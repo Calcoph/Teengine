@@ -1,0 +1,1 @@
+la guia para hacer este engine está en https://github.com/sotrh/learn-wgpu
