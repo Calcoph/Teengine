@@ -4,8 +4,8 @@ use fs_extra::dir::CopyOptions;
 use std::env;
 
 fn main() -> Result<()> {
-    // This tells cargo to rerun this script if something in /res/ changes.
-    println!("cargo:rerun-if-changed=ignore/resources/*");
+    // This tells cargo to rerun this script if something in ignore/resources/ changes.
+    println!("cargo:rerun-if-changed=ignore/resources");
 
     let out_dir = env::var("OUT_DIR")?;
     let mut copy_options = CopyOptions::new();
