@@ -1,11 +1,20 @@
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}};
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, BindGroupLayout, PipelineLayout};
 use cgmath::prelude::*;
 
-use crate::texture;
+use crate::{texture, camera};
 use crate::{model, model::Vertex};
 use crate::resources;
-use crate::camera;
+
+const CAMERA_START_POSITION: (f32, f32, f32) = (0.0, 5.0, 10.0);
+const CAMERA_START_YAW: f32 = -90.0;
+const CAMERA_START_PITCH: f32 = -20.0;
+const CAMERA_SPEED: f32 = 30.0;
+const CAMERA_SENSITIVITY: f32 = 2.0;
+
+const FOVY: f32 = 45.0;
+const ZNEAR: f32 = 1.0;
+const ZFAR: f32 = 1000.0;
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
@@ -99,17 +108,81 @@ impl Instance {
     }
 }
 
-pub struct State {
-    surface: wgpu::Surface,
-    device: wgpu:: Device,
-    queue: wgpu::Queue,
-    config: wgpu:: SurfaceConfiguration,
+struct CameraState {
     camera: camera::Camera,
     projection: camera::Projection,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
-    pub camera_controller: camera::CameraController,
+    camera_controller: camera::CameraController,
     camera_bind_group: wgpu::BindGroup,
+}
+
+impl CameraState {
+    fn new(config: &wgpu::SurfaceConfiguration, device: &wgpu::Device, camera_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
+        let camera = camera::Camera::new(
+            CAMERA_START_POSITION,
+            cgmath::Deg(CAMERA_START_YAW),
+            cgmath::Deg(CAMERA_START_PITCH)
+        );
+        let projection = camera::Projection::new(
+            config.width,
+            config.height,
+            cgmath::Deg(FOVY),
+            ZNEAR,
+            ZFAR
+        );
+        let camera_controller =
+            camera::CameraController::new(
+                CAMERA_SPEED,
+                CAMERA_SENSITIVITY
+            );
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera, &projection);
+        let camera_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
+            }
+        );
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding()
+                }
+            ],
+            label: Some("camera_bind_group")
+        });
+
+        CameraState {
+            camera,
+            projection,
+            camera_uniform,
+            camera_buffer,
+            camera_controller,
+            camera_bind_group
+        }
+    }
+
+    fn update(&mut self, dt: std::time::Duration, queue: &wgpu::Queue) {
+        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
+        queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+    }
+
+    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
+        self.camera_controller.process_mouse(mouse_dx, mouse_dy);
+    }
+}
+
+pub struct State {
+    surface: wgpu::Surface,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    camera: CameraState,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     instances: Vec<Instance>,
@@ -159,84 +232,8 @@ impl State {
             present_mode:wgpu::PresentMode::Fifo 
         };
         surface.configure(&device, &config);
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false
-                        },
-                        count: None
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        // This should match the filterable field of the
-                        // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None
-                    }
-                ],
-                label: Some("texture_bind_group_layour")
-            });
-
-        let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
-        let projection = camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 1.0, 1000.0);
-        let camera_controller = camera::CameraController::new(30.0, 2.0);
-
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera, &projection);
-
-        let camera_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-            }
-        );
-
-        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None
-                    },
-                    count: None
-                }
-            ],
-            label: Some("camera_bind_group_layout")
-        });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding()
-                }
-            ],
-            label: Some("camera_bind_group")
-        });
-
-        let render_pipeline_layout = device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[
-                    &texture_bind_group_layout,
-                    &camera_bind_group_layout,
-                ],
-                push_constant_ranges: &[]
-            }
-        );
+        let (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout) = State::get_layouts(&device);
+        let camera = CameraState::new(&config, &device, &camera_bind_group_layout);
 
         let render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
@@ -279,11 +276,6 @@ impl State {
             queue,
             config,
             camera,
-            projection,
-            camera_uniform,
-            camera_buffer,
-            camera_bind_group,
-            camera_controller,
             size,
             render_pipeline,
             instances,
@@ -319,6 +311,61 @@ impl State {
         }).collect::<Vec<_>>()
     }
 
+    fn get_layouts(device: &wgpu::Device) -> (BindGroupLayout, BindGroupLayout, PipelineLayout) {
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false
+                        },
+                        count: None
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        // This should match the filterable field of the
+                        // corresponding Texture entry above.
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None
+                    }
+                ],
+                label: Some("texture_bind_group_layour")
+            });
+
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None
+                }
+            ],
+            label: Some("camera_bind_group_layout")
+        });
+
+        let render_pipeline_layout = device.create_pipeline_layout(
+            &wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[
+                    &texture_bind_group_layout,
+                    &camera_bind_group_layout,
+                ],
+                push_constant_ranges: &[]
+            }
+        );
+
+        (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout)
+    }
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -326,7 +373,7 @@ impl State {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
             self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
-            self.projection.resize(new_size.width, new_size.height);
+            self.camera.projection.resize(new_size.width, new_size.height);
         }
     }
 
@@ -341,9 +388,9 @@ impl State {
                         ..
                     },
                 ..
-            } => self.camera_controller.process_keyboard(*key, *state),
+            } => self.camera.camera_controller.process_keyboard(*key, *state),
             WindowEvent::MouseWheel { delta, .. } => {
-                self.camera_controller.process_scroll(delta);
+                self.camera.camera_controller.process_scroll(delta);
                 true
             },
             WindowEvent::MouseInput {
@@ -358,10 +405,14 @@ impl State {
         }
     }
 
+    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
+        if self.mouse_pressed {
+            self.camera.process_mouse(mouse_dx, mouse_dy);
+        }
+    }
+
     pub fn update(&mut self, dt: std::time::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
-        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        self.camera.update(dt, &self.queue);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -406,7 +457,7 @@ impl State {
             render_pass.draw_model_instanced(
                 &self.glb_model,
                 0..self.instances.len() as u32,
-                &self.camera_bind_group,
+                &self.camera.camera_bind_group,
             );
         }
 
@@ -415,6 +466,8 @@ impl State {
 
         Ok(())
     }
+
+    
 }
 
 fn create_render_pipeline(

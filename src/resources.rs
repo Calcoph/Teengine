@@ -1,13 +1,9 @@
-use std::io::{BufReader, Cursor};
-use std::{path, fs};
-use cgmath::prelude::*;
 use gltf::buffer;
 use gltf::{Semantic, Accessor, Texture};
 use gltf;
 
 use wgpu::util::DeviceExt;
 
-use crate::model::ModelVertex;
 use crate::{model, texture};
 
 pub fn load_texture(

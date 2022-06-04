@@ -1,7 +1,7 @@
 use std::io::Error;
 
 use image::io::Reader as ImageReader;
-use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent, ModifiersState}};
+use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
 
 use crate::gamepad;
 use crate::config as c;
@@ -47,9 +47,9 @@ pub async fn run() -> Result<(), Error> {
                     WindowEvent::HoveredFileCancelled => (), // ignore
                     WindowEvent::ReceivedCharacter(character) => println!("TODO: ReceivedCharacter{:?}", character),
                     WindowEvent::Focused(is_focused) => println!("TODO: Focused {:?}", is_focused), // TODO
-                    WindowEvent::KeyboardInput { device_id, input, is_synthetic } => {state.input(&event);}, // TODO
+                    WindowEvent::KeyboardInput { device_id: _, input: _, is_synthetic: _ } => {state.input(&event);}, // TODO
                     WindowEvent::ModifiersChanged(modifiers) => println!("TODO: ModifiersChanged ({:?})", modifiers), // TODO
-                    WindowEvent::CursorMoved { device_id, position, .. } => {state.input(&event);},
+                    WindowEvent::CursorMoved { device_id: _, position: _, .. } => {state.input(&event);},
                     WindowEvent::CursorEntered { device_id } => println!("TODO: CursorEntered ({:?})", device_id), // TODO
                     WindowEvent::CursorLeft { device_id } => println!("TODO: CursorLeft ({:?})", device_id), // TODO
                     WindowEvent::MouseWheel { .. } => {state.input(&event);},
@@ -57,7 +57,7 @@ pub async fn run() -> Result<(), Error> {
                     WindowEvent::TouchpadPressure { device_id, pressure, stage } => println!("Ignoring TouchpadPressure ({:?}, {:?}, {:?})", device_id, pressure, stage), // ignore until I know if it's useful
                     WindowEvent::AxisMotion { device_id, axis, value } => println!("Ignoring AxisMotion ({:?}, {:?}, {:?})", device_id, axis, value), // ignore until I know if it's useful
                     WindowEvent::Touch(touch) => println!("TODO: Touch ({:?})", touch), // TODO: do the same as mouse click event
-                    WindowEvent::ScaleFactorChanged { scale_factor, new_inner_size } => state.resize(*new_inner_size),
+                    WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => state.resize(*new_inner_size),
                     WindowEvent::ThemeChanged(theme) => println!("TODO: ThemeChanged ({:?})", theme), // TODO
                 }
             },
@@ -65,9 +65,7 @@ pub async fn run() -> Result<(), Error> {
                 match event {
                     winit::event::DeviceEvent::Added => println!("TODO: Device Added ({:?})", device_id), // TODO
                     winit::event::DeviceEvent::Removed => println!("TODO: Device Removed ({:?})", device_id), // TODO
-                    winit::event::DeviceEvent::MouseMotion { delta } => if state.mouse_pressed {
-                        state.camera_controller.process_mouse(delta.0, delta.1)
-                    },
+                    winit::event::DeviceEvent::MouseMotion { delta } => state.process_mouse(delta.0, delta.1),
                     winit::event::DeviceEvent::MouseWheel { delta } => println!("TODO: Mouse Wheel ({:?}, {:?})", device_id, delta), // TODO
                     winit::event::DeviceEvent::Motion { axis, value } => println!("TODO: Device Motion ({:?}, {:?}, {:?})", device_id, value, axis), // TODO
                     winit::event::DeviceEvent::Button { button, state } => println!("TODO: Device Button ({:?}, {:?}, {:?})", device_id, button, state), // TODO
