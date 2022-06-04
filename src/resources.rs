@@ -33,6 +33,11 @@ pub fn load_glb_model(
     for glb_mesh in document.meshes() {
         let name = glb_mesh.name().unwrap().to_string();
         for glb_primitive in glb_mesh.primitives() {
+            // TODO: sort out the opaque, transparent and translucent primitives so we can correctly draw them using these steps:
+            // 1. Draw all opaque primitives
+            // 2. Sort the transparent primitives (from furthest to nearest)
+            // 3. Draw the transparent primitives in order
+            // to separate them see "alphaMode" in material
             let pbr = glb_primitive.material().pbr_metallic_roughness();
             let glb_color = pbr.base_color_factor();
             let glb_texture = pbr.base_color_texture().unwrap().texture();
@@ -40,9 +45,19 @@ pub fn load_glb_model(
             mat_index += 1;
             let image_index = glb_texture.source().index();
             let texture_name = get_texture_name(glb_texture);
-
-            let image = apply_base_color(images.get(image_index).unwrap(), glb_color);
-            let diffuse_texture = load_texture(&image, device, queue, texture_name)?;
+            
+            let diffuse_texture = match glb_color {
+                [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
+                    // base color multiplier is so close to being 1 that it's not worth to process it
+                    let image = images.get(image_index).unwrap();
+                    load_texture(image, device, queue, texture_name)?
+                },
+                [_,_,_,_] => {
+                    let image = images.get(image_index).unwrap();
+                    let image = apply_base_color(image, glb_color);
+                    load_texture(&image, device, queue, texture_name)?
+                }
+            };
 
             materials.push(model::Material::new(
                 device,
