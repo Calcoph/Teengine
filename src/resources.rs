@@ -1,66 +1,48 @@
 use std::io::{BufReader, Cursor};
 use std::{path, fs};
 use cgmath::prelude::*;
-use gltf::buffer::Data;
+use gltf::buffer;
 use gltf::{Semantic, Accessor, Texture};
+use gltf;
 
 use wgpu::util::DeviceExt;
 
 use crate::model::ModelVertex;
 use crate::{model, texture};
 
-pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
-    let path = path::Path::new(env!("OUT_DIR"))
-        .join("resources")
-        .join(file_name);
-    let txt = fs::read_to_string(path)?;
-
-    Ok(txt)
-}
-
-pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
-    let path = std::path::Path::new(env!("OUT_DIR"))
-        .join("resources")
-        .join(file_name);
-    let data = std::fs::read(path)?;
-
-    Ok(data)
-}
-
-pub async fn load_texture(
-    file_name: &str,
+pub fn load_texture(
+    image: &gltf::image::Data,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    file_name: &str,
 ) -> anyhow::Result<texture::Texture> {
-    let data = load_binary(file_name).await?;
-    texture::Texture::from_bytes(device, queue, &data, file_name)
+    texture::Texture::from_image(device, queue, image, Some(file_name))
 }
 
-pub async fn load_glb_model(
+pub fn load_glb_model(
     file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> anyhow::Result<model::Model> {
-    let (document, buffers, _images) = gltf::import("resources/".to_string()+file_name).unwrap();
-    // materials:
-    //  pub name: String,
-    //  pub diffuse_texture: texture::Texture,
-    //  pub normal_texture: texture::Texture,
-    //  pub bind_group: wgpu::BindGroup
+    let (document, buffers, images) = gltf::import("ignore/resources/".to_string()+file_name).unwrap();
+
     let mut meshes = Vec::new();
     let mut materials = Vec::new();
     let mut mat_index = 0;
     for glb_mesh in document.meshes() {
         let name = glb_mesh.name().unwrap().to_string();
         for glb_primitive in glb_mesh.primitives() {
-            //let _glb_mode = glb_primitive.mode();
-            let glb_texture = glb_primitive.material().pbr_metallic_roughness().base_color_texture().unwrap().texture();
+            let pbr = glb_primitive.material().pbr_metallic_roughness();
+            let glb_color = pbr.base_color_factor();
+            let glb_texture = pbr.base_color_texture().unwrap().texture();
             let material = mat_index;
             mat_index += 1;
+            let image_index = glb_texture.source().index();
             let texture_name = get_texture_name(glb_texture);
 
-            let diffuse_texture = load_texture(texture_name, device, queue).await?;
+            let image = apply_base_color(images.get(image_index).unwrap(), glb_color);
+            let diffuse_texture = load_texture(&image, device, queue, texture_name)?;
 
             materials.push(model::Material::new(
                 device,
@@ -131,7 +113,7 @@ pub async fn load_glb_model(
     Ok(model::Model {meshes, materials})
 }
 
-fn load_vec3(accessor: Accessor, buffer: &Data) -> Vec<[f32; 3]> {
+fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
     match accessor.data_type() {
         gltf::accessor::DataType::F32 => {},
         _ => panic!("vertex data should be F32!")
@@ -154,7 +136,7 @@ fn load_vec3(accessor: Accessor, buffer: &Data) -> Vec<[f32; 3]> {
     vec3
 }
 
-fn load_vec2(accessor: Accessor, buffer: &Data) -> Vec<[f32; 2]> {
+fn load_vec2(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 2]> {
     match accessor.data_type() {
         gltf::accessor::DataType::F32 => {},
         _ => panic!("tex coords should be F32!")
@@ -176,7 +158,7 @@ fn load_vec2(accessor: Accessor, buffer: &Data) -> Vec<[f32; 2]> {
     vec2
 }
 
-fn load_scalar(accessor: Accessor, buffer: &Data) -> Vec<u32> {
+fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
     match accessor.data_type() {
         gltf::accessor::DataType::U16 => {},
         _ => {
@@ -211,5 +193,27 @@ fn get_texture_name(tex: Texture) -> &str {
     match tex.source().source() {
         gltf::image::Source::View { .. } => panic!("texture should be in a png"),
         gltf::image::Source::Uri { uri, .. } => uri,
+    }
+}
+
+fn apply_base_color(image: &gltf::image::Data, color: [f32; 4]) -> gltf::image::Data {
+    assert!(image.format == gltf::image::Format::R8G8B8A8);
+    let new_pixels = image.pixels.chunks_exact(4).into_iter()
+        .map(|c| {
+            [
+             ((f32::from(c[0]) * color[0]).floor() as u8),
+             ((f32::from(c[1]) * color[1]).floor() as u8),
+             ((f32::from(c[2]) * color[2]).floor() as u8),
+             ((f32::from(c[3]) * color[3]).floor() as u8)
+            ]
+        })
+        .flatten()
+        .collect();
+    
+    gltf::image::Data {
+        pixels: new_pixels,
+        format: image.format,
+        width: image.width,
+        height: image.height
     }
 }

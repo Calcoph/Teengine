@@ -288,7 +288,7 @@ impl State {
             &device, 
             &queue,
             &texture_bind_group_layout,
-        ).await.unwrap();
+        ).unwrap();
 
         State {
             surface,
