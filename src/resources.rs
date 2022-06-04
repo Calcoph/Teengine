@@ -206,12 +206,14 @@ pub async fn load_glb_model(
     //  pub bind_group: wgpu::BindGroup
     let mut meshes = Vec::new();
     let mut materials = Vec::new();
+    let mut mat_index = 0;
     for glb_mesh in document.meshes() {
         let name = glb_mesh.name().unwrap().to_string();
         for glb_primitive in glb_mesh.primitives() {
             //let _glb_mode = glb_primitive.mode();
             let glb_texture = glb_primitive.material().pbr_metallic_roughness().base_color_texture().unwrap().texture();
-            let material = glb_texture.index();
+            let material = mat_index;
+            mat_index += 1;
             let texture_name = get_texture_name(glb_texture);
 
             //let diffuse_name = get_texture_name(mat.occlusion_texture().unwrap().texture());
@@ -224,7 +226,7 @@ pub async fn load_glb_model(
                 diffuse_texture,
                 layout
             ));
-            
+
             // get the indices of the triangles
             let indices_accessor = glb_primitive.indices().unwrap();
             let indices_buffer_index = get_buffer_index(&indices_accessor);

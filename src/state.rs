@@ -7,7 +7,7 @@ use crate::{model, model::Vertex};
 use crate::resources;
 use crate::camera;
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
+const NUM_INSTANCES_PER_ROW: u32 = 1;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
     cgmath::Vector3::new(
         NUM_INSTANCES_PER_ROW as f32 * 0.5,
@@ -284,7 +284,7 @@ impl State {
         let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
 
         let glb_model = resources::load_glb_model(
-            "acce01.glb", 
+            "box02.glb", 
             &device, 
             &queue,
             &texture_bind_group_layout,
@@ -379,13 +379,6 @@ impl State {
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform.update_view_proj(&self.camera, &self.projection);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
-        /*let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(60.0 * dt.as_secs_f32()))
-             * old_position
-            ).into();
-        
-            self.queue.write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&[self.light_uniform])); */
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -404,9 +397,9 @@ impl State {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
+                                r: 0.1,
+                                g: 0.6,
+                                b: 0.2,
                                 a: 1.0
                             }),
                             store: true
