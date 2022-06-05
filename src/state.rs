@@ -1,4 +1,4 @@
-use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}};
+use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi::PhysicalSize};
 use wgpu::{util::DeviceExt, BindGroupLayout, PipelineLayout};
 use cgmath::prelude::*;
 
@@ -177,25 +177,15 @@ impl CameraState {
     }
 }
 
-pub struct State {
+struct GpuState {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    camera: CameraState,
-    pub size: winit::dpi::PhysicalSize<u32>,
-    render_pipeline: wgpu::RenderPipeline,
-    instances: Vec<Instance>,
-    instance_buffer: wgpu::Buffer,
-    depth_texture: texture::Texture,
-    glb_model: model::Model,
-    pub mouse_pressed: bool
 }
 
-impl State {
-    pub async fn new(window: &Window) -> Self {
-        let size = window.inner_size();
-
+impl GpuState {
+    async fn new(size: PhysicalSize<u32>, window: &Window) -> Self {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -232,8 +222,40 @@ impl State {
             present_mode:wgpu::PresentMode::Fifo 
         };
         surface.configure(&device, &config);
-        let (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout) = State::get_layouts(&device);
-        let camera = CameraState::new(&config, &device, &camera_bind_group_layout);
+
+        GpuState {
+            surface,
+            device,
+            queue,
+            config
+        }
+    }
+}
+
+pub struct State {
+    gpu: GpuState,
+    camera: CameraState,
+    pub size: winit::dpi::PhysicalSize<u32>,
+    render_pipeline: wgpu::RenderPipeline,
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
+    depth_texture: texture::Texture,
+    glb_model: model::Model,
+    pub mouse_pressed: bool
+}
+
+impl State {
+    pub async fn new(window: &Window) -> Self {
+        let size = window.inner_size();
+
+        let gpu = GpuState::new(size, window).await;
+        
+        let (texture_bind_group_layout,
+            camera_bind_group_layout,
+            render_pipeline_layout
+        ) = State::get_layouts(&gpu.device);
+        
+        let camera = CameraState::new(&gpu.config, &gpu.device, &camera_bind_group_layout);
 
         let render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
@@ -241,9 +263,9 @@ impl State {
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             };
             create_render_pipeline(
-                &device,
+                &gpu.device,
                 &render_pipeline_layout,
-                config.format,
+                gpu.config.format,
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
@@ -253,7 +275,7 @@ impl State {
         let instances = State::get_instances();
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(
+        let instance_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
@@ -261,20 +283,17 @@ impl State {
             }
         );
 
-        let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
+        let depth_texture = texture::Texture::create_depth_texture(&gpu.device, &gpu.config, "depth_texture");
 
         let glb_model = resources::load_glb_model(
             "box02.glb", 
-            &device, 
-            &queue,
+            &gpu.device, 
+            &gpu.queue,
             &texture_bind_group_layout,
         ).unwrap();
 
         State {
-            surface,
-            device,
-            queue,
-            config,
+            gpu,
             camera,
             size,
             render_pipeline,
@@ -369,10 +388,10 @@ impl State {
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
-            self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
+            self.gpu.config.width = new_size.width;
+            self.gpu.config.height = new_size.height;
+            self.gpu.surface.configure(&self.gpu.device, &self.gpu.config);
+            self.depth_texture = texture::Texture::create_depth_texture(&self.gpu.device, &self.gpu.config, "depth_texture");
             self.camera.projection.resize(new_size.width, new_size.height);
         }
     }
@@ -412,13 +431,13 @@ impl State {
     }
 
     pub fn update(&mut self, dt: std::time::Duration) {
-        self.camera.update(dt, &self.queue);
+        self.camera.update(dt, &self.gpu.queue);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
+        let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
         {
@@ -461,7 +480,7 @@ impl State {
             );
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())
@@ -501,7 +520,7 @@ fn create_render_pipeline(
             topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
+            cull_mode: None,//Some(wgpu::Face::Back),
             // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
             polygon_mode: wgpu::PolygonMode::Fill,
             // Requires Features::DEPTH_CLIP_CONTROL
