@@ -13,7 +13,7 @@ pub fn listen(event_loop: EventLoopProxy<ControllerEvent>) {
     });
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ControllerEvent {
     pub device_id: usize,
     pub event: EventType,

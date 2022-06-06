@@ -32,12 +32,12 @@ pub async fn run() -> Result<(), Error> {
 
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;
-        match event {
+        match &event {
             Event::NewEvents(_cause) => (), // TODO
-            Event::WindowEvent { window_id, event } if window_id == window.id() => {
+            Event::WindowEvent { window_id, event } if *window_id == window.id() => {
                 match event {
                     WindowEvent::Resized(size) => {
-                        state.resize(size);
+                        state.resize(size.clone());
                     },
                     WindowEvent::Moved(_) => (), // ignore
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a poionter to the next action we wanna do. In this case, exit the program
@@ -57,7 +57,7 @@ pub async fn run() -> Result<(), Error> {
                     WindowEvent::TouchpadPressure { device_id, pressure, stage } => println!("Ignoring TouchpadPressure ({:?}, {:?}, {:?})", device_id, pressure, stage), // ignore until I know if it's useful
                     WindowEvent::AxisMotion { device_id, axis, value } => println!("Ignoring AxisMotion ({:?}, {:?}, {:?})", device_id, axis, value), // ignore until I know if it's useful
                     WindowEvent::Touch(touch) => println!("TODO: Touch ({:?})", touch), // TODO: do the same as mouse click event
-                    WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => state.resize(*new_inner_size),
+                    WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => state.resize(**new_inner_size),
                     WindowEvent::ThemeChanged(theme) => println!("TODO: ThemeChanged ({:?})", theme), // TODO
                 }
             },
@@ -65,7 +65,7 @@ pub async fn run() -> Result<(), Error> {
                 match event {
                     winit::event::DeviceEvent::Added => println!("TODO: Device Added ({:?})", device_id), // TODO
                     winit::event::DeviceEvent::Removed => println!("TODO: Device Removed ({:?})", device_id), // TODO
-                    winit::event::DeviceEvent::MouseMotion { delta } => state.process_mouse(delta.0, delta.1),
+                    winit::event::DeviceEvent::MouseMotion { delta } => println!("TODO: Mouse Moved ({:?}, {:?})", device_id, delta),
                     winit::event::DeviceEvent::MouseWheel { delta } => println!("TODO: Mouse Wheel ({:?}, {:?})", device_id, delta), // TODO
                     winit::event::DeviceEvent::Motion { axis, value } => println!("TODO: Device Motion ({:?}, {:?}, {:?})", device_id, value, axis), // TODO
                     winit::event::DeviceEvent::Button { button, state } => println!("TODO: Device Button ({:?}, {:?}, {:?})", device_id, button, state), // TODO
@@ -85,12 +85,12 @@ pub async fn run() -> Result<(), Error> {
             Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
             Event::Resumed => (), // TODO: confirm that it unpauses the game
             Event::MainEventsCleared => window.request_redraw(),
-            Event::RedrawRequested(window_id) => if window_id == window.id() {
+            Event::RedrawRequested(window_id) => if *window_id == window.id() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
-                match state.render() {
+                match state.render(&window) {
                     Ok(_) => {},
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
@@ -99,10 +99,12 @@ pub async fn run() -> Result<(), Error> {
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e), 
                 }
-            }, 
+            },
             Event::RedrawEventsCleared => (), // TODO
             Event::LoopDestroyed => println!("TODO: LoopDestroyed"), // TODO: clean memory or save settings or whatever
             _ => () // ignore windowevents that aren't for current window
         }
+
+        state.imgui.platform.handle_event(state.imgui.context.io_mut(), &window, &event)
     })
 }

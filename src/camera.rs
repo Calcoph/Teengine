@@ -132,6 +132,22 @@ impl CameraController {
                 self.amount_right = amount;
                 true
             }
+            VirtualKeyCode::Q => {
+                self.rotate_horizontal -= amount/2.0;
+                true
+            }
+            VirtualKeyCode::E => {
+                self.rotate_horizontal += amount/2.0;
+                true
+            }
+            VirtualKeyCode::X => {
+                self.rotate_vertical += amount/2.0;
+                true
+            }
+            VirtualKeyCode::Z => {
+                self.rotate_vertical -= amount/2.0;
+                true
+            }
             VirtualKeyCode::Space => {
                 self.amount_up = amount;
                 true
@@ -142,11 +158,6 @@ impl CameraController {
             }
             _ => false,
         }
-    }
-
-    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rotate_horizontal = mouse_dx as f32;
-        self.rotate_vertical = mouse_dy as f32;
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
