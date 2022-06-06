@@ -89,11 +89,11 @@ pub struct CameraController {
     amount_backward: f32,
     amount_up: f32,
     amount_down: f32,
-    rotate_horizontal: f32,
-    rotate_vertical: f32,
-    scroll: f32,
-    speed: f32,
-    sensitivity: f32,
+    pub rotate_horizontal: f32,
+    pub rotate_vertical: f32,
+    pub scroll: f32,
+    pub speed: f32,
+    pub sensitivity: f32,
 }
 
 impl CameraController {
@@ -141,11 +141,19 @@ impl CameraController {
                 true
             }
             VirtualKeyCode::X => {
-                self.rotate_vertical += amount/2.0;
+                self.rotate_vertical -= amount/2.0;
                 true
             }
             VirtualKeyCode::Z => {
-                self.rotate_vertical -= amount/2.0;
+                self.rotate_vertical += amount/2.0;
+                true
+            }
+            VirtualKeyCode::R => {
+                self.scroll += amount/2.0;
+                true
+            }
+            VirtualKeyCode::F => {
+                self.scroll -= amount/2.0;
                 true
             }
             VirtualKeyCode::Space => {
@@ -158,17 +166,6 @@ impl CameraController {
             }
             _ => false,
         }
-    }
-
-    pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
-        self.scroll = -match delta {
-            // I'm assuming a line is about 100 pixels
-            MouseScrollDelta::LineDelta(_, scroll) => scroll * 100.0,
-            MouseScrollDelta::PixelDelta(PhysicalPosition {
-                y: scroll,
-                ..
-            }) => *scroll as f32,
-        };
     }
 
     pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
@@ -196,7 +193,7 @@ impl CameraController {
 
         // Rotate
         camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
-        camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;
+        camera.pitch += Rad(self.rotate_vertical) * self.sensitivity * dt;
 
         // If process_mouse isn't called every frame, these values
         // will not get set to zero, and the camera will rotate

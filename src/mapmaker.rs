@@ -11,7 +11,18 @@ pub struct ImguiState {
     pub context: Context,
     pub platform: WinitPlatform,
     renderer: Renderer,
-    pub state: State
+    pub state: State,
+    files: Vec<String>,
+    camera_controls_win: CameraControlsWin,
+    model_selector_win: ModelSelectorWin
+}
+
+struct CameraControlsWin {
+    show_hotkeys: bool
+}
+
+struct ModelSelectorWin {
+    search_str: String
 }
 
 impl ImguiState {
@@ -22,7 +33,6 @@ impl ImguiState {
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
         platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
-        context.set_ini_filename(None);
 
         let renderer_config = RendererConfig {
             texture_format: gpu.config.format,
@@ -31,8 +41,26 @@ impl ImguiState {
 
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
+        let files = get_file_names();
 
-        ImguiState { gpu, context, platform, renderer, state }
+        let camera_controls_win = CameraControlsWin {
+            show_hotkeys: false
+        };
+
+        let model_selector_win = ModelSelectorWin {
+            search_str: String::new()
+        };
+
+        ImguiState {
+            gpu,
+            context,
+            platform,
+            renderer,
+            state,
+            files,
+            camera_controls_win,
+            model_selector_win
+        }
     }
 
     pub fn render_imgui(&mut self, view: &wgpu::TextureView, window: &Window) {
@@ -40,12 +68,52 @@ impl ImguiState {
         let ui = self.context.frame();
         {
             let mut opened = false;
-            let window = imgui::Window::new("Hello too");
-            window
+            imgui::Window::new("Camera controls")
                 .size([400.0, 200.0], Condition::FirstUseEver)
                 .position([400.0, 200.0], Condition::FirstUseEver)
                 .build(&ui, || {
-                    ui.text(format!("Frametime: {:?}", "aaa"));
+                    let camera = &mut self.state.camera.camera_controller;
+                    let state = &mut self.camera_controls_win;
+                    Slider::new("speed", 0.0 as f32, 100.0 as f32).build(&ui, &mut camera.speed);
+                    Slider::new("sensitivity", 0.0 as f32, 20.0 as f32).build(&ui, &mut camera.sensitivity);
+                    Slider::new("yaw", -4.0 as f32, 4.0 as f32).build(&ui, &mut camera.rotate_horizontal);
+                    VerticalSlider::new("pitch", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
+                        .build(&ui, &mut camera.rotate_vertical);
+                    ui.same_line();
+                    VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
+                        .build(&ui, &mut camera.scroll);
+
+                    ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
+                    if state.show_hotkeys {
+                        ui.text("press WASD to move");
+                        ui.text("press space/shift to move up/down");
+                        ui.text("press QE to rotate yaw");
+                        ui.text("press ZX to rotate pitch");
+                        ui.text("press RF to zoom in/out");
+                    }
+                });
+            imgui::Window::new("Models")
+                .size([400.0, 200.0], Condition::FirstUseEver)
+                .position([400.0, 200.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    let state = &mut self.model_selector_win;
+                    ui.text("Put your gltf/glb models in\nignore/resources/ so they show up here");
+                    if ui.button("Refresh") {
+                        self.files = get_file_names();
+                    };
+                    ui.separator();
+                    ui.input_text("search", &mut state.search_str).build();
+                    for file_name in &self.files {
+                        let name = match file_name.strip_suffix(".glb") {
+                            Some(n) => n,
+                            None => file_name.strip_suffix(".gltf").unwrap(),
+                        };
+                        if name.contains(&state.search_str) {
+                            if ui.button(name) {
+                                self.state.change_model(file_name, &self.gpu)
+                            };
+                        }
+                    };
                 });
             ui.show_demo_window(&mut opened);
         }
@@ -72,7 +140,10 @@ impl ImguiState {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.state.resize(new_size, &mut self.gpu)
+        if new_size.width > 0 && new_size.height > 0 {
+            self.gpu.resize(new_size);
+            self.state.resize(new_size)
+        }
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -86,10 +157,25 @@ impl ImguiState {
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.state.render(window, &view, &self.gpu)?;
+        self.state.render(&view, &self.gpu)?;
         self.render_imgui(&view, window);
         output.present();
 
         Ok(())
     }
+}
+
+fn get_file_names() -> Vec<String> {
+    let mut names = Vec::new();
+    match std::fs::read_dir(std::path::Path::new("ignore/resources")) {
+        Ok(files) => for file in files {
+            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
+            if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
+                names.push(file_name)
+            }
+        },
+        Err(_) => names.push(String::from("Error accessing the directory ignore/resources/")),
+    };
+
+    names
 }

@@ -1,3 +1,4 @@
+use anyhow::Error;
 use gltf::buffer;
 use gltf::{Semantic, Accessor, Texture};
 use gltf;
@@ -20,8 +21,8 @@ pub fn load_glb_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
-) -> anyhow::Result<model::Model> {
-    let (document, buffers, images) = gltf::import("ignore/resources/".to_string()+file_name).unwrap();
+) -> Result<model::Model, Error> {
+    let (document, buffers, images) = gltf::import("ignore/resources/".to_string()+file_name)?;
 
     let mut meshes = Vec::new();
     let mut materials = Vec::new();
@@ -36,12 +37,15 @@ pub fn load_glb_model(
             // to separate them see "alphaMode" in material
             let pbr = glb_primitive.material().pbr_metallic_roughness();
             let glb_color = pbr.base_color_factor();
-            let glb_texture = pbr.base_color_texture().unwrap().texture();
+            let glb_texture = match pbr.base_color_texture() {
+                Some(tex) => Ok(tex),
+                None => Err(anyhow::anyhow!("ERROR")),
+            }?.texture();
             let material = mat_index;
             mat_index += 1;
             let image_index = glb_texture.source().index();
             let texture_name = get_texture_name(glb_texture);
-            
+
             let diffuse_texture = match glb_color {
                 [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
                     // base color multiplier is so close to being 1 that it's not worth to process it

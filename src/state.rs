@@ -1,5 +1,5 @@
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi::PhysicalSize};
-use wgpu::{util::DeviceExt, TextureView};
+use wgpu::{util::DeviceExt, TextureView, BindGroupLayout};
 use cgmath::prelude::*;
 
 use crate::{texture, camera};
@@ -16,13 +16,13 @@ const FOVY: f32 = 45.0;
 const ZNEAR: f32 = 1.0;
 const ZFAR: f32 = 1000.0;
 
-const NUM_INSTANCES_PER_ROW: u32 = 1;
+/* const NUM_INSTANCES_PER_ROW: u32 = 1;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
     cgmath::Vector3::new(
         NUM_INSTANCES_PER_ROW as f32 * 0.5,
         0.0,
         NUM_INSTANCES_PER_ROW as f32 * 0.5
-    );
+    ); */
 
 // We need this for Rust to store our data correctly for the shaders
 #[repr(C)]
@@ -108,12 +108,12 @@ impl Instance {
     }
 }
 
-struct CameraState {
+pub struct CameraState {
     camera: camera::Camera,
     projection: camera::Projection,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
-    camera_controller: camera::CameraController,
+    pub camera_controller: camera::CameraController,
     camera_bind_group: wgpu::BindGroup,
 }
 
@@ -171,6 +171,10 @@ impl CameraState {
         self.camera_uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
+
+    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        self.projection.resize(new_size.width, new_size.height);
+    }
 }
 
 pub struct GpuState {
@@ -178,6 +182,7 @@ pub struct GpuState {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
+    depth_texture: texture::Texture,
 }
 
 impl GpuState {
@@ -219,23 +224,33 @@ impl GpuState {
         };
         surface.configure(&device, &config);
 
+        let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
+
         GpuState {
             surface,
             device,
             queue,
-            config
+            config,
+            depth_texture
         }
+    }
+
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        self.config.width = new_size.width;
+        self.config.height = new_size.height;
+        self.surface.configure(&self.device, &self.config);
+        self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
     }
 }
 pub struct State {
-    camera: CameraState,
+    pub camera: CameraState,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
-    depth_texture: texture::Texture,
     glb_model: model::Model,
-    pub mouse_pressed: bool
+    pub mouse_pressed: bool,
+    texture_bind_group_layout: BindGroupLayout
 }
 
 impl State {
@@ -275,8 +290,6 @@ impl State {
             }
         );
 
-        let depth_texture = texture::Texture::create_depth_texture(&gpu.device, &gpu.config, "depth_texture");
-
         let glb_model = resources::load_glb_model(
             "box02.glb", 
             &gpu.device, 
@@ -290,15 +303,15 @@ impl State {
             render_pipeline,
             instances,
             instance_buffer,
-            depth_texture,
             glb_model,
             mouse_pressed: false,
+            texture_bind_group_layout
         }
     }
 
     fn get_instances() -> Vec<Instance> {
         // TODO: get this from a map file
-        const SPACE_BETWEEN: f32 = 30.0;
+        /* const SPACE_BETWEEN: f32 = 30.0;
         (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
             (0..NUM_INSTANCES_PER_ROW).map(move |x| {
                 let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
@@ -318,7 +331,11 @@ impl State {
                     position, rotation
                 }
             })
-        }).collect::<Vec<_>>()
+        }).collect::<Vec<_>>() */
+        vec![Instance {
+            position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
+            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+        }]
     }
 
     fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {
@@ -343,7 +360,7 @@ impl State {
                         count: None
                     }
                 ],
-                label: Some("texture_bind_group_layour")
+                label: Some("texture_bind_group_layout")
             });
 
         let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -376,15 +393,9 @@ impl State {
         (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout)
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, gpu: &mut GpuState) {
-        if new_size.width > 0 && new_size.height > 0 {
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
             self.size = new_size;
-            gpu.config.width = new_size.width;
-            gpu.config.height = new_size.height;
-            gpu.surface.configure(&gpu.device, &gpu.config);
-            self.depth_texture = texture::Texture::create_depth_texture(&gpu.device, &gpu.config, "depth_texture");
-            self.camera.projection.resize(new_size.width, new_size.height);
-        }
+            self.camera.resize(new_size);
     }
 
     // returns if the event has been fully processed
@@ -399,10 +410,6 @@ impl State {
                     },
                 ..
             } => self.camera.camera_controller.process_keyboard(*key, *state),
-            WindowEvent::MouseWheel { delta, .. } => {
-                self.camera.camera_controller.process_scroll(delta);
-                true
-            },
             WindowEvent::MouseInput {
                 button: winit::event::MouseButton::Left,
                 state,
@@ -419,7 +426,7 @@ impl State {
         self.camera.update(dt, &gpu.queue);
     }
 
-    pub fn render(&mut self, window: &Window, view: &TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, view: &TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
@@ -443,7 +450,7 @@ impl State {
                     }
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
+                    view: &gpu.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: true
@@ -466,6 +473,18 @@ impl State {
         gpu.queue.submit(std::iter::once(encoder.finish()));
 
         Ok(())
+    }
+
+    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState) {
+        match resources::load_glb_model(
+            file_name, 
+            &gpu.device, 
+            &gpu.queue,
+            &self.texture_bind_group_layout,
+        ) {
+            Ok(model) => self.glb_model = model,
+            Err(_) => (),
+        };
     }
 }
 
