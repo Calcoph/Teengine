@@ -1,11 +1,10 @@
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi::PhysicalSize};
-use wgpu::{util::DeviceExt};
+use wgpu::{util::DeviceExt, TextureView};
 use cgmath::prelude::*;
 
 use crate::{texture, camera};
 use crate::{model, model::Vertex};
 use crate::resources;
-use crate::config_window;
 
 const CAMERA_START_POSITION: (f32, f32, f32) = (0.0, 5.0, 10.0);
 const CAMERA_START_YAW: f32 = -90.0;
@@ -174,15 +173,15 @@ impl CameraState {
     }
 }
 
-struct GpuState {
-    surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
+pub struct GpuState {
+    pub surface: wgpu::Surface,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub config: wgpu::SurfaceConfiguration,
 }
 
 impl GpuState {
-    async fn new(size: PhysicalSize<u32>, window: &Window) -> Self {
+    pub async fn new(size: PhysicalSize<u32>, window: &Window) -> Self {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -229,7 +228,6 @@ impl GpuState {
     }
 }
 pub struct State {
-    gpu: GpuState,
     camera: CameraState,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
@@ -237,15 +235,12 @@ pub struct State {
     instance_buffer: wgpu::Buffer,
     depth_texture: texture::Texture,
     glb_model: model::Model,
-    pub mouse_pressed: bool,
-    pub imgui: config_window::ImguiState
+    pub mouse_pressed: bool
 }
 
 impl State {
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(window: &Window, gpu: &GpuState) -> Self {
         let size = window.inner_size();
-
-        let gpu = GpuState::new(size, window).await;
         
         let (texture_bind_group_layout,
             camera_bind_group_layout,
@@ -289,10 +284,7 @@ impl State {
             &texture_bind_group_layout,
         ).unwrap();
 
-        let imgui = config_window::ImguiState::new(window, &gpu.config, &gpu.device, &gpu.queue);
-
         State {
-            gpu,
             camera,
             size,
             render_pipeline,
@@ -301,7 +293,6 @@ impl State {
             depth_texture,
             glb_model,
             mouse_pressed: false,
-            imgui
         }
     }
 
@@ -385,13 +376,13 @@ impl State {
         (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout)
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, gpu: &mut GpuState) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
-            self.gpu.config.width = new_size.width;
-            self.gpu.config.height = new_size.height;
-            self.gpu.surface.configure(&self.gpu.device, &self.gpu.config);
-            self.depth_texture = texture::Texture::create_depth_texture(&self.gpu.device, &self.gpu.config, "depth_texture");
+            gpu.config.width = new_size.width;
+            gpu.config.height = new_size.height;
+            gpu.surface.configure(&gpu.device, &gpu.config);
+            self.depth_texture = texture::Texture::create_depth_texture(&gpu.device, &gpu.config, "depth_texture");
             self.camera.projection.resize(new_size.width, new_size.height);
         }
     }
@@ -424,14 +415,12 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, dt: std::time::Duration) {
-        self.camera.update(dt, &self.gpu.queue);
+    pub fn update(&mut self, dt: std::time::Duration, gpu: &GpuState) {
+        self.camera.update(dt, &gpu.queue);
     }
 
-    pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
-        let output = self.gpu.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+    pub fn render(&mut self, window: &Window, view: &TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
+        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
         {
@@ -474,9 +463,7 @@ impl State {
             );
         }
 
-        self.gpu.queue.submit(std::iter::once(encoder.finish()));
-        self.imgui.render(&self.gpu.queue, &self.gpu.device, &view, window);
-        output.present();
+        gpu.queue.submit(std::iter::once(encoder.finish()));
 
         Ok(())
     }

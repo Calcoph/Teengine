@@ -10,7 +10,7 @@ mod state;
 mod texture;
 mod resources;
 mod camera;
-mod config_window;
+mod mapmaker;
 
 fn main() -> Result<(), Error> {
     pollster::block_on(event_loop::run())
