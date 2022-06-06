@@ -1,13 +1,11 @@
-use imgui_winit_support::WinitPlatform;
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi::PhysicalSize};
-use wgpu::{util::DeviceExt, BindGroupLayout, PipelineLayout, Device, Queue, SurfaceConfiguration, TextureView};
+use wgpu::{util::DeviceExt, BindGroupLayout, PipelineLayout};
 use cgmath::prelude::*;
-use imgui::*;
-use imgui_wgpu::{Renderer, RendererConfig};
 
 use crate::{texture, camera};
 use crate::{model, model::Vertex};
 use crate::resources;
+use crate::config_window;
 
 const CAMERA_START_POSITION: (f32, f32, f32) = (0.0, 5.0, 10.0);
 const CAMERA_START_YAW: f32 = -90.0;
@@ -230,67 +228,6 @@ impl GpuState {
         }
     }
 }
-
-pub struct ImguiState {
-    pub context: Context,
-    pub platform: WinitPlatform,
-    renderer: Renderer
-}
-
-impl ImguiState {
-    fn new(window: &Window, config: &SurfaceConfiguration, device: &Device, queue: &Queue) -> Self {
-        let mut context = imgui::Context::create();
-        let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
-        platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
-        context.set_ini_filename(None);
-
-        let renderer_config = RendererConfig {
-            texture_format: config.format,
-            ..Default::default()
-        };
-
-        let renderer = Renderer::new(&mut context, device, queue, renderer_config);
-
-        ImguiState { context, platform, renderer}
-    }
-
-    fn render(&mut self, queue: &Queue, device: &Device, view: &TextureView, window: &Window) {
-        self.platform.prepare_frame(self.context.io_mut(), window).expect("Failed to prepare frame");
-        let ui = self.context.frame();
-        {
-            let mut opened = false;
-            let window = imgui::Window::new("Hello too");
-            window
-                .size([400.0, 200.0], Condition::FirstUseEver)
-                .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(&ui, || {
-                    ui.text(format!("Frametime: {:?}", "aaa"));
-                });
-            ui.show_demo_window(&mut opened);
-        }
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("ImGui Render Encoder")
-        });
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
-            self.renderer.render(ui.render(), &queue, &device, &mut render_pass).expect("Rendering failed");
-        }
-        queue.submit(std::iter::once(encoder.finish()));
-    }
-}
-
 pub struct State {
     gpu: GpuState,
     camera: CameraState,
@@ -301,7 +238,7 @@ pub struct State {
     depth_texture: texture::Texture,
     glb_model: model::Model,
     pub mouse_pressed: bool,
-    pub imgui: ImguiState
+    pub imgui: config_window::ImguiState
 }
 
 impl State {
@@ -352,7 +289,7 @@ impl State {
             &texture_bind_group_layout,
         ).unwrap();
 
-        let imgui = ImguiState::new(window, &gpu.config, &gpu.device, &gpu.queue);
+        let imgui = config_window::ImguiState::new(window, &gpu.config, &gpu.device, &gpu.queue);
 
         State {
             gpu,

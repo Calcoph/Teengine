@@ -2,7 +2,7 @@ use std::io::Error;
 
 use pollster;
 
-mod backend;
+mod event_loop;
 mod config;
 mod gamepad;
 mod model;
@@ -10,8 +10,8 @@ mod state;
 mod texture;
 mod resources;
 mod camera;
-use backend::run;
+mod config_window;
 
 fn main() -> Result<(), Error> {
-    pollster::block_on(run())
+    pollster::block_on(event_loop::run())
 }
