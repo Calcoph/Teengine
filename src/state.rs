@@ -1,5 +1,5 @@
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi::PhysicalSize};
-use wgpu::{util::DeviceExt, BindGroupLayout, PipelineLayout};
+use wgpu::{util::DeviceExt};
 use cgmath::prelude::*;
 
 use crate::{texture, camera};
@@ -330,7 +330,7 @@ impl State {
         }).collect::<Vec<_>>()
     }
 
-    fn get_layouts(device: &wgpu::Device) -> (BindGroupLayout, BindGroupLayout, PipelineLayout) {
+    fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
