@@ -4,7 +4,8 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use crate::{state::{State, GpuState}, camera::Projection};
+use crate::state::{State, GpuState};
+use crate::config as c;
 
 pub struct ImguiState {
     gpu: GpuState,
@@ -46,7 +47,7 @@ impl ImguiState {
 
         let camera_controls_win = CameraControlsWin {
             show_hotkeys: false,
-            fovy: 20.0
+            fovy: c::FOVY
         };
 
         let model_selector_win = ModelSelectorWin {

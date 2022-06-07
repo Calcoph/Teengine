@@ -5,16 +5,7 @@ use cgmath::prelude::*;
 use crate::{texture, camera};
 use crate::{model, model::Vertex};
 use crate::resources;
-
-const CAMERA_START_POSITION: (f32, f32, f32) = (0.0, 5.0, 10.0);
-const CAMERA_START_YAW: f32 = -90.0;
-const CAMERA_START_PITCH: f32 = -65.0;
-const CAMERA_SPEED: f32 = 30.0;
-const CAMERA_SENSITIVITY: f32 = 2.0;
-
-const FOVY: f32 = 20.0;
-const ZNEAR: f32 = 1.0;
-const ZFAR: f32 = 100000.0;
+use crate::config as c;
 
 /* const NUM_INSTANCES_PER_ROW: u32 = 1;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
@@ -120,21 +111,21 @@ pub struct CameraState {
 impl CameraState {
     fn new(config: &wgpu::SurfaceConfiguration, device: &wgpu::Device, camera_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
         let camera = camera::Camera::new(
-            CAMERA_START_POSITION,
-            cgmath::Deg(CAMERA_START_YAW),
-            cgmath::Deg(CAMERA_START_PITCH)
+            c::CAMERA_START_POSITION,
+            cgmath::Deg(c::CAMERA_START_YAW),
+            cgmath::Deg(c::CAMERA_START_PITCH)
         );
         let projection = camera::Projection::new(
             config.width,
             config.height,
-            cgmath::Deg(FOVY),
-            ZNEAR,
-            ZFAR
+            cgmath::Deg(c::FOVY),
+            c::ZNEAR,
+            c::ZFAR
         );
         let camera_controller =
             camera::CameraController::new(
-                CAMERA_SPEED,
-                CAMERA_SENSITIVITY
+                c::CAMERA_SPEED,
+                c::CAMERA_SENSITIVITY
             );
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera, &projection);
