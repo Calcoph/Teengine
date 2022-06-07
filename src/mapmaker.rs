@@ -15,7 +15,8 @@ pub struct ImguiState {
     pub state: State,
     files: Vec<String>,
     camera_controls_win: CameraControlsWin,
-    model_selector_win: ModelSelectorWin
+    model_selector_win: ModelSelectorWin,
+    object_control_win: ObjectControlWin
 }
 
 struct CameraControlsWin {
@@ -25,6 +26,10 @@ struct CameraControlsWin {
 
 struct ModelSelectorWin {
     search_str: String
+}
+
+struct ObjectControlWin {
+    _blinking: bool // TODO: Remove unused variable
 }
 
 impl ImguiState {
@@ -54,6 +59,10 @@ impl ImguiState {
             search_str: String::new()
         };
 
+        let object_control_win = ObjectControlWin {
+            _blinking: true
+        };
+
         ImguiState {
             gpu,
             context,
@@ -62,7 +71,8 @@ impl ImguiState {
             state,
             files,
             camera_controls_win,
-            model_selector_win
+            model_selector_win,
+            object_control_win
         }
     }
 
@@ -89,8 +99,7 @@ impl ImguiState {
                     VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
                         .build(&ui, &mut camera_cont.scroll);
 
-                    ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
-                    if state.show_hotkeys {
+                    if ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys) {
                         ui.text("press WASD to move");
                         ui.text("press space/shift to move up/down");
                         ui.text("press QE to rotate yaw");
@@ -120,6 +129,25 @@ impl ImguiState {
                             };
                         }
                     };
+                });
+            imgui::Window::new("Object control")
+                .size([400.0, 200.0], Condition::FirstUseEver)
+                .position([400.0, 200.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    let _state = &mut self.object_control_win;
+                    let mod_inst = &mut self.state.instances.modifying_instance;
+                    ui.text("position");
+                    InputFloat::new(&ui, "x", &mut mod_inst.x).step(1.0).step_fast(5.0).build();
+                    InputFloat::new(&ui, "y", &mut mod_inst.y).step(1.0).step_fast(5.0).build();
+                    InputFloat::new(&ui, "z", &mut mod_inst.z).step(1.0).step_fast(5.0).build();
+                    if ui.button("place") {
+                        self.state.instances.place_model(&self.gpu.device, &self.gpu.queue, &self.state.texture_bind_group_layout)
+                    }
+                    ui.separator();
+                    ui.checkbox("Blink selected model", &mut self.state.blinking);
+                    let mut blink_freq = self.state.blink_freq as i32;
+                    Slider::new("Blinking frequency", 0, 20).build(&ui, &mut blink_freq);
+                    self.state.blink_freq = blink_freq as u64;
                 });
             ui.show_demo_window(&mut opened);
         }

@@ -10,3 +10,6 @@ pub const CAMERA_SENSITIVITY: f32 = 2.0;
 pub const FOVY: f32 = 20.0;
 pub const ZNEAR: f32 = 1.0;
 pub const ZFAR: f32 = 100000.0;
+
+pub const TILE_SIZE: f32 = 32.0;
+pub const TILE_HEIGHT: f32 = 32.0;

@@ -4,7 +4,7 @@ use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, d
 use wgpu::{util::DeviceExt, TextureView, BindGroupLayout};
 use cgmath::prelude::*;
 
-use crate::{texture, camera};
+use crate::{texture, camera, resources::load_glb_model};
 use crate::{model, model::Vertex};
 use crate::resources;
 use crate::config as c;
@@ -243,9 +243,9 @@ struct InstancedModel {
 }
 
 impl InstancedModel {
-    fn new(model: model::Model, device: &wgpu::Device) -> Self {
+    fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
         let instances = vec![Instance {
-            position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
+            position: cgmath::Vector3 { x, y, z },
             rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
         }];
 
@@ -264,12 +264,59 @@ impl InstancedModel {
             instance_buffer
         }
     }
+
+    fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
+        let new_instance = Instance {
+            position: cgmath::Vector3 { x, y, z },
+            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+        };
+        //TODO: see if there is a better way than replacing the buffer with a new one
+        self.instances.push(new_instance);
+        self.instance_buffer.destroy();
+        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX
+            }
+        );
+        self.instance_buffer = instance_buffer;
+    }
 }
 
-struct InstancesState {
+pub struct ModifyingInstance {
+    model: model::Model,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    buffer: Option<wgpu::Buffer>
+}
+
+impl ModifyingInstance {
+    fn into_renderable(&mut self, device: &wgpu::Device) -> usize {
+        let instances = vec![Instance {
+            position: cgmath::Vector3 { x: self.x*c::TILE_SIZE, y: self.y*c::TILE_SIZE, z: self.z*c::TILE_HEIGHT },
+            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+        }];
+
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX
+            }
+        );
+        self.buffer = Some(instance_buffer);
+        instances.len()
+    }
+}
+
+pub struct InstancesState {
     instances: HashMap<String, InstancedModel>,
     modifying_name: String,
-    modifying_instance: InstancedModel,
+    pub modifying_instance: ModifyingInstance,
     
 }
 
@@ -283,7 +330,13 @@ impl InstancesState {
             &gpu.queue,
             texture_bind_group_layout,
         ).unwrap();
-        let modifying_instance = InstancedModel::new(model, &gpu.device);
+        let modifying_instance = ModifyingInstance {
+            model,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            buffer: None
+        };
         InstancesState {
             instances,
             modifying_name,
@@ -291,9 +344,29 @@ impl InstancesState {
         }
     }
 
-    fn set_model(&mut self, file_name: &str, model: model::Model, device: &wgpu::Device) {
+    fn set_model(&mut self, file_name: &str, model: model::Model) {
         self.modifying_name = file_name.to_string();
-        self.modifying_instance = InstancedModel::new(model, device);
+        self.modifying_instance.model = model
+    }
+
+    pub fn place_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout) {
+        match self.instances.contains_key(&self.modifying_name) {
+            true => {
+                let x = self.modifying_instance.x * c::TILE_SIZE;
+                let y = self.modifying_instance.y * c::TILE_SIZE;
+                let z = self.modifying_instance.z * c::TILE_HEIGHT;
+                let instanced_m = self.instances.get_mut(&mut self.modifying_name).unwrap();
+                instanced_m.add_instance(x, y, z, device);
+            },
+            false => {
+                let model = load_glb_model(&self.modifying_name, device, queue, layout).unwrap(); // TODO: clone the model instead of reading it again
+                let x = self.modifying_instance.x * c::TILE_SIZE;
+                let y = self.modifying_instance.y * c::TILE_SIZE;
+                let z = self.modifying_instance.z * c::TILE_HEIGHT;
+                let instanced_m = InstancedModel::new(model, device, x, y, z);
+                self.instances.insert(self.modifying_name.clone(), instanced_m);
+            },
+        }
     }
 }
 
@@ -302,9 +375,12 @@ pub struct State {
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
-    instances: InstancesState,
+    pub instances: InstancesState,
     pub mouse_pressed: bool,
-    texture_bind_group_layout: BindGroupLayout
+    pub texture_bind_group_layout: BindGroupLayout,
+    pub blinking: bool,
+    blink_time: std::time::Instant,
+    pub blink_freq: u64
 }
 
 impl State {
@@ -369,6 +445,9 @@ impl State {
             &texture_bind_group_layout,
         ).unwrap(); */
 
+        let blinking = true;
+        let blink_time = std::time::Instant::now();
+        let blink_freq = 1;
         State {
             camera,
             size,
@@ -376,11 +455,14 @@ impl State {
             transparent_render_pipeline,
             instances,
             mouse_pressed: false,
-            texture_bind_group_layout
+            texture_bind_group_layout,
+            blinking,
+            blink_time,
+            blink_freq
         }
     }
 
-    fn get_instances() -> Vec<Instance> {
+    fn _get_instances() -> Vec<Instance> {
         // TODO: get this from a map file
         /* const SPACE_BETWEEN: f32 = 30.0;
         (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
@@ -541,13 +623,27 @@ impl State {
                     &self.camera.camera_bind_group,
                 );
             }
-            // TODO: make a function instead of copy-pasting for modifying_instance
-            render_pass.set_vertex_buffer(1, self.instances.modifying_instance.instance_buffer.slice(..));
-            render_pass.draw_model_instanced(
-                &self.instances.modifying_instance.model,
-                0..self.instances.modifying_instance.instances.len() as u32,
-                &self.camera.camera_bind_group,
-            );
+            let time_elapsed = std::time::Instant::now() - self.blink_time;
+            let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
+            let mut instances = 0;
+            let mut buffer = None;
+            let mut model = None;
+            if model_visible {
+                // TODO: make a function instead of copy-pasting for modifying_instance
+                instances = self.instances.modifying_instance.into_renderable(&gpu.device);
+                buffer = self.instances.modifying_instance.buffer.as_ref();
+                model = Some(&self.instances.modifying_instance.model);
+                render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                render_pass.draw_model_instanced(
+                    &model.unwrap(),
+                    0..instances as u32,
+                    &self.camera.camera_bind_group,
+                );
+            // 1 second = 1_000_000_000 nanoseconds
+            // 500_000_000ns = 1/2 seconds
+            } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
+                self.blink_time = std::time::Instant::now();
+            }
 
 
             use model::DrawTransparentModel;
@@ -567,13 +663,15 @@ impl State {
                 }
             }
             // TODO: make a function instead of copy-pasting for modifying_instance
-            if self.instances.modifying_instance.model.transparent_meshes.len() > 0 {
-                render_pass.set_vertex_buffer(1, self.instances.modifying_instance.instance_buffer.slice(..));
-                render_pass.tdraw_model_instanced(
-                    &self.instances.modifying_instance.model,
-                    0..self.instances.modifying_instance.instances.len() as u32,
-                    &self.camera.camera_bind_group,
-                );
+            if model_visible {
+                if model.unwrap().transparent_meshes.len() > 0 {
+                    render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                    render_pass.tdraw_model_instanced(
+                        &model.unwrap(),
+                        0..instances as u32,
+                        &self.camera.camera_bind_group,
+                    );
+                }
             }
         }
 
@@ -589,7 +687,7 @@ impl State {
             &gpu.queue,
             &self.texture_bind_group_layout,
         ) {
-            Ok(model) => self.instances.set_model(file_name, model, &gpu.device),
+            Ok(model) => self.instances.set_model(file_name, model),
             Err(_) => (),
         };
     }
