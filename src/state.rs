@@ -8,13 +8,13 @@ use crate::resources;
 
 const CAMERA_START_POSITION: (f32, f32, f32) = (0.0, 5.0, 10.0);
 const CAMERA_START_YAW: f32 = -90.0;
-const CAMERA_START_PITCH: f32 = -20.0;
+const CAMERA_START_PITCH: f32 = -65.0;
 const CAMERA_SPEED: f32 = 30.0;
 const CAMERA_SENSITIVITY: f32 = 2.0;
 
-const FOVY: f32 = 45.0;
+const FOVY: f32 = 20.0;
 const ZNEAR: f32 = 1.0;
-const ZFAR: f32 = 1000.0;
+const ZFAR: f32 = 100000.0;
 
 /* const NUM_INSTANCES_PER_ROW: u32 = 1;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
@@ -110,7 +110,7 @@ impl Instance {
 
 pub struct CameraState {
     camera: camera::Camera,
-    projection: camera::Projection,
+    pub projection: camera::Projection,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     pub camera_controller: camera::CameraController,

@@ -4,7 +4,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use crate::state::{State, GpuState};
+use crate::{state::{State, GpuState}, camera::Projection};
 
 pub struct ImguiState {
     gpu: GpuState,
@@ -18,7 +18,8 @@ pub struct ImguiState {
 }
 
 struct CameraControlsWin {
-    show_hotkeys: bool
+    show_hotkeys: bool,
+    fovy: f32
 }
 
 struct ModelSelectorWin {
@@ -44,7 +45,8 @@ impl ImguiState {
         let files = get_file_names();
 
         let camera_controls_win = CameraControlsWin {
-            show_hotkeys: false
+            show_hotkeys: false,
+            fovy: 20.0
         };
 
         let model_selector_win = ModelSelectorWin {
@@ -72,16 +74,19 @@ impl ImguiState {
                 .size([400.0, 200.0], Condition::FirstUseEver)
                 .position([400.0, 200.0], Condition::FirstUseEver)
                 .build(&ui, || {
-                    let camera = &mut self.state.camera.camera_controller;
+                    let camera_cont = &mut self.state.camera.camera_controller;
+                    let projection = &mut self.state.camera.projection;
                     let state = &mut self.camera_controls_win;
-                    Slider::new("speed", 0.0 as f32, 100.0 as f32).build(&ui, &mut camera.speed);
-                    Slider::new("sensitivity", 0.0 as f32, 20.0 as f32).build(&ui, &mut camera.sensitivity);
-                    Slider::new("yaw", -4.0 as f32, 4.0 as f32).build(&ui, &mut camera.rotate_horizontal);
+                    Slider::new("speed", 0.0 as f32, 1000.0 as f32).build(&ui, &mut camera_cont.speed);
+                    Slider::new("sensitivity", 0.0 as f32, 20.0 as f32).build(&ui, &mut camera_cont.sensitivity);
+                    Slider::new("fovy", 1.0 as f32, 45.0 as f32).build(&ui, &mut state.fovy);
+                    *projection = projection.change_fovy(cgmath::Deg(state.fovy));
+                    Slider::new("yaw", -4.0 as f32, 4.0 as f32).build(&ui, &mut camera_cont.rotate_horizontal);
                     VerticalSlider::new("pitch", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
-                        .build(&ui, &mut camera.rotate_vertical);
+                        .build(&ui, &mut camera_cont.rotate_vertical);
                     ui.same_line();
                     VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
-                        .build(&ui, &mut camera.scroll);
+                        .build(&ui, &mut camera_cont.scroll);
 
                     ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
                     if state.show_hotkeys {

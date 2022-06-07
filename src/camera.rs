@@ -1,6 +1,5 @@
 use cgmath::*;
 use winit::event::*;
-use winit::dpi::PhysicalPosition;
 use std::time::Duration;
 use std::f32::consts::FRAC_PI_2;
 
@@ -41,19 +40,19 @@ impl Camera {
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         Matrix4::look_to_rh(
             self.position, Vector3::new(
-                self.yaw.0.cos(),
+                self.yaw.0.cos() * self.pitch.0.cos(),
                 self.pitch.0.sin(),
-                self.yaw.0.sin()
+                self.yaw.0.sin() * self.pitch.0.cos()
             ).normalize(),
             Vector3::unit_y())
     }
 }
 
 pub struct Projection {
-    aspect: f32,
-    fovy: Rad<f32>,
-    znear: f32,
-    zfar: f32
+    pub aspect: f32,
+    pub fovy: Rad<f32>,
+    pub znear: f32,
+    pub zfar: f32
 }
 
 impl Projection {
@@ -70,6 +69,10 @@ impl Projection {
             znear,
             zfar
         }
+    }
+
+    pub fn change_fovy<F: Into<Rad<f32>>>(&self, fovy: F) -> Self {
+        Self { aspect: self.aspect, fovy: fovy.into(), znear: self.znear, zfar: self.zfar }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
