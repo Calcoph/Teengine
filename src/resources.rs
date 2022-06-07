@@ -25,6 +25,7 @@ pub fn load_glb_model(
     let (document, buffers, images) = gltf::import("ignore/resources/".to_string()+file_name)?;
 
     let mut meshes = Vec::new();
+    let mut transparent_meshes = Vec::new();
     let mut materials = Vec::new();
     let mut mat_index = 0;
     for glb_mesh in document.meshes() {
@@ -35,6 +36,7 @@ pub fn load_glb_model(
             // 2. Sort the transparent primitives (from furthest to nearest)
             // 3. Draw the transparent primitives in order
             // to separate them see "alphaMode" in material
+            let alpha = glb_primitive.material().alpha_mode();
             let pbr = glb_primitive.material().pbr_metallic_roughness();
             let glb_color = pbr.base_color_factor();
             let glb_texture = match pbr.base_color_texture() {
@@ -122,10 +124,14 @@ pub fn load_glb_model(
                 num_elements,
                 material
             };
-            meshes.push(mesh);
+            match alpha {
+                gltf::material::AlphaMode::Opaque =>  meshes.push(mesh),
+                gltf::material::AlphaMode::Mask => meshes.push(mesh),
+                gltf::material::AlphaMode::Blend => transparent_meshes.push(mesh),
+            }  
         }
     }
-    Ok(model::Model {meshes, materials})
+    Ok(model::Model {meshes, transparent_meshes, materials})
 }
 
 fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
@@ -192,9 +198,6 @@ fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
     for v in scalar_data.chunks_exact(2) {
         let x = u16::from_le_bytes([v[0],v[1]]) as u32;
         scalar.push(x);
-    }
-    for index in &scalar {
-        print!("{}, ", index)
     }
 
     scalar

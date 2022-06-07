@@ -80,6 +80,7 @@ pub struct Mesh {
 
 pub struct Model {
     pub meshes: Vec<Mesh>,
+    pub transparent_meshes: Vec<Mesh>,
     pub materials: Vec<Material>
 }
 
@@ -156,6 +157,92 @@ where
     }
 
     fn draw_mesh_instanced(
+        &mut self,
+        mesh: &'b Mesh,
+        material: &'b Material,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup
+    ) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_bind_group(0, &material.bind_group, &[]);
+        self.set_bind_group(1, camera_bind_group, &[]);
+        self.draw_indexed(0..mesh.num_elements, 0, instances);
+    }
+}
+
+pub trait DrawTransparentModel<'a> {
+    fn tdraw_model_instanced(
+        &mut self,
+        model: &'a Model,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup
+    );
+    fn tdraw_model_instanced_with_material(
+        &mut self,
+        model: &'a Model,
+        material: &'a Material,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup
+    );
+    fn tdraw_mesh(
+        &mut self,
+        mesh: &'a Mesh,
+        material: &'a Material,
+        camera_bind_group: &'a wgpu::BindGroup
+    );
+    fn tdraw_mesh_instanced(
+        &mut self,
+        mesh: &'a Mesh,
+        material: &'a Material,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup
+    );
+}
+
+impl<'a, 'b> DrawTransparentModel<'b> for wgpu::RenderPass<'a>
+where
+    'b: 'a
+{
+    fn tdraw_model_instanced(
+        &mut self,
+        model: &'b Model,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup
+    ) {
+        for mesh in &model.transparent_meshes {
+            let material = &model.materials[mesh.material];
+            self.tdraw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+        }
+    }
+
+    fn tdraw_model_instanced_with_material(
+        &mut self,
+        model: &'b Model,
+        material: &'b Material,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        for mesh in &model.meshes {
+            self.tdraw_mesh_instanced(
+                mesh,
+                material,
+                instances.clone(),
+                camera_bind_group
+            )
+        }
+    }
+
+    fn tdraw_mesh(
+        &mut self,
+        mesh: &'b Mesh,
+        material: &'b Material,
+        camera_bind_group: &'b wgpu::BindGroup
+    ) {
+        self.tdraw_mesh_instanced(mesh, material, 0..1, camera_bind_group);
+    }
+
+    fn tdraw_mesh_instanced(
         &mut self,
         mesh: &'b Mesh,
         material: &'b Material,

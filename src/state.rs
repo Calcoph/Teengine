@@ -246,6 +246,7 @@ pub struct State {
     pub camera: CameraState,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
+    transparent_render_pipeline: wgpu::RenderPipeline,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     glb_model: model::Model,
@@ -276,6 +277,23 @@ impl State {
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
+                false
+            )
+        };
+
+        let transparent_render_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            };
+            create_render_pipeline(
+                &gpu.device,
+                &render_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                true
             )
         };
 
@@ -301,6 +319,7 @@ impl State {
             camera,
             size,
             render_pipeline,
+            transparent_render_pipeline,
             instances,
             instance_buffer,
             glb_model,
@@ -468,6 +487,13 @@ impl State {
                 0..self.instances.len() as u32,
                 &self.camera.camera_bind_group,
             );
+            use model::DrawTransparentModel;
+            render_pass.set_pipeline(&self.transparent_render_pipeline);
+            render_pass.tdraw_model_instanced(
+                &self.glb_model,
+                0..self.instances.len() as u32,
+                &self.camera.camera_bind_group,
+            );
         }
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -495,8 +521,13 @@ fn create_render_pipeline(
     depth_format: Option<wgpu::TextureFormat>,
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
+    transparent: bool
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(&shader);
+    let entry_point = match transparent {
+        true => "fs_main",
+        false => "fs_mask",
+    };
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
@@ -508,7 +539,7 @@ fn create_render_pipeline(
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
-            entry_point: "fs_main",
+            entry_point,
             targets: &[wgpu::ColorTargetState {
                 format: color_format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
