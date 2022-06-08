@@ -8,6 +8,7 @@ use crate::{texture, camera, resources::load_glb_model};
 use crate::{model, model::Vertex};
 use crate::resources;
 use crate::config as c;
+use crate::temap;
 
 /* const NUM_INSTANCES_PER_ROW: u32 = 1;
 const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
@@ -249,6 +250,10 @@ impl InstancedModel {
             rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
         }];
 
+        InstancedModel::new_premade(model, device, instances)
+    }
+
+    fn new_premade(model: model::Model, device: &wgpu::Device, instances: Vec<Instance>) -> Self {
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -368,6 +373,45 @@ impl InstancesState {
             },
         }
     }
+
+    pub fn save_temap(&self, file_name: &str) {
+        let mut map = temap::TeMap::new();
+        for (name, instance) in &self.instances {
+            map.add_model(&name);
+            for inst in &instance.instances {
+                map.add_instance(inst.position.x, inst.position.y, inst.position.z)
+            }
+        }
+
+        map.save(&file_name);
+    }
+
+    fn from_temap(map: temap::TeMap, gpu: &GpuState, texture_bind_group_layout: &BindGroupLayout) -> Self {
+        let mut instances_state = InstancesState::new(gpu, texture_bind_group_layout);
+        for (name, te_model) in map.models {
+            let model = load_glb_model(&name, &gpu.device, &gpu.queue, texture_bind_group_layout);
+            match model {
+                Ok(m) => {
+                    let mut instances = Vec::new();
+                    for offset in te_model.offsets {
+                        let instance = Instance {
+                            position: cgmath::Vector3 {
+                                x: offset.x,
+                                y: offset.y,
+                                z: offset.z
+                            },
+                            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                        };
+                        instances.push(instance);
+                    };
+                    instances_state.instances.insert(name, InstancedModel::new_premade(m, &gpu.device, instances));
+                },
+                _ => ()
+            }
+        };
+
+        instances_state
+    }
 }
 
 pub struct State {
@@ -427,23 +471,6 @@ impl State {
         };
 
         let instances = InstancesState::new(gpu, &texture_bind_group_layout);
-        /* let instances = State::get_instances();
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = gpu.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Instance Buffer"),
-                contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX
-            }
-        );
-
-        let glb_model = resources::load_glb_model(
-            "box02.glb", 
-            &gpu.device, 
-            &gpu.queue,
-            &texture_bind_group_layout,
-        ).unwrap(); */
 
         let blinking = true;
         let blink_time = std::time::Instant::now();
@@ -462,33 +489,9 @@ impl State {
         }
     }
 
-    fn _get_instances() -> Vec<Instance> {
-        // TODO: get this from a map file
-        /* const SPACE_BETWEEN: f32 = 30.0;
-        (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-
-                let position = cgmath::Vector3 { x, y: 0.0, z } - INSTANCE_DISPLACEMENT;
-
-                let rotation = if position.is_zero() {
-                    // This is needed so an object at (0, 0, 0) won't get scaled to zero
-                    // as Quaternions can effect scale if they're not created correctly
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-                } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                };
-
-                Instance {
-                    position, rotation
-                }
-            })
-        }).collect::<Vec<_>>() */
-        vec![Instance {
-            position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
-            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-        }]
+    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
+        let map = temap::TeMap::from_file(file_name);
+        self.instances = InstancesState::from_temap(map, gpu, &self.texture_bind_group_layout);
     }
 
     fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {

@@ -13,7 +13,8 @@ pub struct ImguiState {
     pub platform: WinitPlatform,
     renderer: Renderer,
     pub state: State,
-    files: Vec<String>,
+    resources: Vec<String>,
+    maps: Vec<String>,
     camera_controls_win: CameraControlsWin,
     model_selector_win: ModelSelectorWin,
     object_control_win: ObjectControlWin
@@ -25,7 +26,9 @@ struct CameraControlsWin {
 }
 
 struct ModelSelectorWin {
-    search_str: String
+    search_str_gltf: String,
+    search_str_temap: String,
+    save_map_name: String
 }
 
 struct ObjectControlWin {
@@ -48,7 +51,9 @@ impl ImguiState {
 
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
-        let files = get_file_names();
+        let resources = get_resource_names();
+
+        let maps = get_map_names();
 
         let camera_controls_win = CameraControlsWin {
             show_hotkeys: false,
@@ -56,7 +61,9 @@ impl ImguiState {
         };
 
         let model_selector_win = ModelSelectorWin {
-            search_str: String::new()
+            search_str_gltf: String::new(),
+            search_str_temap: String::new(),
+            save_map_name: String::new()
         };
 
         let object_control_win = ObjectControlWin {
@@ -69,7 +76,8 @@ impl ImguiState {
             platform,
             renderer,
             state,
-            files,
+            resources,
+            maps,
             camera_controls_win,
             model_selector_win,
             object_control_win
@@ -97,9 +105,9 @@ impl ImguiState {
                         .build(&ui, &mut camera_cont.rotate_vertical);
                     ui.same_line();
                     VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
-                        .build(&ui, &mut camera_cont.scroll);
-
-                    if ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys) {
+                            .build(&ui, &mut camera_cont.scroll);
+                    ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
+                    if state.show_hotkeys {
                         ui.text("press WASD to move");
                         ui.text("press space/shift to move up/down");
                         ui.text("press QE to rotate yaw");
@@ -113,22 +121,63 @@ impl ImguiState {
                 .build(&ui, || {
                     let state = &mut self.model_selector_win;
                     ui.text("Put your gltf/glb models in\nignore/resources/ so they show up here");
-                    if ui.button("Refresh") {
-                        self.files = get_file_names();
-                    };
                     ui.separator();
-                    ui.input_text("search", &mut state.search_str).build();
-                    for file_name in &self.files {
-                        let name = match file_name.strip_suffix(".glb") {
-                            Some(n) => n,
-                            None => file_name.strip_suffix(".gltf").unwrap(),
+                    ChildWindow::new("models")
+                        .size([250.0, 0.0])
+                        .build(&ui, || {
+                        if ui.button("Refresh") {
+                            self.resources = get_resource_names();
                         };
-                        if name.contains(&state.search_str) {
-                            if ui.button(name) {
-                                self.state.change_model(file_name, &self.gpu)
+                        ui.input_text("search", &mut state.search_str_gltf).build();
+                        for file_name in &self.resources {
+                            let name = match file_name.strip_suffix(".glb") {
+                                Some(n) => n,
+                                None => match file_name.strip_suffix(".gltf") {
+                                    Some(n) => n,
+                                    None => ""
+                                },
                             };
+                            if name.contains(&state.search_str_gltf) && name != "" {
+                                if ui.button(name) {
+                                    self.state.change_model(file_name, &self.gpu)
+                                };
+                            }
+                        };
+                    });
+                    ui.same_line();
+                    ChildWindow::new("maps").build(&ui, || {
+                        ui.input_text("map name", &mut state.save_map_name).build();
+                        //ui.modal
+                        if ui.button("Save map") {
+                            if state.save_map_name != "" {
+                                self.state.instances.save_temap(&state.save_map_name)
+                            } else {
+                                ui.open_popup("SAVE FAILED");
+                            }
+                        };
+                        if let Some(_token) = PopupModal::new("SAVE FAILED").begin_popup(&ui) {
+                            ui.text("Please write the file name when saving");
+                            if ui.button("OK") {
+                                ui.close_current_popup();
+                            }
                         }
-                    };
+                        ui.separator();
+                        if ui.button("Refresh") {
+                            self.maps = get_map_names();
+                        };
+                        ui.input_text("search", &mut state.search_str_temap).build();
+                        for file_name in &self.maps {
+                            let name = match file_name.strip_suffix(".temap") {
+                                Some(n) => n,
+                                None => "",
+                            };
+                            if name.contains(&state.search_str_temap) && name != "" {
+                                if ui.button(name) {
+                                    self.state.load_map(file_name, &self.gpu);
+                                };
+                            }
+                        };
+                    })
                 });
             imgui::Window::new("Object control")
                 .size([400.0, 200.0], Condition::FirstUseEver)
@@ -199,7 +248,7 @@ impl ImguiState {
     }
 }
 
-fn get_file_names() -> Vec<String> {
+fn get_resource_names() -> Vec<String> {
     let mut names = Vec::new();
     match std::fs::read_dir(std::path::Path::new("ignore/resources")) {
         Ok(files) => for file in files {
@@ -209,6 +258,21 @@ fn get_file_names() -> Vec<String> {
             }
         },
         Err(_) => names.push(String::from("Error accessing the directory ignore/resources/")),
+    };
+
+    names
+}
+
+fn get_map_names() -> Vec<String> {
+    let mut names = Vec::new();
+    match std::fs::read_dir(std::path::Path::new("ignore/maps")) {
+        Ok(files) => for file in files {
+            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
+            if file_name.ends_with(".temap") {
+                names.push(file_name)
+            }
+        },
+        Err(_) => names.push(String::from("Error accessing the directory ignore/maps/")),
     };
 
     names

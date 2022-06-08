@@ -11,6 +11,7 @@ mod texture;
 mod resources;
 mod camera;
 mod mapmaker;
+mod temap;
 
 fn main() -> Result<(), Error> {
     pollster::block_on(event_loop::run())
