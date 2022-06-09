@@ -5,7 +5,7 @@ use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
 use te_renderer::state::{State, GpuState};
-use main::consts as c;
+use crate::consts as c;
 
 pub struct ImguiState {
     gpu: GpuState,

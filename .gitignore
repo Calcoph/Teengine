@@ -5,4 +5,5 @@
 .vscode
 imgui.ini
 /te-mapmaker/src/consts.rs
+/te-mapmaker/target
 /te-renderer/src/consts.rs

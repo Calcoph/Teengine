@@ -4,8 +4,8 @@ use image::io::Reader as ImageReader;
 use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
 
 use te_gamepad::gamepad;
-use main::consts as c;
-use main::mapmaker;
+use crate::consts as c;
+use crate::mapmaker;
 
 pub async fn run() -> Result<(), Error> {
     env_logger::init();
