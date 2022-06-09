@@ -3,8 +3,6 @@ use winit::event::*;
 use std::time::Duration;
 use std::f32::consts::FRAC_PI_2;
 
-use crate::consts as c;
-
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -14,110 +12,6 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
-
-struct Plan {
-    normal:cgmath::Vector3<f32>,
-    distance: f32
-}
-
-impl Plan {
-    fn new(p1: cgmath::Point3<f32>, norm: cgmath::Vector3<f32>) -> Self {
-        let normal = norm.normalize();
-        Plan { normal, distance: p1.dot(normal) }
-    }
-
-    fn is_in_or_forward(&self, corner: &Point3<f32>) -> bool {
-        let is_inside = (corner.dot(self.normal) - self.distance) <= 0.0;
-
-        /* if is_inside {
-            println!("AA");
-        } */
-
-        is_inside
-    }
-}
-
-pub struct Frustum {
-    top_face: Plan,
-    bottom_face: Plan,
-    right_face: Plan,
-    left_face: Plan,
-    //far_face: Plan,
-    //near_face: Plan
-}
-
-impl Frustum {
-    pub fn new(camera: &Camera, projection: &Projection) -> Self {
-        let x = camera.yaw.0.cos() * camera.pitch.0.cos();
-        let y = camera.pitch.0.sin();
-        let z = camera.yaw.0.sin() * camera.pitch.0.cos();
-        let front = cgmath::vec3(x, y, z).normalize();
-        let up = Vector3::unit_y();
-        let right = up.cross(front).normalize();
-        let up = front.cross(right);
-
-        let half_v_side = projection.zfar * (projection.fovy * 0.5).tan();
-        let half_h_side = half_v_side * projection.aspect;
-        let front_mult_far = projection.zfar * front;
-
-
-        let top_face = Plan::new(
-            camera.position,
-            right.cross(front_mult_far - up * half_v_side)
-        );
-        let bottom_face = Plan::new(
-            camera.position,
-            (front_mult_far + up * half_v_side).cross(right)
-        );
-        let right_face = Plan::new(
-            camera.position,
-            up.cross(front_mult_far + right * half_h_side)
-        );
-        let left_face = Plan::new(
-            camera.position,
-            (front_mult_far - right * half_h_side).cross(up)
-        );
-        /* let far_face = Plan::new(
-            camera.position + front_mult_far,
-            -front
-        );
-        let near_face = Plan::new(
-            camera.position + projection.znear * front,
-            front
-        ); */
-
-        Frustum {
-            top_face,
-            bottom_face,
-            right_face,
-            left_face,
-            //far_face,
-            //near_face
-        }
-    }
-
-    pub fn is_inside(&self, row: usize, col: usize) -> bool {
-        let max_x = (col+1) as f32 * c::CHUNK_SIZE;
-        let min_x = col as f32 * c::CHUNK_SIZE;
-        let max_z = (row+1) as f32 * c::CHUNK_SIZE;
-        let min_z = row as f32 * c::CHUNK_SIZE;
-        let corners = vec![
-            cgmath::point3(max_x, 0.0, max_z),
-            cgmath::point3(max_x, 0.0, min_z),
-            cgmath::point3(min_x, 0.0, max_z),
-            cgmath::point3(min_x, 0.0, min_z)
-        ];
-
-        corners.iter().any(|corner| {
-            self.top_face.is_in_or_forward(corner) &&
-            self.bottom_face.is_in_or_forward(corner) &&
-            self.right_face.is_in_or_forward(corner) &&
-            self.left_face.is_in_or_forward(corner) //&&
-            //self.near_face.is_in_or_forward(corner) &&
-            //self.far_face.is_in_or_forward(corner)
-        })
-    }
-}
 
 #[derive(Debug)]
 pub struct Camera {

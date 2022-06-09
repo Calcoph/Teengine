@@ -82,44 +82,10 @@ pub struct Mesh {
     pub material: usize
 }
 
-impl Mesh {
-    fn get_extremes(&self) -> (f32, f32, f32, f32) {
-        (self.min_x, self.max_x, self.min_z, self.max_z)
-    }
-}
-
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub transparent_meshes: Vec<Mesh>,
     pub materials: Vec<Material>
-}
-
-impl Model {
-    pub fn get_extremes(&self) -> (f32, f32, f32, f32) {
-        let mut max_x = f32::NEG_INFINITY;
-        let mut min_x = f32::INFINITY;
-        let mut max_z = f32::NEG_INFINITY;
-        let mut min_z = f32::INFINITY;
-        self.meshes.iter().map(|mesh| {
-            mesh.get_extremes()
-        }).for_each(|(max, mix, maz, miz)| {
-            max_x = f32::max(max_x, max);
-            min_x = f32::min(min_x, mix);
-            max_z = f32::max(max_z, maz);
-            min_z = f32::min(min_z, miz);
-        });
-
-        self.transparent_meshes.iter().map(|mesh| {
-            mesh.get_extremes()
-        }).for_each(|(max, mix, maz, miz)| {
-            max_x = f32::max(max_x, max);
-            min_x = f32::min(min_x, mix);
-            max_z = f32::max(max_z, maz);
-            min_z = f32::min(min_z, miz);
-        });
-
-        (max_x, min_x, max_z, min_z)
-    }
 }
 
 pub trait DrawModel<'a> {
@@ -203,8 +169,8 @@ where
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, &material.bind_group, &[]);
-        self.set_bind_group(1, camera_bind_group, &[]);
+        self.set_bind_group(0, camera_bind_group, &[]);
+        self.set_bind_group(1, &material.bind_group, &[]);
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 }
@@ -289,8 +255,8 @@ where
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, &material.bind_group, &[]);
-        self.set_bind_group(1, camera_bind_group, &[]);
+        self.set_bind_group(0, camera_bind_group, &[]);
+        self.set_bind_group(1, &material.bind_group, &[]);
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 }
