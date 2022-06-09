@@ -251,7 +251,7 @@ impl ImguiState {
 
 fn get_resource_names() -> Vec<String> {
     let mut names = Vec::new();
-    match std::fs::read_dir(std::path::Path::new("ignore/resources")) {
+    match std::fs::read_dir(std::path::Path::new("../ignore/resources")) {
         Ok(files) => for file in files {
             let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
             if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
@@ -266,7 +266,7 @@ fn get_resource_names() -> Vec<String> {
 
 fn get_map_names() -> Vec<String> {
     let mut names = Vec::new();
-    match std::fs::read_dir(std::path::Path::new("ignore/maps")) {
+    match std::fs::read_dir(std::path::Path::new("../ignore/maps")) {
         Ok(files) => for file in files {
             let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
             if file_name.ends_with(".temap") {

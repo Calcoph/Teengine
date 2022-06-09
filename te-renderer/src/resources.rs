@@ -22,7 +22,7 @@ pub fn load_glb_model(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> Result<model::Model, Error> {
-    let (document, buffers, images) = gltf::import("ignore/resources/".to_string()+file_name)?;
+    let (document, buffers, images) = gltf::import("../ignore/resources/".to_string()+file_name)?; // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();
     let mut transparent_meshes = Vec::new();

@@ -26,7 +26,7 @@ impl TeMap {
 
     pub fn from_file(file_name: &str) -> Self {
         let file_name = file_name.trim_end_matches(".temap");
-        let json_temap = std::fs::read_to_string("ignore/maps/".to_string() + file_name + ".temap").unwrap();
+        let json_temap = std::fs::read_to_string("../ignore/maps/".to_string() + file_name + ".temap").unwrap();
         let json_temap = json::parse(&json_temap).unwrap();
         // I know this match is horrible, but I left it as is, because it's also beautiful
         match json_temap {

@@ -9,11 +9,10 @@ use crate::mapmaker;
 
 pub async fn run() -> Result<(), Error> {
     env_logger::init();
-    let img = match ImageReader::open("icon.png")?.decode() {
+    let img = match ImageReader::open("../icon.png")?.decode() {
         Ok(img) => img.to_rgba8(),
         Err(_) => panic!("Couldn't find icon"),
     };
-
     let event_loop = EventLoop::with_user_event();
     gamepad::listen(event_loop.create_proxy());
     let wb = WindowBuilder::new()
