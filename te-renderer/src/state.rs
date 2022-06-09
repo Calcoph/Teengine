@@ -4,19 +4,9 @@ use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, d
 use wgpu::util::DeviceExt;
 use cgmath::prelude::*;
 
-use crate::{texture, camera, resources::load_glb_model};
-use crate::{model, model::Vertex};
-use crate::resources;
+use crate::{texture, temap, resources, model, camera, resources::load_glb_model};
+use crate::model::Vertex;
 use crate::consts as c;
-use crate::temap;
-
-/* const NUM_INSTANCES_PER_ROW: u32 = 1;
-const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> =
-    cgmath::Vector3::new(
-        NUM_INSTANCES_PER_ROW as f32 * 0.5,
-        0.0,
-        NUM_INSTANCES_PER_ROW as f32 * 0.5
-    ); */
 
 // We need this for Rust to store our data correctly for the shaders
 #[repr(C)]

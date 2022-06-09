@@ -3,9 +3,9 @@ use std::io::Error;
 use image::io::Reader as ImageReader;
 use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
 
-use crate::gamepad;
-use crate::consts as c;
-use crate::mapmaker;
+use te_gamepad::gamepad;
+use main::consts as c;
+use main::mapmaker;
 
 pub async fn run() -> Result<(), Error> {
     env_logger::init();

@@ -36,6 +36,15 @@ features = ["png", "jpeg"]
 [dependencies.imgui-wgpu]
 path = "imgui-wgpu-temp-fix"
 
+[dependencies.te-renderer]
+path = "./te-renderer"
+
+[dependencies.te-player]
+path = "./te-player"
+
+[dependencies.te-mapmaker]
+path = "./te-mapmaker"
+
 [build-dependencies]
 anyhow = "1.0"
 fs_extra = "1.2"

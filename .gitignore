@@ -4,4 +4,5 @@
 /imgui-wgpu-temp-fix
 .vscode
 imgui.ini
-/src/consts.rs
+/te-mapmaker/src/consts.rs
+/te-renderer/src/consts.rs

@@ -4,8 +4,8 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use crate::state::{State, GpuState};
-use crate::consts as c;
+use te_renderer::state::{State, GpuState};
+use main::consts as c;
 
 pub struct ImguiState {
     gpu: GpuState,
