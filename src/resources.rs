@@ -85,13 +85,13 @@ pub fn load_glb_model(
                     },
                     Semantic::Normals => (), // ignoring since there is no light
                     Semantic::Tangents => (), // ignoring since there is no light
-                    Semantic::Colors(_) => println!("this model had colors and you ignored them!"), // TODO: ignore colors, they should be overwritten by textures
+                    Semantic::Colors(_) => (),//println!("this model had colors and you ignored them!"), // TODO: ignore colors, they should be overwritten by textures
                     Semantic::TexCoords(_) => {
                         let index = get_buffer_index(&accessor);
                         tex_coords = Some(load_vec2(accessor, &buffers[index]));
                     }, //TODO: use the TexCoords parameter
-                    Semantic::Joints(_) => println!("this model had joints and you ignored them!"), // TODO: ignore animations for now
-                    Semantic::Weights(_) => println!("this model had weights and you ignored them!"), // TODO: ignore animations for now
+                    Semantic::Joints(_) => (),//println!("this model had joints and you ignored them!"), // TODO: ignore animations for now
+                    Semantic::Weights(_) => (),//println!("this model had weights and you ignored them!"), // TODO: ignore animations for now
                 }
             }
             let vertices = positions.unwrap()
@@ -103,6 +103,22 @@ pub fn load_glb_model(
                         tex_coords
                     }
                 }).collect::<Vec<model::ModelVertex>>();
+
+            let mut max_x = f32::NEG_INFINITY;
+            let mut min_x = f32::INFINITY;
+            let mut max_z = f32::NEG_INFINITY;
+            let mut min_z = f32::INFINITY;
+            vertices.iter().map(|vertex| {
+                (
+                    vertex.position[0],
+                    vertex.position[2]
+                )
+            }).for_each(|(x, z)| {
+                max_x = f32::max(max_x, x);
+                min_x = f32::min(min_x, x);
+                max_z = f32::max(max_z, z);
+                min_z = f32::min(min_z, z);
+            });
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{:?} Vertex Buffer", file_name)),
@@ -119,6 +135,10 @@ pub fn load_glb_model(
             let num_elements = indices.len() as u32;
             let mesh = model::Mesh {
                 name: name.clone(),
+                max_x,
+                min_x,
+                max_z,
+                min_z,
                 vertex_buffer,
                 index_buffer,
                 num_elements,

@@ -1,13 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi::PhysicalSize};
 use wgpu::{util::DeviceExt, TextureView, BindGroupLayout};
 use cgmath::prelude::*;
 
-use crate::{texture, camera, resources::load_glb_model};
+use crate::{texture, camera::{self, Frustum}, resources::load_glb_model};
 use crate::{model, model::Vertex};
 use crate::resources;
-use crate::config as c;
+use crate::consts as c;
 use crate::temap;
 
 /* const NUM_INSTANCES_PER_ROW: u32 = 1;
@@ -90,12 +90,13 @@ impl model::Vertex for InstanceRaw {
 
 struct Instance {
     position: cgmath::Vector3<f32>,
-    rotation: cgmath::Quaternion<f32>
+    col: usize,
+    row: usize
 }
 
 impl Instance {
     fn to_raw(&self) -> InstanceRaw {
-        let model = cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
+        let model = cgmath::Matrix4::from_translation(self.position);
         InstanceRaw {
             model: model.into(),
         }
@@ -109,6 +110,7 @@ pub struct CameraState {
     camera_buffer: wgpu::Buffer,
     pub camera_controller: camera::CameraController,
     camera_bind_group: wgpu::BindGroup,
+    frustum: camera::Frustum
 }
 
 impl CameraState {
@@ -150,18 +152,22 @@ impl CameraState {
             label: Some("camera_bind_group")
         });
 
+        let frustum = Frustum::new(&camera, &projection);
+
         CameraState {
             camera,
             projection,
             camera_uniform,
             camera_buffer,
             camera_controller,
-            camera_bind_group
+            camera_bind_group,
+            frustum
         }
     }
 
     fn update(&mut self, dt: std::time::Duration, queue: &wgpu::Queue) {
         self.camera_controller.update_camera(&mut self.camera, dt);
+        //self.frustum = Frustum::new(&self.camera, &self.projection);
         self.camera_uniform.update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
@@ -236,7 +242,6 @@ impl GpuState {
         self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
     }
 }
-
 struct InstancedModel {
     model: model::Model,
     instances: Vec<Instance>,
@@ -247,7 +252,8 @@ impl InstancedModel {
     fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
         let instances = vec![Instance {
             position: cgmath::Vector3 { x, y, z },
-            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+            row: 0, // TODO: calculate these
+            col: 0
         }];
 
         InstancedModel::new_premade(model, device, instances)
@@ -263,6 +269,10 @@ impl InstancedModel {
             }
         );
 
+        let instances = instances.into_iter().map(|instance| {
+            instance
+        }).collect();
+
         InstancedModel {
             model,
             instances,
@@ -273,12 +283,13 @@ impl InstancedModel {
     fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
         let new_instance = Instance {
             position: cgmath::Vector3 { x, y, z },
-            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+            row: 0, //TODO: calculate these
+            col: 0
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
         self.instance_buffer.destroy();
-        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_data = self.instances.iter().map(|instance| instance.to_raw()).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
@@ -302,7 +313,8 @@ impl ModifyingInstance {
     fn into_renderable(&mut self, device: &wgpu::Device) -> usize {
         let instances = vec![Instance {
             position: cgmath::Vector3 { x: self.x*c::TILE_SIZE, y: self.y*c::TILE_SIZE, z: self.z*c::TILE_HEIGHT },
-            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+            row: 0, // TODO: calculate these
+            col: 0
         }];
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
@@ -315,6 +327,72 @@ impl ModifyingInstance {
         );
         self.buffer = Some(instance_buffer);
         instances.len()
+    }
+}
+
+struct RenderMatrix {
+    cells: Vec<Vec<bool>>,
+    cols: usize
+}
+
+impl RenderMatrix {
+    fn new() -> Self {
+        RenderMatrix {
+            cells: Vec::new(),
+            cols: 0
+        }
+    }
+
+    fn register_instance(&mut self, instance: &mut Instance, model: &model::Model) {
+        let (max_x, min_x, max_z, min_z) = model.get_extremes();
+        let max_x = max_x + instance.position.x;
+        let min_x = min_x + instance.position.x;
+        let max_z = max_z + instance.position.z;
+        let min_z = min_z + instance.position.z;
+        let corners = vec![
+            (max_x, max_z),
+            (max_x, min_z),
+            (min_x, max_z),
+            (min_x, min_z)
+        ];
+        let chunks = corners.into_iter().map(|(x, z)| {
+            // TODO: take into account that f32 can be negative, but row and col can never be negative
+            let row = ((z/c::CHUNK_SIZE).floor()) as usize;
+            let col = ((x/c::CHUNK_SIZE).floor()) as usize;
+            (row, col)
+        }).collect::<HashSet<(usize, usize)>>();
+        chunks.into_iter().for_each(|(row, col)| {
+            while self.cells.len() <= row {
+                self.cells.push(Vec::new())
+            };
+            let row_vec = self.cells.get_mut(row).unwrap();
+            while row_vec.len() <= col {
+                row_vec.push(true);
+            };
+            if col+1 > self.cols {
+                self.cols = col+1
+            }
+            instance.row = row;
+            instance.col = col;
+        });
+    }
+
+    fn update_rendered(&mut self, view_cone: &camera::Frustum) {
+        for row in 0..self.cells.len() {
+            for col in 0..self.cols {
+                let cell = self.cells.get_mut(row).unwrap().get_mut(col);
+                match cell {
+                    Some(c) => {
+                        *c = view_cone.is_inside(row, col);
+                    },
+                    None => ()
+                }
+            }
+        }
+    }
+
+    fn is_rendered(&self, row: usize, col: usize) -> bool {
+        *self.cells.get(row).unwrap().get(col).unwrap()
     }
 }
 
@@ -400,7 +478,8 @@ impl InstancesState {
                                 y: offset.y,
                                 z: offset.z
                             },
-                            rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                            row: 0, //TODO: calculate row and col
+                            col: 0
                         };
                         instances.push(instance);
                     };
@@ -424,7 +503,8 @@ pub struct State {
     pub texture_bind_group_layout: BindGroupLayout,
     pub blinking: bool,
     blink_time: std::time::Instant,
-    pub blink_freq: u64
+    pub blink_freq: u64,
+    render_matrix: RenderMatrix
 }
 
 impl State {
@@ -475,6 +555,8 @@ impl State {
         let blinking = true;
         let blink_time = std::time::Instant::now();
         let blink_freq = 1;
+        let render_matrix = RenderMatrix::new();
+
         State {
             camera,
             size,
@@ -485,7 +567,8 @@ impl State {
             texture_bind_group_layout,
             blinking,
             blink_time,
-            blink_freq
+            blink_freq,
+            render_matrix
         }
     }
 
@@ -580,6 +663,7 @@ impl State {
 
     pub fn update(&mut self, dt: std::time::Duration, gpu: &GpuState) {
         self.camera.update(dt, &gpu.queue);
+        //self.render_matrix.update_rendered(&self.camera.frustum);
     }
 
     pub fn render(&mut self, view: &TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
@@ -619,10 +703,11 @@ impl State {
             use model::DrawModel;
             render_pass.set_pipeline(&self.render_pipeline);
             for (_name, instanced_model) in self.instances.instances.iter() {
+                let instances = instanced_model.instances.iter().filter(|instance| self.render_matrix.is_rendered(instance.row, instance.col)).count();
                 render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
                 render_pass.draw_model_instanced(
                     &instanced_model.model,
-                    0..instanced_model.instances.len() as u32,
+                    0..instances as u32,
                     &self.camera.camera_bind_group,
                 );
             }
@@ -657,10 +742,12 @@ impl State {
                 })
             {
                 if instanced_model.model.transparent_meshes.len() > 0 {
+                    let instances = instanced_model.instances.len();
+                    let instances = instanced_model.instances.iter().filter(|instance| self.render_matrix.is_rendered(instance.row, instance.col)).count();
                     render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
                     render_pass.tdraw_model_instanced(
                         &instanced_model.model,
-                        0..instanced_model.instances.len() as u32,
+                        0..instances as u32,
                         &self.camera.camera_bind_group,
                     );
                 }
@@ -693,6 +780,16 @@ impl State {
             Ok(model) => self.instances.set_model(file_name, model),
             Err(_) => (),
         };
+    }
+
+    pub fn calculate_render_matrix(&mut self) {
+        self.render_matrix = RenderMatrix::new();
+        for (_name, instanced_model) in &mut self.instances.instances {
+            let model = &instanced_model.model;
+            for instance in &mut instanced_model.instances {
+                self.render_matrix.register_instance(instance, model)
+            }
+        }
     }
 }
 

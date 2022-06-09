@@ -5,7 +5,7 @@ use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
 use crate::state::{State, GpuState};
-use crate::config as c;
+use crate::consts as c;
 
 pub struct ImguiState {
     gpu: GpuState,
@@ -174,6 +174,7 @@ impl ImguiState {
                             if name.contains(&state.search_str_temap) && name != "" {
                                 if ui.button(name) {
                                     self.state.load_map(file_name, &self.gpu);
+                                    //self.state.calculate_render_matrix();
                                 };
                             }
                         };

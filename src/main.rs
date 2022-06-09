@@ -3,7 +3,7 @@ use std::io::Error;
 use pollster;
 
 mod event_loop;
-mod config;
+mod consts;
 mod gamepad;
 mod model;
 mod state;

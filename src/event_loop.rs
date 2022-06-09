@@ -4,7 +4,7 @@ use image::io::Reader as ImageReader;
 use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
 
 use crate::gamepad;
-use crate::config as c;
+use crate::consts as c;
 use crate::mapmaker;
 
 pub async fn run() -> Result<(), Error> {
@@ -41,45 +41,45 @@ pub async fn run() -> Result<(), Error> {
                     },
                     WindowEvent::Moved(_) => (), // ignore
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a poionter to the next action we wanna do. In this case, exit the program
-                    WindowEvent::Destroyed => println!("TODO: Destroyed window {:?}", window_id), // TODO
+                    WindowEvent::Destroyed => (),//println!("TODO: Destroyed window {:?}", window_id), // TODO
                     WindowEvent::DroppedFile(_) => (), // ignore
                     WindowEvent::HoveredFile(_) => (), // ignore
                     WindowEvent::HoveredFileCancelled => (), // ignore
-                    WindowEvent::ReceivedCharacter(character) => println!("TODO: ReceivedCharacter{:?}", character),
-                    WindowEvent::Focused(is_focused) => println!("TODO: Focused {:?}", is_focused), // TODO
+                    WindowEvent::ReceivedCharacter(character) => (),//println!("TODO: ReceivedCharacter{:?}", character),
+                    WindowEvent::Focused(is_focused) => (),//println!("TODO: Focused {:?}", is_focused), // TODO
                     WindowEvent::KeyboardInput { device_id: _, input: _, is_synthetic: _ } => {mapmaker.input(&event);}, // TODO
-                    WindowEvent::ModifiersChanged(modifiers) => println!("TODO: ModifiersChanged ({:?})", modifiers), // TODO
+                    WindowEvent::ModifiersChanged(modifiers) => (),//println!("TODO: ModifiersChanged ({:?})", modifiers), // TODO
                     WindowEvent::CursorMoved { device_id: _, position: _, .. } => {mapmaker.input(&event);},
-                    WindowEvent::CursorEntered { device_id } => println!("TODO: CursorEntered ({:?})", device_id), // TODO
-                    WindowEvent::CursorLeft { device_id } => println!("TODO: CursorLeft ({:?})", device_id), // TODO
+                    WindowEvent::CursorEntered { device_id } => (),//println!("TODO: CursorEntered ({:?})", device_id), // TODO
+                    WindowEvent::CursorLeft { device_id } => (),//println!("TODO: CursorLeft ({:?})", device_id), // TODO
                     WindowEvent::MouseWheel { .. } => {mapmaker.input(&event);},
                     WindowEvent::MouseInput { .. } => {mapmaker.input(&event);},
-                    WindowEvent::TouchpadPressure { device_id, pressure, stage } => println!("Ignoring TouchpadPressure ({:?}, {:?}, {:?})", device_id, pressure, stage), // ignore until I know if it's useful
-                    WindowEvent::AxisMotion { device_id, axis, value } => println!("Ignoring AxisMotion ({:?}, {:?}, {:?})", device_id, axis, value), // ignore until I know if it's useful
-                    WindowEvent::Touch(touch) => println!("TODO: Touch ({:?})", touch), // TODO: do the same as mouse click event
+                    WindowEvent::TouchpadPressure { device_id, pressure, stage } => (),//println!("Ignoring TouchpadPressure ({:?}, {:?}, {:?})", device_id, pressure, stage), // ignore until I know if it's useful
+                    WindowEvent::AxisMotion { device_id, axis, value } => (),//println!("Ignoring AxisMotion ({:?}, {:?}, {:?})", device_id, axis, value), // ignore until I know if it's useful
+                    WindowEvent::Touch(touch) => (),//println!("TODO: Touch ({:?})", touch), // TODO: do the same as mouse click event
                     WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => mapmaker.resize(**new_inner_size),
-                    WindowEvent::ThemeChanged(theme) => println!("TODO: ThemeChanged ({:?})", theme), // TODO
+                    WindowEvent::ThemeChanged(theme) => (),//println!("TODO: ThemeChanged ({:?})", theme), // TODO
                 }
             },
             Event::DeviceEvent { device_id, event } => {
                 match event {
-                    winit::event::DeviceEvent::Added => println!("TODO: Device Added ({:?})", device_id), // TODO
-                    winit::event::DeviceEvent::Removed => println!("TODO: Device Removed ({:?})", device_id), // TODO
-                    winit::event::DeviceEvent::MouseMotion { delta } => println!("TODO: Mouse Moved ({:?}, {:?})", device_id, delta),
-                    winit::event::DeviceEvent::MouseWheel { delta } => println!("TODO: Mouse Wheel ({:?}, {:?})", device_id, delta), // TODO
-                    winit::event::DeviceEvent::Motion { axis, value } => println!("TODO: Device Motion ({:?}, {:?}, {:?})", device_id, value, axis), // TODO
-                    winit::event::DeviceEvent::Button { button, state } => println!("TODO: Device Button ({:?}, {:?}, {:?})", device_id, button, state), // TODO
-                    winit::event::DeviceEvent::Key(input) => println!("TODO: Device Key ({:?}, {:?})", device_id, input), // TODO
-                    winit::event::DeviceEvent::Text { codepoint } => println!("TODO: Device Text ({:?}, {:?})", device_id, codepoint), // TODO
+                    winit::event::DeviceEvent::Added => (),//println!("TODO: Device Added ({:?})", device_id), // TODO
+                    winit::event::DeviceEvent::Removed => (),//println!("TODO: Device Removed ({:?})", device_id), // TODO
+                    winit::event::DeviceEvent::MouseMotion { delta } => (),//println!("TODO: Mouse Moved ({:?}, {:?})", device_id, delta),
+                    winit::event::DeviceEvent::MouseWheel { delta } => (),//println!("TODO: Mouse Wheel ({:?}, {:?})", device_id, delta), // TODO
+                    winit::event::DeviceEvent::Motion { axis, value } => (),//println!("TODO: Device Motion ({:?}, {:?}, {:?})", device_id, value, axis), // TODO
+                    winit::event::DeviceEvent::Button { button, state } => (),//println!("TODO: Device Button ({:?}, {:?}, {:?})", device_id, button, state), // TODO
+                    winit::event::DeviceEvent::Key(input) => (),//println!("TODO: Device Key ({:?}, {:?})", device_id, input), // TODO
+                    winit::event::DeviceEvent::Text { codepoint } => (),//println!("TODO: Device Text ({:?}, {:?})", device_id, codepoint), // TODO
                 }
             },
             Event::UserEvent(event) => {
                 match event.event {
-                    gilrs_core::EventType::ButtonPressed(code) => println!("TODO: ButtonPressed ({:?}, {:?})", event.device_id, code), // TODO
-                    gilrs_core::EventType::ButtonReleased(code) => println!("TODO: ButtonReleased ({:?}, {:?})", event.device_id, code), // TODO
-                    gilrs_core::EventType::AxisValueChanged(value, code) => println!("TODO: AxisValueChanged ({:?}, {:?}, {:?})", event.device_id, code, value), // TODO
-                    gilrs_core::EventType::Connected => println!("TODO: Connected ({:?})", event.device_id), // TODO
-                    gilrs_core::EventType::Disconnected => println!("TODO: Disconnected ({:?})", event.device_id), // TODO
+                    gilrs_core::EventType::ButtonPressed(code) => (),//println!("TODO: ButtonPressed ({:?}, {:?})", event.device_id, code), // TODO
+                    gilrs_core::EventType::ButtonReleased(code) => (),//println!("TODO: ButtonReleased ({:?}, {:?})", event.device_id, code), // TODO
+                    gilrs_core::EventType::AxisValueChanged(value, code) => (),//println!("TODO: AxisValueChanged ({:?}, {:?}, {:?})", event.device_id, code, value), // TODO
+                    gilrs_core::EventType::Connected => (),//println!("TODO: Connected ({:?})", event.device_id), // TODO
+                    gilrs_core::EventType::Disconnected => (),//println!("TODO: Disconnected ({:?})", event.device_id), // TODO
                 }
             },
             Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
@@ -101,7 +101,7 @@ pub async fn run() -> Result<(), Error> {
                 }
             },
             Event::RedrawEventsCleared => (), // TODO
-            Event::LoopDestroyed => println!("TODO: LoopDestroyed"), // TODO: clean memory or save settings or whatever
+            Event::LoopDestroyed => (),//println!("TODO: LoopDestroyed"), // TODO: clean memory or save settings or whatever
             _ => () // ignore windowevents that aren't for current window
         }
 
