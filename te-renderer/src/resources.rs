@@ -22,7 +22,7 @@ pub fn load_glb_model(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> Result<model::Model, Error> {
-    let (document, buffers, images) = gltf::import("../ignore/resources/".to_string()+file_name)?; // TODO: don't hardcode the path
+    let (document, buffers, images) = gltf::import("../ignore/resources/".to_string()+file_name).unwrap(); // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();
     let mut transparent_meshes = Vec::new();
@@ -39,27 +39,51 @@ pub fn load_glb_model(
             let alpha = glb_primitive.material().alpha_mode();
             let pbr = glb_primitive.material().pbr_metallic_roughness();
             let glb_color = pbr.base_color_factor();
-            let glb_texture = match pbr.base_color_texture() {
-                Some(tex) => Ok(tex),
-                None => Err(anyhow::anyhow!("ERROR")),
-            }?.texture();
+            let diffuse_texture = match pbr.base_color_texture() {
+                Some(tex) => {
+                    let glb_texture = tex.texture();
+                    let image_index = glb_texture.source().index();
+                    let texture_name = get_texture_name(glb_texture);
+
+                    match glb_color {
+                        [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
+                            // base color multiplier is so close to being 1 that it's not worth to process it
+                            let image = images.get(image_index).unwrap();
+                            load_texture(image, device, queue, texture_name).unwrap()
+                        },
+                        [_,_,_,_] => {
+                            let image = images.get(image_index).unwrap();
+                            let image = apply_base_color(image, glb_color);
+                            load_texture(&image, device, queue, texture_name).unwrap()
+                        }
+                    }
+                },
+                None => {
+                    let texture_name = "default_texture.png";
+                    let image = image::io::Reader::open("../ignore/default_texture.png")?.decode()?.into_rgba8();
+                    let width = image.width();
+                    let height = image.height();
+                    let pixels = image.into_raw();
+                    let image = gltf::image::Data {
+                        pixels,
+                        format: gltf::image::Format::R8G8B8A8, // TODO: change this placeholder when we actually take into account the format
+                        width, 
+                        height
+                    };
+                    match glb_color {
+                        [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
+                            // base color multiplier is so close to being 1 that it's not worth to process it
+                            load_texture(&image, device, queue, texture_name).unwrap()
+                        },
+                        [_,_,_,_] => {
+                            let image = apply_base_color(&image, glb_color);
+                            load_texture(&image, device, queue, texture_name).unwrap()
+                        }
+                    }
+                },
+            };
             let material = mat_index;
             mat_index += 1;
-            let image_index = glb_texture.source().index();
-            let texture_name = get_texture_name(glb_texture);
-
-            let diffuse_texture = match glb_color {
-                [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
-                    // base color multiplier is so close to being 1 that it's not worth to process it
-                    let image = images.get(image_index).unwrap();
-                    load_texture(image, device, queue, texture_name)?
-                },
-                [_,_,_,_] => {
-                    let image = images.get(image_index).unwrap();
-                    let image = apply_base_color(image, glb_color);
-                    load_texture(&image, device, queue, texture_name)?
-                }
-            };
 
             materials.push(model::Material::new(
                 device,
@@ -94,9 +118,13 @@ pub fn load_glb_model(
                     Semantic::Weights(_) => (),//println!("this model had weights and you ignored them!"), // TODO: ignore animations for now
                 }
             }
+            let tex_coords = match tex_coords {
+                Some(coords) => coords,
+                None => positions.as_ref().unwrap().iter().map(|[x, y, _z]| [*x, *y]).collect::<Vec<[f32;2]>>() // it doesn't matter what tex_coords are since the model doesn't have a texture anyway
+            };
             let vertices = positions.unwrap()
                 .into_iter()
-                .zip(tex_coords.unwrap())
+                .zip(tex_coords)
                 .map(|(position, tex_coords)| {
                     model::ModelVertex {
                         position,

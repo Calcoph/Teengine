@@ -1436,6 +1436,7 @@ dependencies = [
  "bytemuck",
  "cgmath",
  "gltf",
+ "image 0.24.2",
  "json",
  "wgpu",
  "winit",

@@ -15,3 +15,8 @@ bytemuck = { version = "1.4", features = [ "derive" ] }
 
 [dependencies.gltf]
 version = "1.0"
+
+[dependencies.image]
+version = "0.24"
+default-features = false
+features = ["png", "jpeg"]
