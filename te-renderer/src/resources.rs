@@ -1,4 +1,3 @@
-use anyhow::Error;
 use gltf::buffer;
 use gltf::{Semantic, Accessor, Texture};
 use gltf;
@@ -12,7 +11,7 @@ pub fn load_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     file_name: &str,
-) -> anyhow::Result<texture::Texture> {
+) -> std::io::Result<texture::Texture> {
     texture::Texture::from_image(device, queue, image, Some(file_name))
 }
 
@@ -23,7 +22,7 @@ pub fn load_glb_model(
     layout: &wgpu::BindGroupLayout,
     resources_path: String,
     default_texture_path: &str
-) -> Result<model::Model, Error> {
+) -> std::result::Result<model::Model, Box<dyn std::error::Error>> {
     let (document, buffers, images) = gltf::import(resources_path + "/" + file_name).unwrap(); // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();

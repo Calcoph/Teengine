@@ -38,3 +38,6 @@ git = "https://github.com/Yatekii/imgui-wgpu-rs.git"
 
 [dependencies.te-mapmaker]
 path = "../te-mapmaker"
+
+[dependencies.te-renderer]
+path = "../te-renderer"

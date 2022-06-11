@@ -2,36 +2,9 @@ use std::collections::HashMap;
 
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi};
 use wgpu::util::DeviceExt;
-use cgmath::prelude::*;
 
-use crate::{texture, temap, resources, model, camera, resources::load_glb_model};
+use crate::{texture, temap, resources, model, camera, resources::load_glb_model, initial_config::InitialConfiguration};
 use crate::model::Vertex;
-
-// We need this for Rust to store our data correctly for the shaders
-#[repr(C)]
-// This is so we can store this in a buffer
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct CameraUniform {
-    // We can't use cgmath with bytemuck directly so we'll have
-    // to convert the Matrix4 into a 4x4 f32 array
-    view_position: [f32; 4],
-    view_proj: [[f32; 4]; 4]
-}
-
-impl CameraUniform {
-    fn new() -> Self {
-        Self {
-            view_position: [0.0; 4],
-            view_proj: cgmath::Matrix4::identity().into()
-        }
-    }
-
-    fn update_view_proj(&mut self, camera: &camera::Camera, projection: &camera::Projection) {
-        // We're using Vector4 because of the uniforms 16 byte spacing requirement
-        self.view_position = camera.position.to_homogeneous().into();
-        self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
-    }
-}
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -87,87 +60,6 @@ impl Instance {
         InstanceRaw {
             model: model.into(),
         }
-    }
-}
-
-pub struct CameraState {
-    camera: camera::Camera,
-    pub projection: camera::Projection,
-    camera_uniform: CameraUniform,
-    camera_buffer: wgpu::Buffer,
-    pub camera_controller: camera::CameraController,
-    camera_bind_group: wgpu::BindGroup,
-}
-
-impl CameraState {
-    fn new(
-        config: &wgpu::SurfaceConfiguration,
-        device: &wgpu::Device,
-        camera_bind_group_layout: &wgpu::BindGroupLayout,
-        position: (f32, f32, f32),
-        yaw: f32,
-        pitch: f32,
-        fovy: f32,
-        znear: f32,
-        zfar: f32,
-        speed: f32,
-        sensitivity: f32
-    ) -> Self {
-        let camera = camera::Camera::new(
-            position,
-            cgmath::Deg(yaw),
-            cgmath::Deg(pitch)
-        );
-        let projection = camera::Projection::new(
-            config.width,
-            config.height,
-            cgmath::Deg(fovy),
-            znear,
-            zfar
-        );
-        let camera_controller =
-            camera::CameraController::new(
-                speed,
-                sensitivity
-            );
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera, &projection);
-        let camera_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-            }
-        );
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding()
-                }
-            ],
-            label: Some("camera_bind_group")
-        });
-
-        CameraState {
-            camera,
-            projection,
-            camera_uniform,
-            camera_buffer,
-            camera_controller,
-            camera_bind_group,
-        }
-    }
-
-    fn update(&mut self, dt: std::time::Duration, queue: &wgpu::Queue) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
-        queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
-    }
-
-    fn resize(&mut self, new_size: dpi::PhysicalSize<u32>) {
-        self.projection.resize(new_size.width, new_size.height);
     }
 }
 
@@ -416,7 +308,7 @@ impl InstancesState {
 }
 
 pub struct State {
-    pub camera: CameraState,
+    pub camera: camera::CameraState,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
@@ -432,16 +324,7 @@ impl State {
     pub async fn new(
         window: &Window,
         gpu: &GpuState,
-        camera_position: (f32, f32, f32),
-        camera_yaw: f32,
-        camera_pitch: f32,
-        camera_fovy: f32,
-        camera_znear: f32,
-        camera_zfar: f32,
-        camera_speed: f32,
-        camera_sensitivity: f32,
-        resources_path: String,
-        default_texture_path: &str
+        init_config: InitialConfiguration
     ) -> Self {
         let size = window.inner_size();
         
@@ -450,18 +333,11 @@ impl State {
             render_pipeline_layout
         ) = State::get_layouts(&gpu.device);
         
-        let camera = CameraState::new(
+        let camera = camera::CameraState::new(
             &gpu.config,
             &gpu.device,
             &camera_bind_group_layout,
-            camera_position,
-            camera_yaw,
-            camera_pitch,
-            camera_fovy,
-            camera_znear,
-            camera_zfar,
-            camera_speed,
-            camera_sensitivity
+            init_config.clone()
         );
 
         let render_pipeline = {
@@ -496,7 +372,7 @@ impl State {
             )
         };
 
-        let instances = InstancesState::new(gpu, &texture_bind_group_layout, resources_path, default_texture_path);
+        let instances = InstancesState::new(gpu, &texture_bind_group_layout, init_config.resource_files_directory, &init_config.default_texture_path);
 
         let blinking = true;
         let blink_time = std::time::Instant::now();

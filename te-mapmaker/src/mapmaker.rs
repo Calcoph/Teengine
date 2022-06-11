@@ -4,7 +4,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use te_renderer::state::{State, GpuState};
+use te_renderer::{state::{State, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE};
 
 pub struct ImguiState {
     gpu: GpuState,
@@ -37,34 +37,11 @@ struct ObjectControlWin {
 impl ImguiState {
     pub async fn new(
         window: &Window,
-        camera_position: (f32, f32, f32),
-        camera_yaw: f32,
-        camera_pitch: f32,
-        camera_fovy: f32,
-        camera_znear: f32,
-        camera_zfar: f32,
-        camera_speed: f32,
-        camera_sensitivity: f32,
-        resource_files_directory: &str,
-        map_files_directory: &str,
-        default_texture_path: &str
+        config: InitialConfiguration
     ) -> Self {
         let size = window.inner_size();
         let gpu = GpuState::new(size, window).await;
-        let state = State::new(
-            window,
-            &gpu,
-            camera_position,
-            camera_yaw,
-            camera_pitch,
-            camera_fovy,
-            camera_znear,
-            camera_zfar,
-            camera_speed,
-            camera_sensitivity,
-            resource_files_directory.to_string(),
-            default_texture_path
-        ).await;
+        let state = State::new(window, &gpu, config.clone()).await;
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
         platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
@@ -76,13 +53,13 @@ impl ImguiState {
 
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
-        let resources = get_resource_names(resource_files_directory);
+        let resources = get_resource_names(&config.resource_files_directory);
 
-        let maps = get_map_names(map_files_directory);
+        let maps = get_map_names(&config.map_files_directory);
 
         let camera_controls_win = CameraControlsWin {
             show_hotkeys: false,
-            fovy: camera_fovy
+            fovy: config.camera_fovy
         };
 
         let model_selector_win = ModelSelectorWin {
@@ -118,19 +95,46 @@ impl ImguiState {
                 .size([400.0, 200.0], Condition::FirstUseEver)
                 .position([400.0, 200.0], Condition::FirstUseEver)
                 .build(&ui, || {
-                    let camera_cont = &mut self.state.camera.camera_controller;
-                    let projection = &mut self.state.camera.projection;
+                    let camera = &mut self.state.camera;
                     let state = &mut self.camera_controls_win;
-                    Slider::new("speed", 0.0 as f32, 1000.0 as f32).build(&ui, &mut camera_cont.speed);
-                    Slider::new("sensitivity", 0.0 as f32, 20.0 as f32).build(&ui, &mut camera_cont.sensitivity);
-                    Slider::new("fovy", 1.0 as f32, 45.0 as f32).build(&ui, &mut state.fovy);
-                    *projection = projection.change_fovy(cgmath::Deg(state.fovy));
-                    Slider::new("yaw", -4.0 as f32, 4.0 as f32).build(&ui, &mut camera_cont.rotate_horizontal);
-                    VerticalSlider::new("pitch", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
-                        .build(&ui, &mut camera_cont.rotate_vertical);
+
+                    let mut speed = camera.get_speed();
+                    Slider::new("speed", 0.0 as f32, 3000.0 as f32).build(&ui, &mut speed);
+                    camera.set_speed(speed);
+
+                    let mut sensitivity = camera.get_sensitivity();
+                    Slider::new("sensitivity", 0.0 as f32, 20.0 as f32).build(&ui, &mut sensitivity);
+                    camera.set_sensitivity(sensitivity);
+
+                    let mut fovy = camera.get_fovy();
+                    Slider::new("fovy", 0.1 as f32, 179.9 as f32).build(&ui, &mut fovy);
+                    camera.set_fovy(fovy);
+
+                    let mut znear = camera.get_znear();
+                    Slider::new("znear", 1.0 as f32, 1000.0 as f32).build(&ui, &mut znear);
+                    camera.set_znear(znear);
+
+                    let mut zfar = camera.get_zfar();
+                    Slider::new("zfar", 100.0 as f32, 100000.0 as f32).build(&ui, &mut zfar);
+                    camera.set_zfar(zfar);
+
+                    let mut yaw = camera.get_yaw();
+                    Slider::new("yaw", -2.0*SAFE_CAMERA_ANGLE as f32, 2.0*SAFE_CAMERA_ANGLE as f32).build(&ui, &mut yaw);
+                    camera.set_yaw(yaw);
+
+                    let mut pitch = camera.get_pitch();
+                    VerticalSlider::new("pitch", [50.0, 100.0], -SAFE_CAMERA_ANGLE as f32, SAFE_CAMERA_ANGLE as f32).build(&ui, &mut pitch);
+                    camera.set_pitch(pitch);
+
                     ui.same_line();
-                    VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
-                            .build(&ui, &mut camera_cont.scroll);
+                    let mut zoom = 0.0;
+                    VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32).build(&ui, &mut zoom);
+                    
+                    ui.same_line();
+                    if ui.button("Go to origin") {
+                        camera.move_absolute((0.0, 0.0, 0.0))
+                    }
+                    camera.set_zoom(zoom);
                     ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
                     if state.show_hotkeys {
                         ui.text("press WASD to move");

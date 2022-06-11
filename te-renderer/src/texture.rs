@@ -1,5 +1,3 @@
-use anyhow::*;
-
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
@@ -14,7 +12,7 @@ impl Texture {
         queue: &wgpu::Queue,
         img: &gltf::image::Data,
         label: Option<&str>,
-    ) -> Result<Self> {
+    ) -> std::io::Result<Self> {
         let size = wgpu::Extent3d {
             width: img.width,
             height: img.height,

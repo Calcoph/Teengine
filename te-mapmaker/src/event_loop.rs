@@ -3,25 +3,12 @@ use std::io::Error;
 use image::io::Reader as ImageReader;
 use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
 
+use te_renderer::initial_config::InitialConfiguration;
 use te_gamepad::gamepad;
+
 use crate::mapmaker;
 
-pub async fn run(
-    camera_position: (f32, f32, f32),
-    camera_yaw: f32,
-    camera_pitch: f32,
-    camera_fovy: f32,
-    camera_znear: f32,
-    camera_zfar: f32,
-    camera_speed: f32,
-    camera_sensitivity: f32,
-    tile_size: (f32, f32, f32),
-    scree_width: u32,
-    screen_height: u32,
-    resource_files_directory: String,
-    map_files_directory: String,
-    default_texture_path: String
-) -> Result<(), Error> {
+pub async fn run(config: InitialConfiguration) -> Result<(), Error> {
     env_logger::init();
     let img = match ImageReader::open("icon.png")?.decode() {
         Ok(img) => img.to_rgba8(),
@@ -31,7 +18,7 @@ pub async fn run(
     gamepad::listen(event_loop.create_proxy());
     let wb = WindowBuilder::new()
         .with_title("Tilengine")
-        .with_inner_size(dpi::LogicalSize::new(scree_width, screen_height))
+        .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
         .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => icon,
             Err(_) => panic!("Couldn't get raw data")
@@ -40,20 +27,7 @@ pub async fn run(
     let window = wb.build(&event_loop)
         .unwrap();
 
-    let mut mapmaker = mapmaker::ImguiState::new(
-        &window,
-        camera_position,
-        camera_yaw,
-        camera_pitch,
-        camera_fovy,
-        camera_znear,
-        camera_zfar,
-        camera_speed,
-        camera_sensitivity,
-        &resource_files_directory,
-        &map_files_directory,
-        &default_texture_path
-    ).await;
+    let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone()).await;
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -115,7 +89,7 @@ pub async fn run(
                 let dt = now - last_render_time;
                 last_render_time = now;
                 mapmaker.update(dt);
-                match mapmaker.render(&window, tile_size, &resource_files_directory, &map_files_directory, &default_texture_path) {
+                match mapmaker.render(&window, config.tile_size, &config.resource_files_directory, &config.map_files_directory, &config.default_texture_path) {
                     Ok(_) => {},
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => mapmaker.resize(mapmaker.state.size),
