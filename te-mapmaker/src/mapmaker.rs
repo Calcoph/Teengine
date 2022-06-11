@@ -12,8 +12,8 @@ pub struct ImguiState {
     pub platform: WinitPlatform,
     renderer: Renderer,
     pub state: State,
-    resources: Vec<String>,
-    maps: Vec<String>,
+    resources: Directory,
+    maps: Directory,
     camera_controls_win: CameraControlsWin,
     model_selector_win: ModelSelectorWin,
     object_control_win: ObjectControlWin
@@ -21,7 +21,6 @@ pub struct ImguiState {
 
 struct CameraControlsWin {
     show_hotkeys: bool,
-    fovy: f32
 }
 
 struct ModelSelectorWin {
@@ -53,13 +52,12 @@ impl ImguiState {
 
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
-        let resources = get_resource_names(&config.resource_files_directory);
+        let resources = get_resource_names(&config.resource_files_directory, "");
 
-        let maps = get_map_names(&config.map_files_directory);
+        let maps = get_map_names(&config.map_files_directory, "");
 
         let camera_controls_win = CameraControlsWin {
             show_hotkeys: false,
-            fovy: config.camera_fovy
         };
 
         let model_selector_win = ModelSelectorWin {
@@ -155,23 +153,10 @@ impl ImguiState {
                         .size([250.0, 0.0])
                         .build(&ui, || {
                         if ui.button("Refresh") {
-                            self.resources = get_resource_names(resource_files_directory);
+                            self.resources = get_resource_names(resource_files_directory, "");
                         };
                         ui.input_text("search", &mut state.search_str_gltf).build();
-                        for file_name in &self.resources {
-                            let name = match file_name.strip_suffix(".glb") {
-                                Some(n) => n,
-                                None => match file_name.strip_suffix(".gltf") {
-                                    Some(n) => n,
-                                    None => ""
-                                },
-                            };
-                            if name.contains(&state.search_str_gltf) && name != "" {
-                                if ui.button(name) {
-                                    self.state.change_model(file_name, &self.gpu, resource_files_directory.to_string(), default_texture_path)
-                                };
-                            }
-                        };
+                        show_resources_directory(resource_files_directory, &self.resources, &ui, state, &self.gpu, &mut self.state)
                     });
                     ui.same_line();
                     ChildWindow::new("maps").build(&ui, || {
@@ -192,21 +177,10 @@ impl ImguiState {
                         }
                         ui.separator();
                         if ui.button("Refresh") {
-                            self.maps = get_map_names(map_files_directory);
+                            self.maps = get_map_names(map_files_directory, "");
                         };
                         ui.input_text("search", &mut state.search_str_temap).build();
-                        for file_name in &self.maps {
-                            let name = match file_name.strip_suffix(".temap") {
-                                Some(n) => n,
-                                None => "",
-                            };
-                            if name.contains(&state.search_str_temap) && name != "" {
-                                if ui.button(name) {
-                                    self.state.load_map(file_name, &self.gpu, map_files_directory.to_string(), resource_files_directory.to_string(), default_texture_path);
-                                    //self.state.calculate_render_matrix();
-                                };
-                            }
-                        };
+                        show_maps_directory(map_files_directory, &self.maps, &ui, state, &self.gpu, &mut self.state);
                     })
                 });
             imgui::Window::new("Object control")
@@ -278,32 +252,111 @@ impl ImguiState {
     }
 }
 
-fn get_resource_names(resource_files_directory: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    match std::fs::read_dir(std::path::Path::new(resource_files_directory)) {
-        Ok(files) => for file in files {
-            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
-            if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
-                names.push(file_name)
-            }
-        },
-        Err(_) => names.push(format!("Error accessing the directory {}", resource_files_directory)),
-    };
+fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &mut State) {
+    ui.text(&dir.directory_name);
+    ui.separator();
 
-    names
+    for file in &dir.files {
+        match file {
+            File::F(file_name) => {
+                let name = match file_name.strip_suffix(".glb") {
+                    Some(n) => n,
+                    None => match file_name.strip_suffix(".gltf") {
+                        Some(n) => n,
+                        None => ""
+                    },
+                };
+                if name.contains(&window_state.search_str_gltf) && name != "" {
+                    if ui.button(name) {
+                        state.change_model(&(dir.directory_name.clone() + "/" + &file_name), gpu) // TODO: don't hardcode "/"
+                    };
+                }
+            },
+            File::D(nested_dir) => show_resources_directory(root, &nested_dir, ui, window_state, gpu, state),
+        }
+    }
 }
 
-fn get_map_names(map_files_directory: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    match std::fs::read_dir(std::path::Path::new(map_files_directory)) {
-        Ok(files) => for file in files {
-            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
-            if file_name.ends_with(".temap") {
-                names.push(file_name)
-            }
-        },
-        Err(_) => names.push(format!("Error accessing the directory {}", map_files_directory)),
+fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &mut State) {
+    ui.text(&dir.directory_name);
+    ui.separator();
+
+    for file in &dir.files {
+        match file {
+            File::F(file_name) => {
+                let name = match file_name.strip_suffix(".temap") {
+                    Some(n) => n,
+                    None => "",
+                };
+                if name.contains(&window_state.search_str_temap) && name != "" {
+                    if ui.button(name) {
+                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), gpu); // TODO: don't hardcode "/"
+                        //state.calculate_render_matrix();
+                    };
+                }
+            },
+            File::D(nested_dir) => show_maps_directory(root, &nested_dir, ui, window_state, gpu, state),
+        }
     };
 
-    names
+}
+
+fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directory {
+    let mut dir = Directory { directory_name: dir_name.to_string(), files: Vec::new() };
+    let path = resource_files_directory.to_string() + "/" + dir_name;
+    let path = std::path::Path::new(&(path));
+    match std::fs::read_dir(path) {
+        Ok(files) => for file in files {
+            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
+            let name = match dir_name {
+                "" => "".to_string(),
+                s => s.to_string() + "/" // TODO: don't hardcode "/"
+            };
+            let full_path = name + &file_name;
+            let full_path = std::path::Path::new(&(full_path));
+            if path.join(full_path).is_dir() {
+                dir.files.push(File::D(get_resource_names(resource_files_directory, full_path.to_str().unwrap())))
+            } else if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
+                dir.files.push(File::F(file_name));
+            }
+        },
+        Err(_) => dir.files.push(File::F(format!("Error accessing the directory {}", dir_name))),
+    };
+
+    dir
+}
+
+fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
+    let mut dir = Directory { directory_name: dir_name.to_string(), files: Vec::new() };
+    let path = map_files_directory.to_string() + "/" + dir_name; // TODO: don't hardcode "/"
+    let path = std::path::Path::new(&(path));
+    match std::fs::read_dir(path) {
+        Ok(files) => for file in files {
+            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
+            let name = match dir_name {
+                "" => "".to_string(),
+                s => s.to_string() + "/" // TODO: don't hardcode "/"
+            };
+            let full_path = name + &file_name;
+            let full_path = std::path::Path::new(&(full_path));
+            if path.join(full_path).is_dir() {
+                dir.files.push(File::D(get_map_names(map_files_directory, full_path.to_str().unwrap())))
+            } else if file_name.ends_with(".temap") {
+                dir.files.push(File::F(file_name))
+            }
+        },
+        Err(_) => dir.files.push(File::F(format!("Error accessing the directory {}", dir_name))),
+    };
+
+    dir
+}
+
+enum File {
+    F(String),
+    D(Directory)
+}
+
+struct Directory {
+    directory_name: String,
+    files: Vec<File>
 }

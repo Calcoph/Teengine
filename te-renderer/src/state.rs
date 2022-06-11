@@ -318,6 +318,9 @@ pub struct State {
     pub blinking: bool,
     blink_time: std::time::Instant,
     pub blink_freq: u64,
+    maps_path: String,
+    resources_path: String,
+    default_texture_path: String
 }
 
 impl State {
@@ -327,6 +330,9 @@ impl State {
         init_config: InitialConfiguration
     ) -> Self {
         let size = window.inner_size();
+        let maps_path = init_config.map_files_directory.clone();
+        let resources_path = init_config.resource_files_directory.clone();
+        let default_texture_path = init_config.default_texture_path.clone();
         
         let (texture_bind_group_layout,
             camera_bind_group_layout,
@@ -389,12 +395,15 @@ impl State {
             blinking,
             blink_time,
             blink_freq,
+            maps_path,
+            resources_path,
+            default_texture_path
         }
     }
 
-    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState, maps_path: String, resources_path: String, default_texture_path: &str) {
-        let map = temap::TeMap::from_file(file_name, maps_path);
-        self.instances = InstancesState::from_temap(map, gpu, &self.texture_bind_group_layout, resources_path, default_texture_path);
+    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
+        let map = temap::TeMap::from_file(file_name, self.maps_path.clone());
+        self.instances = InstancesState::from_temap(map, gpu, &self.texture_bind_group_layout, self.resources_path.clone(), &self.default_texture_path);
     }
 
     fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {
@@ -586,14 +595,14 @@ impl State {
         Ok(())
     }
 
-    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState, resources_path: String, default_texture_path: &str) {
+    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState) {
         match resources::load_glb_model(
             file_name, 
             &gpu.device, 
             &gpu.queue,
             &self.texture_bind_group_layout,
-            resources_path,
-            default_texture_path
+            self.resources_path.clone(),
+            &self.default_texture_path
         ) {
             Ok(model) => self.instances.set_model(file_name, model),
             Err(_) => (),
