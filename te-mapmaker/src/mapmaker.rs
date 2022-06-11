@@ -5,7 +5,6 @@ use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
 use te_renderer::state::{State, GpuState};
-use crate::consts as c;
 
 pub struct ImguiState {
     gpu: GpuState,
@@ -36,10 +35,36 @@ struct ObjectControlWin {
 }
 
 impl ImguiState {
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(
+        window: &Window,
+        camera_position: (f32, f32, f32),
+        camera_yaw: f32,
+        camera_pitch: f32,
+        camera_fovy: f32,
+        camera_znear: f32,
+        camera_zfar: f32,
+        camera_speed: f32,
+        camera_sensitivity: f32,
+        resource_files_directory: &str,
+        map_files_directory: &str,
+        default_texture_path: &str
+    ) -> Self {
         let size = window.inner_size();
         let gpu = GpuState::new(size, window).await;
-        let state = State::new(window, &gpu).await;
+        let state = State::new(
+            window,
+            &gpu,
+            camera_position,
+            camera_yaw,
+            camera_pitch,
+            camera_fovy,
+            camera_znear,
+            camera_zfar,
+            camera_speed,
+            camera_sensitivity,
+            resource_files_directory.to_string(),
+            default_texture_path
+        ).await;
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
         platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
@@ -51,13 +76,13 @@ impl ImguiState {
 
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
-        let resources = get_resource_names();
+        let resources = get_resource_names(resource_files_directory);
 
-        let maps = get_map_names();
+        let maps = get_map_names(map_files_directory);
 
         let camera_controls_win = CameraControlsWin {
             show_hotkeys: false,
-            fovy: c::FOVY
+            fovy: camera_fovy
         };
 
         let model_selector_win = ModelSelectorWin {
@@ -84,7 +109,7 @@ impl ImguiState {
         }
     }
 
-    pub fn render_imgui(&mut self, view: &wgpu::TextureView, window: &Window) {
+    pub fn render_imgui(&mut self, view: &wgpu::TextureView, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str, default_texture_path: &str) {
         self.platform.prepare_frame(self.context.io_mut(), window).expect("Failed to prepare frame");
         let ui = self.context.frame();
         {
@@ -126,7 +151,7 @@ impl ImguiState {
                         .size([250.0, 0.0])
                         .build(&ui, || {
                         if ui.button("Refresh") {
-                            self.resources = get_resource_names();
+                            self.resources = get_resource_names(resource_files_directory);
                         };
                         ui.input_text("search", &mut state.search_str_gltf).build();
                         for file_name in &self.resources {
@@ -139,7 +164,7 @@ impl ImguiState {
                             };
                             if name.contains(&state.search_str_gltf) && name != "" {
                                 if ui.button(name) {
-                                    self.state.change_model(file_name, &self.gpu)
+                                    self.state.change_model(file_name, &self.gpu, resource_files_directory.to_string(), default_texture_path)
                                 };
                             }
                         };
@@ -150,7 +175,7 @@ impl ImguiState {
                         //ui.modal
                         if ui.button("Save map") {
                             if state.save_map_name != "" {
-                                self.state.instances.save_temap(&state.save_map_name)
+                                self.state.instances.save_temap(&state.save_map_name, map_files_directory.to_string())
                             } else {
                                 ui.open_popup("SAVE FAILED");
                             }
@@ -163,7 +188,7 @@ impl ImguiState {
                         }
                         ui.separator();
                         if ui.button("Refresh") {
-                            self.maps = get_map_names();
+                            self.maps = get_map_names(map_files_directory);
                         };
                         ui.input_text("search", &mut state.search_str_temap).build();
                         for file_name in &self.maps {
@@ -173,7 +198,7 @@ impl ImguiState {
                             };
                             if name.contains(&state.search_str_temap) && name != "" {
                                 if ui.button(name) {
-                                    self.state.load_map(file_name, &self.gpu);
+                                    self.state.load_map(file_name, &self.gpu, map_files_directory.to_string(), resource_files_directory.to_string(), default_texture_path);
                                     //self.state.calculate_render_matrix();
                                 };
                             }
@@ -191,7 +216,7 @@ impl ImguiState {
                     InputFloat::new(&ui, "y", &mut mod_inst.y).step(1.0).step_fast(5.0).build();
                     InputFloat::new(&ui, "z", &mut mod_inst.z).step(1.0).step_fast(5.0).build();
                     if ui.button("place") {
-                        self.state.instances.place_model(&self.gpu.device, &self.gpu.queue, &self.state.texture_bind_group_layout)
+                        self.state.instances.place_model(&self.gpu.device, &self.gpu.queue, &self.state.texture_bind_group_layout, tile_size, resource_files_directory.to_string(), default_texture_path)
                     }
                     ui.separator();
                     ui.checkbox("Blink selected model", &mut self.state.blinking);
@@ -238,42 +263,42 @@ impl ImguiState {
         self.state.update(dt, &self.gpu);
     }
 
-    pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str, default_texture_path: &str) -> Result<(), wgpu::SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.state.render(&view, &self.gpu)?;
-        self.render_imgui(&view, window);
+        self.state.render(&view, &self.gpu, tile_size)?;
+        self.render_imgui(&view, window, tile_size, resource_files_directory, map_files_directory, default_texture_path);
         output.present();
 
         Ok(())
     }
 }
 
-fn get_resource_names() -> Vec<String> {
+fn get_resource_names(resource_files_directory: &str) -> Vec<String> {
     let mut names = Vec::new();
-    match std::fs::read_dir(std::path::Path::new("../ignore/resources")) {
+    match std::fs::read_dir(std::path::Path::new(resource_files_directory)) {
         Ok(files) => for file in files {
             let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
             if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
                 names.push(file_name)
             }
         },
-        Err(_) => names.push(String::from("Error accessing the directory ignore/resources/")),
+        Err(_) => names.push(format!("Error accessing the directory {}", resource_files_directory)),
     };
 
     names
 }
 
-fn get_map_names() -> Vec<String> {
+fn get_map_names(map_files_directory: &str) -> Vec<String> {
     let mut names = Vec::new();
-    match std::fs::read_dir(std::path::Path::new("../ignore/maps")) {
+    match std::fs::read_dir(std::path::Path::new(map_files_directory)) {
         Ok(files) => for file in files {
             let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
             if file_name.ends_with(".temap") {
                 names.push(file_name)
             }
         },
-        Err(_) => names.push(String::from("Error accessing the directory ignore/maps/")),
+        Err(_) => names.push(format!("Error accessing the directory {}", map_files_directory)),
     };
 
     names

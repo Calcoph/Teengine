@@ -24,9 +24,9 @@ impl TeMap {
         }
     }
 
-    pub fn from_file(file_name: &str) -> Self {
+    pub fn from_file(file_name: &str, maps_path: String) -> Self {
         let file_name = file_name.trim_end_matches(".temap");
-        let json_temap = std::fs::read_to_string("../ignore/maps/".to_string() + file_name + ".temap").unwrap();
+        let json_temap = std::fs::read_to_string(maps_path + "/" + file_name + ".temap").unwrap();
         let json_temap = json::parse(&json_temap).unwrap();
         // I know this match is horrible, but I left it as is, because it's also beautiful
         match json_temap {
@@ -95,10 +95,10 @@ impl TeMap {
         model.add_offset(x, y, z);
     }
 
-    pub fn save(&self, file_name: &str) {
+    pub fn save(&self, file_name: &str, maps_path: String) {
         let contents = self.get_json();
         let file_name = file_name.trim_end_matches(".temap");
-        std::fs::write("ignore/maps/".to_string() + file_name + ".temap", contents).unwrap();
+        std::fs::write(maps_path + file_name + ".temap", contents).unwrap();
     }
 
     fn get_json(&self) -> String {

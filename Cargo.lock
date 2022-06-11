@@ -699,6 +699,7 @@ dependencies = [
 [[package]]
 name = "imgui-wgpu"
 version = "0.19.0"
+source = "git+https://github.com/Yatekii/imgui-wgpu-rs.git#fb2858db38ea38c3de89c1e6999638e07b3ed756"
 dependencies = [
  "bytemuck",
  "imgui",
@@ -1429,12 +1430,65 @@ dependencies = [
 ]
 
 [[package]]
+name = "te-gamepad"
+version = "0.1.0"
+dependencies = [
+ "gilrs-core",
+ "winit",
+]
+
+[[package]]
+name = "te-mapmaker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cgmath",
+ "env_logger",
+ "fs_extra",
+ "gilrs-core",
+ "glob",
+ "image 0.24.2",
+ "imgui",
+ "imgui-wgpu",
+ "imgui-winit-support",
+ "pollster",
+ "te-gamepad",
+ "te-renderer",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "te-player"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "cgmath",
+ "env_logger",
+ "gilrs-core",
+ "gltf",
+ "image 0.24.2",
+ "imgui",
+ "imgui-wgpu",
+ "imgui-winit-support",
+ "json",
+ "log",
+ "pollster",
+ "te-mapmaker",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "te-renderer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
  "cgmath",
+ "fs_extra",
+ "glob",
  "gltf",
  "image 0.24.2",
  "json",
@@ -1472,30 +1526,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tilengine"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "cgmath",
- "env_logger",
- "fs_extra",
- "gilrs-core",
- "glob",
- "gltf",
- "image 0.24.2",
- "imgui",
- "imgui-wgpu",
- "imgui-winit-support",
- "json",
- "log",
- "pollster",
- "te-renderer",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "toml"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1518,9 +1548,9 @@ checksum = "3ed742d4ea2bd1176e236172c8429aaf54486e7ac098db29ffe6529e0ce50973"
 
 [[package]]
 name = "uuid"
-version = "1.1.1"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6d5d669b51467dcf7b2f1a796ce0f955f05f01cafda6c19d6e95f730df29238"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 
 [[package]]
 name = "vec_map"

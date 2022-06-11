@@ -21,8 +21,10 @@ pub fn load_glb_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
+    resources_path: String,
+    default_texture_path: &str
 ) -> Result<model::Model, Error> {
-    let (document, buffers, images) = gltf::import("../ignore/resources/".to_string()+file_name).unwrap(); // TODO: don't hardcode the path
+    let (document, buffers, images) = gltf::import(resources_path + "/" + file_name).unwrap(); // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();
     let mut transparent_meshes = Vec::new();
@@ -60,7 +62,7 @@ pub fn load_glb_model(
                 },
                 None => {
                     let texture_name = "default_texture.png";
-                    let image = image::io::Reader::open("../ignore/default_texture.png")?.decode()?.into_rgba8();
+                    let image = image::io::Reader::open(default_texture_path)?.decode()?.into_rgba8();
                     let width = image.width();
                     let height = image.height();
                     let pixels = image.into_raw();

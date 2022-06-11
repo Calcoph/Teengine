@@ -6,7 +6,6 @@ use cgmath::prelude::*;
 
 use crate::{texture, temap, resources, model, camera, resources::load_glb_model};
 use crate::model::Vertex;
-use crate::consts as c;
 
 // We need this for Rust to store our data correctly for the shaders
 #[repr(C)]
@@ -101,23 +100,35 @@ pub struct CameraState {
 }
 
 impl CameraState {
-    fn new(config: &wgpu::SurfaceConfiguration, device: &wgpu::Device, camera_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
+    fn new(
+        config: &wgpu::SurfaceConfiguration,
+        device: &wgpu::Device,
+        camera_bind_group_layout: &wgpu::BindGroupLayout,
+        position: (f32, f32, f32),
+        yaw: f32,
+        pitch: f32,
+        fovy: f32,
+        znear: f32,
+        zfar: f32,
+        speed: f32,
+        sensitivity: f32
+    ) -> Self {
         let camera = camera::Camera::new(
-            c::CAMERA_START_POSITION,
-            cgmath::Deg(c::CAMERA_START_YAW),
-            cgmath::Deg(c::CAMERA_START_PITCH)
+            position,
+            cgmath::Deg(yaw),
+            cgmath::Deg(pitch)
         );
         let projection = camera::Projection::new(
             config.width,
             config.height,
-            cgmath::Deg(c::FOVY),
-            c::ZNEAR,
-            c::ZFAR
+            cgmath::Deg(fovy),
+            znear,
+            zfar
         );
         let camera_controller =
             camera::CameraController::new(
-                c::CAMERA_SPEED,
-                c::CAMERA_SENSITIVITY
+                speed,
+                sensitivity
             );
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera, &projection);
@@ -289,9 +300,9 @@ pub struct ModifyingInstance {
 }
 
 impl ModifyingInstance {
-    fn into_renderable(&mut self, device: &wgpu::Device) -> usize {
+    fn into_renderable(&mut self, device: &wgpu::Device, tile_size: (f32, f32, f32)) -> usize {
         let instances = vec![Instance {
-            position: cgmath::Vector3 { x: self.x*c::TILE_SIZE, y: self.y*c::TILE_SIZE, z: self.z*c::TILE_HEIGHT },
+            position: cgmath::Vector3 { x: self.x*tile_size.0, y: self.y*tile_size.1, z: self.z*tile_size.2 },
         }];
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
@@ -315,7 +326,7 @@ pub struct InstancesState {
 }
 
 impl InstancesState {
-    fn new(gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
+    fn new(gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout, resources_path: String, default_texture_path: &str) -> Self {
         let instances = HashMap::new();
         let modifying_name = "box02.glb".to_string();
         let model = resources::load_glb_model(
@@ -323,6 +334,8 @@ impl InstancesState {
             &gpu.device, 
             &gpu.queue,
             texture_bind_group_layout,
+            resources_path,
+            default_texture_path
         ).unwrap();
         let modifying_instance = ModifyingInstance {
             model,
@@ -343,27 +356,27 @@ impl InstancesState {
         self.modifying_instance.model = model
     }
 
-    pub fn place_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout) {
+    pub fn place_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout, tile_size: (f32, f32, f32), resources_path: String, default_texture_path: &str) {
         match self.instances.contains_key(&self.modifying_name) {
             true => {
-                let x = self.modifying_instance.x * c::TILE_SIZE;
-                let y = self.modifying_instance.y * c::TILE_SIZE;
-                let z = self.modifying_instance.z * c::TILE_HEIGHT;
+                let x = self.modifying_instance.x * tile_size.0;
+                let y = self.modifying_instance.y * tile_size.1;
+                let z = self.modifying_instance.z * tile_size.2;
                 let instanced_m = self.instances.get_mut(&mut self.modifying_name).unwrap();
                 instanced_m.add_instance(x, y, z, device);
             },
             false => {
-                let model = load_glb_model(&self.modifying_name, device, queue, layout).unwrap(); // TODO: clone the model instead of reading it again
-                let x = self.modifying_instance.x * c::TILE_SIZE;
-                let y = self.modifying_instance.y * c::TILE_SIZE;
-                let z = self.modifying_instance.z * c::TILE_HEIGHT;
+                let model = load_glb_model(&self.modifying_name, device, queue, layout, resources_path, default_texture_path).unwrap(); // TODO: clone the model instead of reading it again
+                let x = self.modifying_instance.x * tile_size.0;
+                let y = self.modifying_instance.y * tile_size.1;
+                let z = self.modifying_instance.z * tile_size.2;
                 let instanced_m = InstancedModel::new(model, device, x, y, z);
                 self.instances.insert(self.modifying_name.clone(), instanced_m);
             },
         }
     }
 
-    pub fn save_temap(&self, file_name: &str) {
+    pub fn save_temap(&self, file_name: &str, maps_path: String) {
         let mut map = temap::TeMap::new();
         for (name, instance) in &self.instances {
             map.add_model(&name);
@@ -372,13 +385,13 @@ impl InstancesState {
             }
         }
 
-        map.save(&file_name);
+        map.save(&file_name, maps_path);
     }
 
-    fn from_temap(map: temap::TeMap, gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout) -> Self {
-        let mut instances_state = InstancesState::new(gpu, texture_bind_group_layout);
+    fn from_temap(map: temap::TeMap, gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout, resources_path: String, default_texture_path: &str) -> Self {
+        let mut instances_state = InstancesState::new(gpu, texture_bind_group_layout, resources_path.clone(), default_texture_path);
         for (name, te_model) in map.models {
-            let model = load_glb_model(&name, &gpu.device, &gpu.queue, texture_bind_group_layout);
+            let model = load_glb_model(&name, &gpu.device, &gpu.queue, texture_bind_group_layout, resources_path.clone(), default_texture_path);
             match model {
                 Ok(m) => {
                     let mut instances = Vec::new();
@@ -416,7 +429,20 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(window: &Window, gpu: &GpuState) -> Self {
+    pub async fn new(
+        window: &Window,
+        gpu: &GpuState,
+        camera_position: (f32, f32, f32),
+        camera_yaw: f32,
+        camera_pitch: f32,
+        camera_fovy: f32,
+        camera_znear: f32,
+        camera_zfar: f32,
+        camera_speed: f32,
+        camera_sensitivity: f32,
+        resources_path: String,
+        default_texture_path: &str
+    ) -> Self {
         let size = window.inner_size();
         
         let (texture_bind_group_layout,
@@ -424,7 +450,19 @@ impl State {
             render_pipeline_layout
         ) = State::get_layouts(&gpu.device);
         
-        let camera = CameraState::new(&gpu.config, &gpu.device, &camera_bind_group_layout);
+        let camera = CameraState::new(
+            &gpu.config,
+            &gpu.device,
+            &camera_bind_group_layout,
+            camera_position,
+            camera_yaw,
+            camera_pitch,
+            camera_fovy,
+            camera_znear,
+            camera_zfar,
+            camera_speed,
+            camera_sensitivity
+        );
 
         let render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
@@ -458,7 +496,7 @@ impl State {
             )
         };
 
-        let instances = InstancesState::new(gpu, &texture_bind_group_layout);
+        let instances = InstancesState::new(gpu, &texture_bind_group_layout, resources_path, default_texture_path);
 
         let blinking = true;
         let blink_time = std::time::Instant::now();
@@ -478,9 +516,9 @@ impl State {
         }
     }
 
-    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
-        let map = temap::TeMap::from_file(file_name);
-        self.instances = InstancesState::from_temap(map, gpu, &self.texture_bind_group_layout);
+    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState, maps_path: String, resources_path: String, default_texture_path: &str) {
+        let map = temap::TeMap::from_file(file_name, maps_path);
+        self.instances = InstancesState::from_temap(map, gpu, &self.texture_bind_group_layout, resources_path, default_texture_path);
     }
 
     fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {
@@ -571,7 +609,7 @@ impl State {
         self.camera.update(dt, &gpu.queue);
     }
 
-    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState, tile_size: (f32, f32, f32)) -> Result<(), wgpu::SurfaceError> {
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
@@ -622,7 +660,7 @@ impl State {
             let mut model = None;
             if model_visible {
                 // TODO: make a function instead of copy-pasting for modifying_instance
-                instances = self.instances.modifying_instance.into_renderable(&gpu.device);
+                instances = self.instances.modifying_instance.into_renderable(&gpu.device, tile_size);
                 buffer = self.instances.modifying_instance.buffer.as_ref();
                 model = Some(&self.instances.modifying_instance.model);
                 render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
@@ -672,12 +710,14 @@ impl State {
         Ok(())
     }
 
-    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState) {
+    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState, resources_path: String, default_texture_path: &str) {
         match resources::load_glb_model(
             file_name, 
             &gpu.device, 
             &gpu.queue,
             &self.texture_bind_group_layout,
+            resources_path,
+            default_texture_path
         ) {
             Ok(model) => self.instances.set_model(file_name, model),
             Err(_) => (),
