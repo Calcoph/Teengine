@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi};
 use wgpu::util::DeviceExt;
 
-use crate::{texture, temap, resources, model, camera, resources::load_glb_model, initial_config::InitialConfiguration};
+use crate::{texture, temap, model, camera, resources::load_glb_model, initial_config::InitialConfiguration};
 use crate::model::Vertex;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct InstanceRaw {
+pub struct InstanceRaw {
     model: [[f32; 4]; 4],
 }
 
@@ -50,12 +50,12 @@ impl model::Vertex for InstanceRaw {
     }
 }
 
-struct Instance {
-    position: cgmath::Vector3<f32>,
+pub struct Instance {
+    pub position: cgmath::Vector3<f32>,
 }
 
 impl Instance {
-    fn to_raw(&self) -> InstanceRaw {
+    pub fn to_raw(&self) -> InstanceRaw {
         let model = cgmath::Matrix4::from_translation(self.position);
         InstanceRaw {
             model: model.into(),
@@ -68,7 +68,7 @@ pub struct GpuState {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    depth_texture: texture::Texture,
+    pub depth_texture: texture::Texture,
 }
 
 impl GpuState {
@@ -183,87 +183,42 @@ impl InstancedModel {
     }
 }
 
-pub struct ModifyingInstance {
-    model: model::Model,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    buffer: Option<wgpu::Buffer>
-}
-
-impl ModifyingInstance {
-    fn into_renderable(&mut self, device: &wgpu::Device, tile_size: (f32, f32, f32)) -> usize {
-        let instances = vec![Instance {
-            position: cgmath::Vector3 { x: self.x*tile_size.0, y: self.y*tile_size.1, z: self.z*tile_size.2 },
-        }];
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Instance Buffer"),
-                contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX
-            }
-        );
-        self.buffer = Some(instance_buffer);
-        instances.len()
-    }
-}
-
 pub struct InstancesState {
-    instances: HashMap<String, InstancedModel>,
-    modifying_name: String,
-    pub modifying_instance: ModifyingInstance,
-    
+    instances: HashMap<String, InstancedModel>
 }
 
 impl InstancesState {
-    fn new(gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout, resources_path: String, default_texture_path: &str) -> Self {
+    fn new() -> Self {
         let instances = HashMap::new();
-        let modifying_name = "box02.glb".to_string();
-        let model = resources::load_glb_model(
-            "box02.glb", 
-            &gpu.device, 
-            &gpu.queue,
-            texture_bind_group_layout,
-            resources_path,
-            default_texture_path
-        ).unwrap();
-        let modifying_instance = ModifyingInstance {
-            model,
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            buffer: None
-        };
         InstancesState {
             instances,
-            modifying_name,
-            modifying_instance,
         }
     }
 
-    fn set_model(&mut self, file_name: &str, model: model::Model) {
-        self.modifying_name = file_name.to_string();
-        self.modifying_instance.model = model
-    }
-
-    pub fn place_model(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, layout: &wgpu::BindGroupLayout, tile_size: (f32, f32, f32), resources_path: String, default_texture_path: &str) {
-        match self.instances.contains_key(&self.modifying_name) {
+    pub fn place_model(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        tile_size: (f32, f32, f32),
+        resources_path: String,
+        default_texture_path: &str,
+        model_name: &str,
+        tile_position: (f32, f32, f32)
+    ) {
+        // TODO: Option to pass model instead of name of model
+        let x = tile_position.0 * tile_size.0;
+        let y = tile_position.1 * tile_size.1;
+        let z = tile_position.2 * tile_size.2;
+        match self.instances.contains_key(model_name) {
             true => {
-                let x = self.modifying_instance.x * tile_size.0;
-                let y = self.modifying_instance.y * tile_size.1;
-                let z = self.modifying_instance.z * tile_size.2;
-                let instanced_m = self.instances.get_mut(&mut self.modifying_name).unwrap();
+                let instanced_m = self.instances.get_mut(model_name).unwrap();
                 instanced_m.add_instance(x, y, z, device);
             },
             false => {
-                let model = load_glb_model(&self.modifying_name, device, queue, layout, resources_path, default_texture_path).unwrap(); // TODO: clone the model instead of reading it again
-                let x = self.modifying_instance.x * tile_size.0;
-                let y = self.modifying_instance.y * tile_size.1;
-                let z = self.modifying_instance.z * tile_size.2;
+                let model = load_glb_model(model_name, device, queue, layout, resources_path, default_texture_path).unwrap();
                 let instanced_m = InstancedModel::new(model, device, x, y, z);
-                self.instances.insert(self.modifying_name.clone(), instanced_m);
+                self.instances.insert(model_name.to_string(), instanced_m);
             },
         }
     }
@@ -281,12 +236,12 @@ impl InstancesState {
     }
 
     fn from_temap(map: temap::TeMap, gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout, resources_path: String, default_texture_path: &str) -> Self {
-        let mut instances_state = InstancesState::new(gpu, texture_bind_group_layout, resources_path.clone(), default_texture_path);
+        let mut instances = InstancesState::new();
         for (name, te_model) in map.models {
             let model = load_glb_model(&name, &gpu.device, &gpu.queue, texture_bind_group_layout, resources_path.clone(), default_texture_path);
             match model {
                 Ok(m) => {
-                    let mut instances = Vec::new();
+                    let mut instance_vec = Vec::new();
                     for offset in te_model.offsets {
                         let instance = Instance {
                             position: cgmath::Vector3 {
@@ -295,15 +250,15 @@ impl InstancesState {
                                 z: offset.z
                             },
                         };
-                        instances.push(instance);
+                        instance_vec.push(instance);
                     };
-                    instances_state.instances.insert(name, InstancedModel::new_premade(m, &gpu.device, instances));
+                    instances.instances.insert(name, InstancedModel::new_premade(m, &gpu.device, instance_vec));
                 },
                 _ => ()
             }
         };
 
-        instances_state
+        instances
     }
 }
 
@@ -315,12 +270,9 @@ pub struct State {
     pub instances: InstancesState,
     pub mouse_pressed: bool,
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
-    pub blinking: bool,
-    blink_time: std::time::Instant,
-    pub blink_freq: u64,
     maps_path: String,
-    resources_path: String,
-    default_texture_path: String
+    pub resources_path: String,
+    pub default_texture_path: String
 }
 
 impl State {
@@ -378,11 +330,7 @@ impl State {
             )
         };
 
-        let instances = InstancesState::new(gpu, &texture_bind_group_layout, init_config.resource_files_directory, &init_config.default_texture_path);
-
-        let blinking = true;
-        let blink_time = std::time::Instant::now();
-        let blink_freq = 1;
+        let instances = InstancesState::new();
 
         State {
             camera,
@@ -392,9 +340,6 @@ impl State {
             instances,
             mouse_pressed: false,
             texture_bind_group_layout,
-            blinking,
-            blink_time,
-            blink_freq,
             maps_path,
             resources_path,
             default_texture_path
@@ -494,7 +439,7 @@ impl State {
         self.camera.update(dt, &gpu.queue);
     }
 
-    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState, tile_size: (f32, f32, f32)) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
@@ -527,67 +472,8 @@ impl State {
                 })
             });
 
-            
-            use model::DrawModel;
-            render_pass.set_pipeline(&self.render_pipeline);
-            for (_name, instanced_model) in self.instances.instances.iter() {
-                render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
-                render_pass.draw_model_instanced(
-                    &instanced_model.model,
-                    0..instanced_model.instances.len() as u32,
-                    &self.camera.camera_bind_group,
-                );
-            }
-            let time_elapsed = std::time::Instant::now() - self.blink_time;
-            let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
-            let mut instances = 0;
-            let mut buffer = None;
-            let mut model = None;
-            if model_visible {
-                // TODO: make a function instead of copy-pasting for modifying_instance
-                instances = self.instances.modifying_instance.into_renderable(&gpu.device, tile_size);
-                buffer = self.instances.modifying_instance.buffer.as_ref();
-                model = Some(&self.instances.modifying_instance.model);
-                render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
-                render_pass.draw_model_instanced(
-                    &model.unwrap(),
-                    0..instances as u32,
-                    &self.camera.camera_bind_group,
-                );
-            // 1 second = 1_000_000_000 nanoseconds
-            // 500_000_000ns = 1/2 seconds
-            } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
-                self.blink_time = std::time::Instant::now();
-            }
-
-
-            use model::DrawTransparentModel;
-            render_pass.set_pipeline(&self.transparent_render_pipeline);
-            for (_name, instanced_model) in self.instances.instances.iter()
-                .filter(|(_name, instanced_model)| {
-                    instanced_model.model.transparent_meshes.len() > 0
-                })
-            {
-                if instanced_model.model.transparent_meshes.len() > 0 {
-                    render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
-                    render_pass.tdraw_model_instanced(
-                        &instanced_model.model,
-                        0..instanced_model.instances.len() as u32,
-                        &self.camera.camera_bind_group,
-                    );
-                }
-            }
-            // TODO: make a function instead of copy-pasting for modifying_instance
-            if model_visible {
-                if model.unwrap().transparent_meshes.len() > 0 {
-                    render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
-                    render_pass.tdraw_model_instanced(
-                        &model.unwrap(),
-                        0..instances as u32,
-                        &self.camera.camera_bind_group,
-                    );
-                }
-            }
+            self.draw_opaque(&mut render_pass);
+            self.draw_transparent(&mut render_pass);
         }
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -595,18 +481,36 @@ impl State {
         Ok(())
     }
 
-    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState) {
-        match resources::load_glb_model(
-            file_name, 
-            &gpu.device, 
-            &gpu.queue,
-            &self.texture_bind_group_layout,
-            self.resources_path.clone(),
-            &self.default_texture_path
-        ) {
-            Ok(model) => self.instances.set_model(file_name, model),
-            Err(_) => (),
-        };
+    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        use model::DrawModel;
+        render_pass.set_pipeline(&self.render_pipeline);
+        for (_name, instanced_model) in self.instances.instances.iter() {
+            render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
+            render_pass.draw_model_instanced(
+                &instanced_model.model,
+                0..instanced_model.instances.len() as u32,
+                &self.camera.camera_bind_group,
+            );
+        }
+    }
+
+    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        use model::DrawTransparentModel;
+        render_pass.set_pipeline(&self.transparent_render_pipeline);
+        for (_name, instanced_model) in self.instances.instances.iter()
+            .filter(|(_name, instanced_model)| {
+                instanced_model.model.transparent_meshes.len() > 0
+            })
+        {
+            if instanced_model.model.transparent_meshes.len() > 0 {
+                render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
+                render_pass.tdraw_model_instanced(
+                    &instanced_model.model,
+                    0..instanced_model.instances.len() as u32,
+                    &self.camera.camera_bind_group,
+                );
+            }
+        }
     }
 }
 

@@ -27,7 +27,7 @@ pub async fn run(config: InitialConfiguration) -> Result<(), Error> {
     let window = wb.build(&event_loop)
         .unwrap();
 
-    let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone()).await;
+    let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone(), "box02.glb").await;
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;

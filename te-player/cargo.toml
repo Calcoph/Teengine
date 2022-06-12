@@ -16,7 +16,6 @@ log = "0.4"
 wgpu = "0.12"
 pollster = "0.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
-anyhow = "1.0"
 cgmath = "0.18"
 
 #imgui
@@ -36,8 +35,8 @@ features = ["png", "jpeg"]
 [dependencies.imgui-wgpu]
 git = "https://github.com/Yatekii/imgui-wgpu-rs.git"
 
-[dependencies.te-mapmaker]
-path = "../te-mapmaker"
-
 [dependencies.te-renderer]
 path = "../te-renderer"
+
+[dependencies.te-gamepad]
+path = "../te-gamepad"

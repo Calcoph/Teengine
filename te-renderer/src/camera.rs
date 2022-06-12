@@ -48,7 +48,7 @@ pub struct CameraState {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     pub (crate) camera_controller: CameraController,
-    pub (crate) camera_bind_group: wgpu::BindGroup,
+    pub camera_bind_group: wgpu::BindGroup,
 }
 
 impl CameraState {

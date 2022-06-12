@@ -4,7 +4,9 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use te_renderer::{state::{State, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE};
+use te_renderer::{state::{State, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources};
+
+use crate::modifiying_instance::{self, InstancesState, ModifyingInstance};
 
 pub struct ImguiState {
     gpu: GpuState,
@@ -16,7 +18,9 @@ pub struct ImguiState {
     maps: Directory,
     camera_controls_win: CameraControlsWin,
     model_selector_win: ModelSelectorWin,
-    object_control_win: ObjectControlWin
+    object_control_win: ObjectControlWin,
+    mod_instance: modifiying_instance::InstancesState,
+    renderer_s: RendererState
 }
 
 struct CameraControlsWin {
@@ -36,7 +40,8 @@ struct ObjectControlWin {
 impl ImguiState {
     pub async fn new(
         window: &Window,
-        config: InitialConfiguration
+        config: InitialConfiguration,
+        default_model: &str
     ) -> Self {
         let size = window.inner_size();
         let gpu = GpuState::new(size, window).await;
@@ -70,6 +75,13 @@ impl ImguiState {
             _blinking: true
         };
 
+        let blinking = true;
+        let blink_time = std::time::Instant::now();
+        let blink_freq = 1;
+        let renderer_s = RendererState { blinking, blink_time, blink_freq };
+
+        let mod_instance = InstancesState::new(&gpu, &state.texture_bind_group_layout, state.resources_path.clone(), &state.default_texture_path, default_model);
+
         ImguiState {
             gpu,
             context,
@@ -80,7 +92,9 @@ impl ImguiState {
             maps,
             camera_controls_win,
             model_selector_win,
-            object_control_win
+            object_control_win,
+            mod_instance,
+            renderer_s
         }
     }
 
@@ -156,7 +170,16 @@ impl ImguiState {
                             self.resources = get_resource_names(resource_files_directory, "");
                         };
                         ui.input_text("search", &mut state.search_str_gltf).build();
-                        show_resources_directory(resource_files_directory, &self.resources, &ui, state, &self.gpu, &mut self.state)
+                        show_resources_directory(
+                            resource_files_directory,
+                            &self.resources,
+                            &ui,
+                            state,
+                            &self.gpu,
+                            &self.state,
+                            &mut self.mod_instance,
+                            &mut self.renderer_s
+                        )
                     });
                     ui.same_line();
                     ChildWindow::new("maps").build(&ui, || {
@@ -180,7 +203,7 @@ impl ImguiState {
                             self.maps = get_map_names(map_files_directory, "");
                         };
                         ui.input_text("search", &mut state.search_str_temap).build();
-                        show_maps_directory(map_files_directory, &self.maps, &ui, state, &self.gpu, &mut self.state);
+                        show_maps_directory(map_files_directory, &self.maps, &ui, state, &mut self.state, &self.gpu);
                     })
                 });
             imgui::Window::new("Object control")
@@ -188,19 +211,32 @@ impl ImguiState {
                 .position([400.0, 200.0], Condition::FirstUseEver)
                 .build(&ui, || {
                     let _state = &mut self.object_control_win;
-                    let mod_inst = &mut self.state.instances.modifying_instance;
+                    let mod_inst = &mut self.mod_instance.modifying_instance;
                     ui.text("position");
                     InputFloat::new(&ui, "x", &mut mod_inst.x).step(1.0).step_fast(5.0).build();
                     InputFloat::new(&ui, "y", &mut mod_inst.y).step(1.0).step_fast(5.0).build();
                     InputFloat::new(&ui, "z", &mut mod_inst.z).step(1.0).step_fast(5.0).build();
                     if ui.button("place") {
-                        self.state.instances.place_model(&self.gpu.device, &self.gpu.queue, &self.state.texture_bind_group_layout, tile_size, resource_files_directory.to_string(), default_texture_path)
+                        let x = self.mod_instance.modifying_instance.x;
+                        let y = self.mod_instance.modifying_instance.y;
+                        let z = self.mod_instance.modifying_instance.z;
+                        self.state.instances.place_model(
+                            &self.gpu.device,
+                            &self.gpu.queue,
+                            &self.state.texture_bind_group_layout,
+                            tile_size,
+                            resource_files_directory.to_string(),
+                            default_texture_path,
+                            &self.mod_instance.modifying_name,
+                            (x, y, z)
+                            
+                        );
                     }
                     ui.separator();
-                    ui.checkbox("Blink selected model", &mut self.state.blinking);
-                    let mut blink_freq = self.state.blink_freq as i32;
+                    ui.checkbox("Blink selected model", &mut self.renderer_s.blinking);
+                    let mut blink_freq = self.renderer_s.blink_freq as i32;
                     Slider::new("Blinking frequency", 0, 20).build(&ui, &mut blink_freq);
-                    self.state.blink_freq = blink_freq as u64;
+                    self.renderer_s.blink_freq = blink_freq as u64;
                 });
             ui.show_demo_window(&mut opened);
         }
@@ -244,15 +280,16 @@ impl ImguiState {
     pub fn render(&mut self, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str, default_texture_path: &str) -> Result<(), wgpu::SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.state.render(&view, &self.gpu, tile_size)?;
+        self.renderer_s.render_state(&view, tile_size, &self.state, &self.gpu, &mut self.mod_instance.modifying_instance);
         self.render_imgui(&view, window, tile_size, resource_files_directory, map_files_directory, default_texture_path);
         output.present();
 
         Ok(())
     }
+
 }
 
-fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &mut State) {
+fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &State, mod_instance: &mut InstancesState, renderer_s: &mut RendererState) {
     ui.text(&dir.directory_name);
     ui.separator();
 
@@ -268,16 +305,16 @@ fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: 
                 };
                 if name.contains(&window_state.search_str_gltf) && name != "" {
                     if ui.button(name) {
-                        state.change_model(&(dir.directory_name.clone() + "/" + &file_name), gpu) // TODO: don't hardcode "/"
+                        renderer_s.change_model(&(dir.directory_name.clone() + "/" + &file_name), gpu, state, mod_instance) // TODO: don't hardcode "/"
                     };
                 }
             },
-            File::D(nested_dir) => show_resources_directory(root, &nested_dir, ui, window_state, gpu, state),
+            File::D(nested_dir) => show_resources_directory(root, &nested_dir, ui, window_state, gpu, state, mod_instance, renderer_s),
         }
     }
 }
 
-fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &mut State) {
+fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, state: &mut State, gpu: &GpuState) {
     ui.text(&dir.directory_name);
     ui.separator();
 
@@ -290,15 +327,107 @@ fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &Mode
                 };
                 if name.contains(&window_state.search_str_temap) && name != "" {
                     if ui.button(name) {
-                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), gpu); // TODO: don't hardcode "/"
-                        //state.calculate_render_matrix();
+                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu); // TODO: don't hardcode "/"
                     };
                 }
             },
-            File::D(nested_dir) => show_maps_directory(root, &nested_dir, ui, window_state, gpu, state),
+            File::D(nested_dir) => show_maps_directory(root, &nested_dir, ui, window_state, state, gpu),
         }
     };
+}
 
+struct RendererState {
+    blinking: bool,
+    blink_time: std::time::Instant,
+    blink_freq: u64
+}
+
+impl RendererState {
+    fn render_state(&mut self, view: &wgpu::TextureView, tile_size: (f32, f32, f32), state: &State, gpu: &GpuState, modifying_instance: &mut ModifyingInstance) {
+        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder")
+        });
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[
+                    wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.1,
+                                g: 0.6,
+                                b: 0.2,
+                                a: 1.0
+                            }),
+                            store: true
+                        }
+                    }
+                ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &gpu.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true
+                    }),
+                    stencil_ops: None
+                })
+            });
+    
+            use te_renderer::model::DrawModel;
+            state.draw_opaque(&mut render_pass);
+            let time_elapsed = std::time::Instant::now() - self.blink_time;
+            let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
+            let mut instances = 0;
+            let mut buffer = None;
+            let mut model = None;
+            if model_visible {
+                instances = modifying_instance.into_renderable(&gpu.device, tile_size);
+                buffer = modifying_instance.buffer.as_ref();
+                model = Some(&modifying_instance.model);
+                render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                render_pass.draw_model_instanced(
+                    &model.unwrap(),
+                    0..instances as u32,
+                    &state.camera.camera_bind_group,
+                );
+            // 1 second = 1_000_000_000 nanoseconds
+            // 500_000_000ns = 1/2 seconds
+            } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
+                self.blink_time = std::time::Instant::now();
+            }
+    
+            use te_renderer::model::DrawTransparentModel;
+            state.draw_transparent(&mut render_pass);
+            if model_visible {
+                if model.unwrap().transparent_meshes.len() > 0 {
+                    render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                    render_pass.tdraw_model_instanced(
+                        &model.unwrap(),
+                        0..instances as u32,
+                        &state.camera.camera_bind_group,
+                    );
+                }
+            }
+        }
+    
+        gpu.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState, state: &State, mod_instance: &mut InstancesState) {
+        match resources::load_glb_model(
+            file_name, 
+            &gpu.device, 
+            &gpu.queue,
+            &state.texture_bind_group_layout,
+            state.resources_path.clone(),
+            &state.default_texture_path
+        ) {
+            Ok(model) => mod_instance.set_model(file_name, model),
+            Err(_) => (),
+        };
+    }
 }
 
 fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directory {

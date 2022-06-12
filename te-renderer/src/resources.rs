@@ -23,6 +23,7 @@ pub fn load_glb_model(
     resources_path: String,
     default_texture_path: &str
 ) -> std::result::Result<model::Model, Box<dyn std::error::Error>> {
+    println!("{}", resources_path.clone() + "/" + file_name);
     let (document, buffers, images) = gltf::import(resources_path + "/" + file_name).unwrap(); // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();

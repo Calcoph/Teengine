@@ -35,12 +35,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.57"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08f9b8508dccb7687a1d6c4ce66b2b0ecef467c94667de27d8d7fe1f8d2a9cdc"
-
-[[package]]
 name = "approx"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1429,6 +1423,7 @@ dependencies = [
 name = "te-mapmaker"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "cgmath",
  "env_logger",
  "gilrs-core",
@@ -1447,7 +1442,6 @@ dependencies = [
 name = "te-player"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bytemuck",
  "cgmath",
  "env_logger",
@@ -1460,7 +1454,7 @@ dependencies = [
  "json",
  "log",
  "pollster",
- "te-mapmaker",
+ "te-gamepad",
  "te-renderer",
  "wgpu",
  "winit",

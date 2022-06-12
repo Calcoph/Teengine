@@ -5,6 +5,7 @@ use te_renderer::initial_config::InitialConfiguration;
 
 mod event_loop;
 mod mapmaker;
+mod modifiying_instance;
 
 pub fn start_mapmaker(
     config: InitialConfiguration
