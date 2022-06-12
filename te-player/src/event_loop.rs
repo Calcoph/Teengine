@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc};
 
 use te_gamepad::gamepad::ControllerEvent;
 use te_renderer::state::{State, GpuState};
-use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::{Event, WindowEvent}};
+use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
+pub use winit::event::Event as Event;
 
 pub fn run(event_loop: EventLoop<ControllerEvent>, window: Window, gpu: Rc<RefCell<GpuState>>, state: Rc<RefCell<State>>, mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>) {
     event_loop.run(move |event, _window_target, control_flow| {

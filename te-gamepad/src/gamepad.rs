@@ -1,4 +1,5 @@
-use gilrs_core::{ Gilrs, Event, EventType};
+use gilrs_core::{Gilrs, Event};
+pub use gilrs_core::EventType as EventType;
 use winit::{event_loop::EventLoopProxy};
 use std::thread;
 
