@@ -89,7 +89,7 @@ pub async fn run(config: InitialConfiguration) -> Result<(), Error> {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 mapmaker.update(dt);
-                match mapmaker.render(&window, config.tile_size, &config.resource_files_directory, &config.map_files_directory, &config.default_texture_path) {
+                match mapmaker.render(&window, config.tile_size, &config.resource_files_directory, &config.map_files_directory) {
                     Ok(_) => {},
                     // Reconfigure the surface if lost
                     Err(wgpu::SurfaceError::Lost) => mapmaker.resize(mapmaker.state.size),

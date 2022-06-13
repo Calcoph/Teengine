@@ -102,7 +102,7 @@ impl ImguiState {
         }
     }
 
-    pub fn render_imgui(&mut self, view: &wgpu::TextureView, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str, default_texture_path: &str) {
+    pub fn render_imgui(&mut self, view: &wgpu::TextureView, window: &Window, resource_files_directory: &str, map_files_directory: &str) {
         self.platform.prepare_frame(self.context.io_mut(), window).expect("Failed to prepare frame");
         let ui = self.context.frame();
         {
@@ -150,6 +150,8 @@ impl ImguiState {
                     if ui.button("Go to origin") {
                         camera.move_absolute((0.0, 0.0, 0.0))
                     }
+                    let (x, y, z) = camera.get_position();
+                    ui.text(format!("position: {}x, {}y, {}z", x, y, z));
                     camera.set_zoom(zoom);
                     ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
                     if state.show_hotkeys {
@@ -276,11 +278,11 @@ impl ImguiState {
         self.state.update(dt, &self.gpu);
     }
 
-    pub fn render(&mut self, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str, default_texture_path: &str) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str) -> Result<(), wgpu::SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.renderer_s.render_state(&view, tile_size, &self.state, &self.gpu, &mut self.mod_instance.modifying_instance);
-        self.render_imgui(&view, window, tile_size, resource_files_directory, map_files_directory, default_texture_path);
+        self.render_imgui(&view, window, resource_files_directory, map_files_directory);
         output.present();
 
         Ok(())
