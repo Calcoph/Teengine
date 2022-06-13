@@ -61,6 +61,14 @@ impl Instance {
             model: model.into(),
         }
     }
+
+    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V)  {
+        self.position = self.position + direction.into();
+    }
+
+    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P) {
+        self.position = position.into();
+    }
 }
 
 pub struct GpuState {
@@ -149,7 +157,7 @@ impl InstancedModel {
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
             }
         );
 
@@ -181,46 +189,92 @@ impl InstancedModel {
         );
         self.instance_buffer = instance_buffer;
     }
+
+    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, direction: V, queue: &wgpu::Queue) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.move_direction(direction);
+        let raw = instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
+
+    pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.move_to(position);
+        let raw = instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
+}
+
+pub struct InstanceReference {
+    name: String,
+    index: usize
+}
+
+impl InstanceReference {
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn get_id(&self) -> usize {
+        self.index
+    }
 }
 
 pub struct InstancesState {
-    instances: HashMap<String, InstancedModel>
+    instances: HashMap<String, InstancedModel>,
+    pub layout: wgpu::BindGroupLayout,
+    tile_size: (f32, f32, f32),
+    pub resources_path: String,
+    pub default_texture_path: String
 }
 
 impl InstancesState {
-    fn new() -> Self {
+    fn new(
+        layout: wgpu::BindGroupLayout,
+        tile_size: (f32, f32, f32),
+        resources_path: String,
+        default_texture_path: String
+    ) -> Self {
         let instances = HashMap::new();
         InstancesState {
             instances,
+            layout,
+            tile_size,
+            resources_path,
+            default_texture_path
         }
     }
 
     pub fn place_model(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        layout: &wgpu::BindGroupLayout,
-        tile_size: (f32, f32, f32),
-        resources_path: String,
-        default_texture_path: &str,
         model_name: &str,
+        gpu: &GpuState,
         tile_position: (f32, f32, f32)
-    ) {
+    ) -> InstanceReference {
         // TODO: Option to pass model instead of name of model
-        let x = tile_position.0 * tile_size.0;
-        let y = tile_position.1 * tile_size.1;
-        let z = tile_position.2 * tile_size.2;
+        let x = tile_position.0 * self.tile_size.0;
+        let y = tile_position.1 * self.tile_size.1;
+        let z = tile_position.2 * self.tile_size.2;
         match self.instances.contains_key(model_name) {
             true => {
                 let instanced_m = self.instances.get_mut(model_name).unwrap();
-                instanced_m.add_instance(x, y, z, device);
+                instanced_m.add_instance(x, y, z, &gpu.device);
             },
             false => {
-                let model = load_glb_model(model_name, device, queue, layout, resources_path, default_texture_path).unwrap();
-                let instanced_m = InstancedModel::new(model, device, x, y, z);
+                let model = load_glb_model(
+                    model_name,
+                    &gpu.device,
+                    &gpu.queue,
+                    &self.layout,
+                    self.resources_path.clone(),
+                    &self.default_texture_path
+                ).unwrap();
+                let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
                 self.instances.insert(model_name.to_string(), instanced_m);
             },
         }
+
+        InstanceReference { name: model_name.to_string(), index: self.instances.get(&model_name.to_string()).unwrap().instances.len()-1 }
     }
 
     pub fn save_temap(&self, file_name: &str, maps_path: String) {
@@ -235,10 +289,16 @@ impl InstancesState {
         map.save(&file_name, maps_path);
     }
 
-    fn from_temap(map: temap::TeMap, gpu: &GpuState, texture_bind_group_layout: &wgpu::BindGroupLayout, resources_path: String, default_texture_path: &str) -> Self {
-        let mut instances = InstancesState::new();
+    fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
         for (name, te_model) in map.models {
-            let model = load_glb_model(&name, &gpu.device, &gpu.queue, texture_bind_group_layout, resources_path.clone(), default_texture_path);
+            let model = load_glb_model(
+                &name,
+                &gpu.device,
+                &gpu.queue,
+                &self.layout,
+                self.resources_path.clone(),
+                &self.default_texture_path
+            );
             match model {
                 Ok(m) => {
                     let mut instance_vec = Vec::new();
@@ -252,13 +312,21 @@ impl InstancesState {
                         };
                         instance_vec.push(instance);
                     };
-                    instances.instances.insert(name, InstancedModel::new_premade(m, &gpu.device, instance_vec));
+                    self.instances.insert(name, InstancedModel::new_premade(m, &gpu.device, instance_vec));
                 },
                 _ => ()
             }
-        };
+        }
+    }
 
-        instances
+    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &InstanceReference, direction: V, queue: &wgpu::Queue) {
+        let model = self.instances.get_mut(&instance.name).unwrap();
+        model.move_instance(instance.index, direction, queue);
+    }
+
+    pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, instance: &InstanceReference, position: P, queue: &wgpu::Queue) {
+        let model = self.instances.get_mut(&instance.name).unwrap();
+        model.set_instance_position(instance.index, position, queue);
     }
 }
 
@@ -269,10 +337,7 @@ pub struct State {
     transparent_render_pipeline: wgpu::RenderPipeline,
     pub instances: InstancesState,
     pub mouse_pressed: bool,
-    pub texture_bind_group_layout: wgpu::BindGroupLayout,
     maps_path: String,
-    pub resources_path: String,
-    pub default_texture_path: String
 }
 
 impl State {
@@ -330,7 +395,12 @@ impl State {
             )
         };
 
-        let instances = InstancesState::new();
+        let instances = InstancesState::new(
+            texture_bind_group_layout,
+            init_config.tile_size,
+            resources_path,
+            default_texture_path,
+        );
 
         State {
             camera,
@@ -339,16 +409,13 @@ impl State {
             transparent_render_pipeline,
             instances,
             mouse_pressed: false,
-            texture_bind_group_layout,
             maps_path,
-            resources_path,
-            default_texture_path
         }
     }
 
     pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
         let map = temap::TeMap::from_file(file_name, self.maps_path.clone());
-        self.instances = InstancesState::from_temap(map, gpu, &self.texture_bind_group_layout, self.resources_path.clone(), &self.default_texture_path);
+        self.instances.fill_from_temap(map, gpu);
     }
 
     fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {

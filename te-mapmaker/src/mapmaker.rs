@@ -49,12 +49,12 @@ impl ImguiState {
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
         platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
-
+        
         let renderer_config = RendererConfig {
             texture_format: gpu.config.format,
             ..Default::default()
         };
-
+        
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
         let resources = get_resource_names(&config.resource_files_directory, "");
@@ -80,7 +80,11 @@ impl ImguiState {
         let blink_freq = 1;
         let renderer_s = RendererState { blinking, blink_time, blink_freq };
 
-        let mod_instance = InstancesState::new(&gpu, &state.texture_bind_group_layout, state.resources_path.clone(), &state.default_texture_path, default_model);
+        let mod_instance = InstancesState::new(&gpu,
+            &state.instances.layout,
+            state.instances.resources_path.clone(),
+            &state.instances.default_texture_path,
+            default_model);
 
         ImguiState {
             gpu,
@@ -221,13 +225,8 @@ impl ImguiState {
                         let y = self.mod_instance.modifying_instance.y;
                         let z = self.mod_instance.modifying_instance.z;
                         self.state.instances.place_model(
-                            &self.gpu.device,
-                            &self.gpu.queue,
-                            &self.state.texture_bind_group_layout,
-                            tile_size,
-                            resource_files_directory.to_string(),
-                            default_texture_path,
                             &self.mod_instance.modifying_name,
+                            &self.gpu,
                             (x, y, z)
                             
                         );
@@ -420,9 +419,9 @@ impl RendererState {
             file_name, 
             &gpu.device, 
             &gpu.queue,
-            &state.texture_bind_group_layout,
-            state.resources_path.clone(),
-            &state.default_texture_path
+            &state.instances.layout,
+            state.instances.resources_path.clone(),
+            &state.instances.default_texture_path
         ) {
             Ok(model) => mod_instance.set_model(file_name, model),
             Err(_) => (),
