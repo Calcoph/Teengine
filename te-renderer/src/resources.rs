@@ -285,3 +285,16 @@ fn apply_base_color(image: &gltf::image::Data, color: [f32; 4]) -> gltf::image::
         height: image.height
     }
 }
+
+pub fn load_sprite(
+    file_name: &str,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    resources_path: String,
+) -> std::result::Result<model::Material, Box<dyn std::error::Error>> {
+    let img = image::open(resources_path + "/" + file_name)?;
+    let img = img.as_rgba8().unwrap();
+    let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name))?;
+    Ok(model::Material::new(device, file_name, diffuse_texture, layout))
+}

@@ -1,4 +1,5 @@
 use std::ops::Range;
+
 use crate::texture;
 
 pub trait Vertex {
@@ -26,6 +27,35 @@ impl Vertex for ModelVertex {
                 },
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2
+                }
+            ]
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SpriteVertex {
+    pub position: [f32; 2],
+    pub tex_coords: [f32; 2]
+}
+
+impl Vertex for SpriteVertex {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<SpriteVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2
                 }
@@ -67,6 +97,34 @@ impl Material {
             diffuse_texture,
             bind_group
         }
+    }
+}
+
+pub trait DrawSprite<'a> {
+    fn draw_sprite_instanced(
+        &mut self,
+        material: &'a Material,
+        instances: Range<u32>,
+        projection_bind_group: &'a wgpu::BindGroup,
+        vertex_buffer: &'a wgpu::Buffer
+    );
+}
+
+impl<'a, 'b> DrawSprite<'b> for wgpu::RenderPass<'a>
+where
+    'b: 'a
+{
+    fn draw_sprite_instanced(
+        &mut self,
+        material: &'a Material,
+        instances: Range<u32>,
+        projection_bind_group: &'a wgpu::BindGroup,
+        vertex_buffer: &'a wgpu::Buffer
+    ) {
+        self.set_vertex_buffer(0, vertex_buffer.slice(..));
+        self.set_bind_group(0, projection_bind_group, &[]);
+        self.set_bind_group(1, &material.bind_group, &[]);
+        self.draw(0..6, instances);
     }
 }
 
@@ -116,7 +174,6 @@ pub trait DrawModel<'a> {
         camera_bind_group: &'a wgpu::BindGroup
     );
 }
-
 
 impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
 where

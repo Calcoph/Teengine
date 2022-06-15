@@ -34,7 +34,9 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Window, gpu: Rc<RefCe
                 state.borrow_mut().update(dt, &gpu.borrow());
                 let output = gpu.borrow().surface.get_current_texture().unwrap();
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                state.borrow_mut().render(&view, &gpu.borrow()).unwrap();
+                let mut encoder = te_renderer::state::State::prepare_render(&gpu.borrow());
+                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder);
+                te_renderer::state::State::end_render(&gpu.borrow(), encoder);
                 output.present();
             },
             _ => ()

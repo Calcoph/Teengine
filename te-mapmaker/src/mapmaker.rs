@@ -260,7 +260,7 @@ impl ImguiState {
             });
             self.renderer.render(ui.render(), &self.gpu.queue, &self.gpu.device, &mut render_pass).expect("Rendering failed");
         }
-        self.gpu.queue.submit(std::iter::once(encoder.finish()));
+        self.gpu.queue.submit(std::iter::once(encoder.finish())); // TODO: call submit only once. right now it is called twice
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

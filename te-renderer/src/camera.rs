@@ -42,13 +42,30 @@ impl CameraUniform {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ProjectionUniform {
+    // We can't use cgmath with bytemuck directly so we'll have
+    // to convert the Matrix4 into a 4x4 f32 array
+    projection: [[f32; 4]; 4]
+}
+
+impl ProjectionUniform {
+    fn new(matrix: Matrix4<f32>) -> Self {
+        ProjectionUniform { projection: matrix.into() }
+    }
+}
+
 pub struct CameraState {
-    camera: Camera,
     projection: Projection,
+    projection_uniform: ProjectionUniform,
+    projection_buffer: wgpu::Buffer,
+    pub projection_bind_group: wgpu::BindGroup,
+    camera: Camera,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
-    pub (crate) camera_controller: CameraController,
     pub camera_bind_group: wgpu::BindGroup,
+    pub (crate) camera_controller: CameraController,
 }
 
 impl CameraState {
@@ -56,6 +73,7 @@ impl CameraState {
         config: &wgpu::SurfaceConfiguration,
         device: &wgpu::Device,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
+        projection_bind_group_layout: &wgpu::BindGroupLayout,
         init_config: InitialConfiguration
     ) -> Self {
         let camera = Camera::new(
@@ -70,6 +88,24 @@ impl CameraState {
             init_config.camera_znear,
             init_config.camera_zfar
         );
+        let projection_uniform = ProjectionUniform::new(projection.calc_2d_matrix());
+        let projection_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Projection Buffer"),
+                contents: bytemuck::cast_slice(&[projection_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
+            }
+        );
+        let projection_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &projection_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: projection_buffer.as_entire_binding()
+                }
+            ],
+            label: Some("projeciton_bind_group")
+        });
         let camera_controller = CameraController::new(
                 init_config.camera_speed,
                 init_config.camera_sensitivity
@@ -95,12 +131,15 @@ impl CameraState {
         });
 
         CameraState {
-            camera,
             projection,
+            projection_uniform,
+            projection_buffer,
+            projection_bind_group,
+            camera,
             camera_uniform,
             camera_buffer,
-            camera_controller,
             camera_bind_group,
+            camera_controller,
         }
     }
 
@@ -219,6 +258,8 @@ impl Camera {
 }
 
 pub struct Projection {
+    width: u32,
+    height: u32,
     aspect: f32,
     fovy: f32,
     znear: f32,
@@ -234,6 +275,8 @@ impl Projection {
         zfar: f32
     ) -> Self {
         Self {
+            width,
+            height,
             aspect: width as f32 / height as f32,
             fovy: fovy,
             znear,
@@ -247,6 +290,10 @@ impl Projection {
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         OPENGL_TO_WGPU_MATRIX * perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar)
+    }
+
+    pub fn calc_2d_matrix(&self) -> Matrix4<f32> {
+        OPENGL_TO_WGPU_MATRIX * ortho(0.0, self.width as f32, self.height as f32, 0.0, -1.0, 1.0)
     }
 }
 

@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use cgmath::Vector3;
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi};
 use wgpu::util::DeviceExt;
 
-use crate::{texture, temap, model, camera, resources::load_glb_model, initial_config::InitialConfiguration};
+use crate::{texture, temap, model, camera, resources::{load_glb_model, load_sprite}, initial_config::InitialConfiguration};
 use crate::model::Vertex;
 
 #[repr(C)]
@@ -50,12 +51,46 @@ impl model::Vertex for InstanceRaw {
     }
 }
 
-pub struct Instance {
+pub trait Instance {
+    fn to_raw(&self) -> InstanceRaw;
+
+    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V);
+
+    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P);
+}
+
+pub struct Instance2D {
+    pub position: cgmath::Vector2<f32>,
+    pub size: cgmath::Vector2<f32>
+}
+
+impl Instance for Instance2D {
+    fn to_raw(&self) -> InstanceRaw {
+        let sprite = cgmath::Matrix4::from_translation(Vector3{x: self.position.x, y: self.position.y, z: 0.0})
+            * cgmath::Matrix4::from_nonuniform_scale(self.size.x, self.size.y, 1.0);
+
+        InstanceRaw {
+            model: sprite.into(),
+        }
+    }
+
+    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V)  {
+        let direction = direction.into();
+        self.position = self.position + cgmath::Vector2::new(direction.x, direction.y);
+    }
+
+    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P) {
+        let position = position.into();
+        self.position = cgmath::Vector2::new(position.x, position.y)
+    }
+}
+
+pub struct Instance3D {
     pub position: cgmath::Vector3<f32>,
 }
 
-impl Instance {
-    pub fn to_raw(&self) -> InstanceRaw {
+impl Instance for Instance3D {
+    fn to_raw(&self) -> InstanceRaw {
         let model = cgmath::Matrix4::from_translation(self.position);
         InstanceRaw {
             model: model.into(),
@@ -136,23 +171,30 @@ impl GpuState {
         self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
     }
 }
+
+trait InstancedDraw {
+    fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, direction: V, queue: &wgpu::Queue);
+
+    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue);
+}
+
 struct InstancedModel {
     model: model::Model,
-    instances: Vec<Instance>,
+    instances: Vec<Instance3D>,
     instance_buffer: wgpu::Buffer,
 }
 
 impl InstancedModel {
     fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
-        let instances = vec![Instance {
+        let instances = vec![Instance3D {
             position: cgmath::Vector3 { x, y, z },
         }];
 
         InstancedModel::new_premade(model, device, instances)
     }
 
-    fn new_premade(model: model::Model, device: &wgpu::Device, instances: Vec<Instance>) -> Self {
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+    fn new_premade(model: model::Model, device: &wgpu::Device, instances: Vec<Instance3D>) -> Self {
+        let instance_data = instances.iter().map(Instance3D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
@@ -161,9 +203,9 @@ impl InstancedModel {
             }
         );
 
-        let instances = instances.into_iter().map(|instance| {
+        /* let instances = instances.into_iter().map(|instance| {
             instance
-        }).collect();
+        }).collect(); */
 
         InstancedModel {
             model,
@@ -173,7 +215,7 @@ impl InstancedModel {
     }
 
     fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
-        let new_instance = Instance {
+        let new_instance = Instance3D {
             position: cgmath::Vector3 { x, y, z },
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
@@ -189,15 +231,17 @@ impl InstancedModel {
         );
         self.instance_buffer = instance_buffer;
     }
+}
 
-    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, direction: V, queue: &wgpu::Queue) {
+impl InstancedDraw for InstancedModel {
+    fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, direction: V, queue: &wgpu::Queue) {
         let instance = self.instances.get_mut(index).unwrap();
         instance.move_direction(direction);
         let raw = instance.to_raw();
         queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
     }
 
-    pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue) {
+    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue) {
         let instance = self.instances.get_mut(index).unwrap();
         instance.move_to(position);
         let raw = instance.to_raw();
@@ -205,9 +249,88 @@ impl InstancedModel {
     }
 }
 
+struct InstancedSprite {
+    sprite: model::Material,
+    instances: Vec<Instance2D>,
+    instance_buffer: wgpu::Buffer,
+}
+
+impl InstancedSprite {
+    fn new(sprite: model::Material, device: &wgpu::Device, x: f32, y: f32, w: f32, h: f32) -> Self {
+        let instances = vec![Instance2D {
+            position: cgmath::Vector2 { x, y },
+            size: cgmath::Vector2 { x: w, y: h }
+        }];
+
+        InstancedSprite::new_premade(sprite, device, instances)
+    }
+
+    fn new_premade(sprite: model::Material, device: &wgpu::Device, instances: Vec<Instance2D>) -> Self {
+        let instance_data = instances.iter().map(Instance2D::to_raw).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
+            }
+        );
+
+        /* let instances = instances.into_iter().map(|instance| {
+            instance
+        }).collect(); */
+
+        InstancedSprite {
+            sprite,
+            instances,
+            instance_buffer
+        }
+    }
+
+    fn add_instance(&mut self, x: f32, y: f32, w: f32, h: f32, device: &wgpu::Device) {
+        let new_instance = Instance2D {
+            position: cgmath::Vector2 { x, y },
+            size: cgmath::Vector2 { x: w, y: h }
+        };
+        //TODO: see if there is a better way than replacing the buffer with a new one
+        self.instances.push(new_instance);
+        self.instance_buffer.destroy();
+        let instance_data = self.instances.iter().map(|instance| instance.to_raw()).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX
+            }
+        );
+        self.instance_buffer = instance_buffer;
+    }
+}
+
+impl InstancedDraw for InstancedSprite {
+    fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, direction: V, queue: &wgpu::Queue) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.move_direction(direction);
+        let raw = instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
+
+    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.move_to(position);
+        let raw = instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
+}
+
+enum Dimension {
+    D2,
+    D3
+}
+
 pub struct InstanceReference {
     name: String,
-    index: usize
+    index: usize,
+    dimension: Dimension
 }
 
 impl InstanceReference {
@@ -222,6 +345,7 @@ impl InstanceReference {
 
 pub struct InstancesState {
     instances: HashMap<String, InstancedModel>,
+    instances_2d: HashMap<String, InstancedSprite>,
     pub layout: wgpu::BindGroupLayout,
     tile_size: (f32, f32, f32),
     pub resources_path: String,
@@ -236,8 +360,10 @@ impl InstancesState {
         default_texture_path: String
     ) -> Self {
         let instances = HashMap::new();
+        let instances_2d = HashMap::new();
         InstancesState {
             instances,
+            instances_2d,
             layout,
             tile_size,
             resources_path,
@@ -274,7 +400,44 @@ impl InstancesState {
             },
         }
 
-        InstanceReference { name: model_name.to_string(), index: self.instances.get(&model_name.to_string()).unwrap().instances.len()-1 }
+        InstanceReference {
+            name: model_name.to_string(),
+            index: self.instances.get(&model_name.to_string()).unwrap().instances.len()-1,
+            dimension: Dimension::D3
+        }
+    }
+
+
+    pub fn place_sprite(
+        &mut self,
+        sprite_name: &str,
+        gpu: &GpuState,
+        size: (f32, f32),
+        position: (f32, f32)
+    ) -> InstanceReference {
+        match self.instances_2d.contains_key(sprite_name) {
+            true => {
+                let instanced_s = self.instances_2d.get_mut(sprite_name).unwrap();
+                instanced_s.add_instance(position.0, position.1, size.0, size.1, &gpu.device);
+            },
+            false => {
+                let sprite = load_sprite(
+                    sprite_name,
+                    &gpu.device,
+                    &gpu.queue,
+                    &self.layout,
+                    self.resources_path.clone(),
+                ).unwrap();
+                let instanced_s = InstancedSprite::new(sprite, &gpu.device, position.0, position.1, size.0, size.1);
+                self.instances_2d.insert(sprite_name.to_string(), instanced_s);
+            }
+        }
+
+        InstanceReference {
+            name: sprite_name.to_string(),
+            index: self.instances_2d.get(&sprite_name.to_string()).unwrap().instances.len()-1,
+            dimension: Dimension::D2
+        }
     }
 
     pub fn save_temap(&self, file_name: &str, maps_path: String) {
@@ -303,7 +466,7 @@ impl InstancesState {
                 Ok(m) => {
                     let mut instance_vec = Vec::new();
                     for offset in te_model.offsets {
-                        let instance = Instance {
+                        let instance = Instance3D {
                             position: cgmath::Vector3 {
                                 x: offset.x,
                                 y: offset.y,
@@ -320,13 +483,29 @@ impl InstancesState {
     }
 
     pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &InstanceReference, direction: V, queue: &wgpu::Queue) {
-        let model = self.instances.get_mut(&instance.name).unwrap();
-        model.move_instance(instance.index, direction, queue);
+        match instance.dimension {
+            Dimension::D2 => {
+                let model = self.instances_2d.get_mut(&instance.name).unwrap();
+                model.move_instance(instance.index, direction, queue);
+            },
+            Dimension::D3 => {
+                let model = self.instances.get_mut(&instance.name).unwrap();
+                model.move_instance(instance.index, direction, queue);
+            }
+        };
     }
 
     pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, instance: &InstanceReference, position: P, queue: &wgpu::Queue) {
-        let model = self.instances.get_mut(&instance.name).unwrap();
-        model.set_instance_position(instance.index, position, queue);
+        match instance.dimension {
+            Dimension::D2 => {
+                let model = self.instances_2d.get_mut(&instance.name).unwrap();
+                model.set_instance_position(instance.index, position, queue);
+            },
+            Dimension::D3 => {
+                let model = self.instances.get_mut(&instance.name).unwrap();
+                model.set_instance_position(instance.index, position, queue);
+            }
+        };
     }
 }
 
@@ -335,9 +514,11 @@ pub struct State {
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
+    sprite_render_pipeline: wgpu::RenderPipeline,
     pub instances: InstancesState,
     pub mouse_pressed: bool,
     maps_path: String,
+    sprite_vertices_buffer: wgpu::Buffer,
 }
 
 impl State {
@@ -353,13 +534,16 @@ impl State {
         
         let (texture_bind_group_layout,
             camera_bind_group_layout,
-            render_pipeline_layout
+            render_pipeline_layout,
+            projection_bind_group_layout,
+            sprite_render_pipeline_layout
         ) = State::get_layouts(&gpu.device);
         
         let camera = camera::CameraState::new(
             &gpu.config,
             &gpu.device,
             &camera_bind_group_layout,
+            &projection_bind_group_layout,
             init_config.clone()
         );
 
@@ -395,6 +579,22 @@ impl State {
             )
         };
 
+        let sprite_render_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("2d_shader.wgsl").into()),
+            };
+            create_render_pipeline(
+                &gpu.device,
+                &sprite_render_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::SpriteVertex::desc(), InstanceRaw::desc()],
+                shader,
+                true
+            )
+        };
+
         let instances = InstancesState::new(
             texture_bind_group_layout,
             init_config.tile_size,
@@ -402,14 +602,30 @@ impl State {
             default_texture_path,
         );
 
+        let sprite_vertices = &[
+            model::SpriteVertex { position: [0.0, 1.0], tex_coords: [0.0, 1.0]},
+            model::SpriteVertex { position: [1.0, 0.0], tex_coords: [1.0, 0.0]},
+            model::SpriteVertex { position: [0.0, 0.0], tex_coords: [0.0, 0.0]},
+            model::SpriteVertex { position: [0.0, 1.0], tex_coords: [0.0, 1.0]},
+            model::SpriteVertex { position: [1.0, 1.0], tex_coords: [1.0, 1.0]},
+            model::SpriteVertex { position: [1.0, 0.0], tex_coords: [1.0, 0.0]}
+        ];
+        let sprite_vertices_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Sprite Vertex Buffer"),
+            contents: bytemuck::cast_slice(sprite_vertices),
+            usage: wgpu::BufferUsages::VERTEX
+        });
+
         State {
             camera,
             size,
             render_pipeline,
             transparent_render_pipeline,
+            sprite_render_pipeline,
             instances,
             mouse_pressed: false,
             maps_path,
+            sprite_vertices_buffer
         }
     }
 
@@ -418,7 +634,7 @@ impl State {
         self.instances.fill_from_temap(map, gpu);
     }
 
-    fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {
+    fn get_layouts(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout, wgpu::BindGroupLayout, wgpu::PipelineLayout) {
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -470,7 +686,34 @@ impl State {
             }
         );
 
-        (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout)
+        let projection_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None
+                    },
+                    count: None
+                }
+            ],
+            label: Some("projection_bind_group_layout")
+        });
+
+        let sprite_render_pipeline_layout = device.create_pipeline_layout(
+            &wgpu::PipelineLayoutDescriptor {
+                label: Some("Sprite Render Pipeline Layout"),
+                bind_group_layouts: &[
+                    &projection_bind_group_layout,
+                    &texture_bind_group_layout,
+                ],
+                push_constant_ranges: &[]
+            }
+        );
+
+        (texture_bind_group_layout, camera_bind_group_layout, render_pipeline_layout, projection_bind_group_layout, sprite_render_pipeline_layout)
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -506,46 +749,48 @@ impl State {
         self.camera.update(dt, &gpu.queue);
     }
 
-    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState) -> Result<(), wgpu::SurfaceError> {
-        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+    pub fn prepare_render(gpu: &GpuState) -> wgpu::CommandEncoder {
+        gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
-        });
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[
-                    // This is what [[location(0)]] in the fragment shader targets
-                    wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.1,
-                                g: 0.6,
-                                b: 0.2,
-                                a: 1.0
-                            }),
-                            store: true
-                        }
-                    }
-                ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &gpu.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
+        })
+    }
+
+    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoder: &mut wgpu::CommandEncoder) {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[
+                // This is what [[location(0)]] in the fragment shader targets
+                wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.6,
+                            b: 0.2,
+                            a: 1.0
+                        }),
                         store: true
-                    }),
-                    stencil_ops: None
-                })
-            });
+                    }
+                }
+            ],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &gpu.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true
+                }),
+                stencil_ops: None
+            })
+        });
 
-            self.draw_opaque(&mut render_pass);
-            self.draw_transparent(&mut render_pass);
-        }
+        self.draw_opaque(&mut render_pass);
+        self.draw_transparent(&mut render_pass);
+        self.draw_sprites(&mut render_pass);
+    }
 
+    pub fn end_render(gpu: &GpuState, encoder: wgpu::CommandEncoder) {
         gpu.queue.submit(std::iter::once(encoder.finish()));
-
-        Ok(())
     }
 
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
@@ -577,6 +822,20 @@ impl State {
                     &self.camera.camera_bind_group,
                 );
             }
+        }
+    }
+
+    pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        use model::DrawSprite;
+        render_pass.set_pipeline(&self.sprite_render_pipeline);
+        for (_name, instanced_sprite) in &self.instances.instances_2d {
+            render_pass.set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
+            render_pass.draw_sprite_instanced(
+                &instanced_sprite.sprite,
+                0..instanced_sprite.instances.len() as u32,
+                &self.camera.projection_bind_group,
+                &self.sprite_vertices_buffer
+            );
         }
     }
 }
