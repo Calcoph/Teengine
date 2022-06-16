@@ -224,6 +224,12 @@ impl CameraState {
     pub fn get_position(&self) -> (f32, f32, f32) {
         return self.camera.position.into();
     }
+
+    pub fn resize_2d_space(&mut self, width: u32, height: u32, queue: &wgpu::Queue) {
+        self.projection.resize_2d(width, height);
+        self.projection_uniform = ProjectionUniform::new(self.projection.calc_2d_matrix());
+        queue.write_buffer(&self.projection_buffer, 0, bytemuck::cast_slice(&[self.projection_uniform]))
+    }
 }
 
 #[derive(Debug)]
@@ -286,6 +292,11 @@ impl Projection {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.aspect = width as f32 / height as f32;
+    }
+
+    pub fn resize_2d(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
     }
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
