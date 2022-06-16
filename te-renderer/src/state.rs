@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cgmath::Vector3;
 use winit::{window::Window, event::{WindowEvent, KeyboardInput, ElementState}, dpi};
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, CommandBuffer};
 
 use crate::{texture, temap, model, camera, resources::{load_glb_model, load_sprite}, initial_config::InitialConfiguration};
 use crate::model::Vertex;
@@ -253,19 +253,20 @@ struct InstancedSprite {
     sprite: model::Material,
     instances: Vec<Instance2D>,
     instance_buffer: wgpu::Buffer,
+    depth: f32
 }
 
 impl InstancedSprite {
-    fn new(sprite: model::Material, device: &wgpu::Device, x: f32, y: f32, w: f32, h: f32) -> Self {
+    fn new(sprite: model::Material, device: &wgpu::Device, x: f32, y: f32, depth: f32, w: f32, h: f32) -> Self {
         let instances = vec![Instance2D {
             position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h }
+            size: cgmath::Vector2 { x: w, y: h },
         }];
 
-        InstancedSprite::new_premade(sprite, device, instances)
+        InstancedSprite::new_premade(sprite, device, instances, depth)
     }
 
-    fn new_premade(sprite: model::Material, device: &wgpu::Device, instances: Vec<Instance2D>) -> Self {
+    fn new_premade(sprite: model::Material, device: &wgpu::Device, instances: Vec<Instance2D>, depth: f32) -> Self {
         let instance_data = instances.iter().map(Instance2D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -282,7 +283,8 @@ impl InstancedSprite {
         InstancedSprite {
             sprite,
             instances,
-            instance_buffer
+            instance_buffer,
+            depth
         }
     }
 
@@ -413,7 +415,7 @@ impl InstancesState {
         sprite_name: &str,
         gpu: &GpuState,
         size: (f32, f32),
-        position: (f32, f32)
+        position: (f32, f32, f32)
     ) -> InstanceReference {
         match self.instances_2d.contains_key(sprite_name) {
             true => {
@@ -428,7 +430,7 @@ impl InstancesState {
                     &self.layout,
                     self.resources_path.clone(),
                 ).unwrap();
-                let instanced_s = InstancedSprite::new(sprite, &gpu.device, position.0, position.1, size.0, size.1);
+                let instanced_s = InstancedSprite::new(sprite, &gpu.device, position.0, position.1, position.2, size.0, size.1);
                 self.instances_2d.insert(sprite_name.to_string(), instanced_s);
             }
         }
@@ -584,7 +586,7 @@ impl State {
                 label: Some("Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("2d_shader.wgsl").into()),
             };
-            create_render_pipeline(
+            create_2d_render_pipeline(
                 &gpu.device,
                 &sprite_render_pipeline_layout,
                 gpu.config.format,
@@ -749,14 +751,52 @@ impl State {
         self.camera.update(dt, &gpu.queue);
     }
 
-    pub fn prepare_render(gpu: &GpuState) -> wgpu::CommandEncoder {
-        gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder")
-        })
+    pub fn prepare_render(gpu: &GpuState) -> Vec<wgpu::CommandEncoder> {
+        vec![
+            gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder")
+            }),
+            gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("2D Render Encoder")
+            })
+        ]
     }
 
-    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoder: &mut wgpu::CommandEncoder) {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoders: &mut Vec<wgpu::CommandEncoder>) {
+        {
+            let mut render_pass = encoders.get_mut(0).unwrap().begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[
+                    // This is what [[location(0)]] in the fragment shader targets
+                    wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.1,
+                                g: 0.6,
+                                b: 0.2,
+                                a: 1.0
+                            }),
+                            store: true
+                        }
+                    }
+                ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &gpu.depth_texture.view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true
+                    }),
+                    stencil_ops: None
+                })
+            });
+
+            self.draw_opaque(&mut render_pass);
+            self.draw_transparent(&mut render_pass);
+        }
+        
+        let mut render_pass = encoders.get_mut(1).unwrap().begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[
                 // This is what [[location(0)]] in the fragment shader targets
@@ -764,33 +804,19 @@ impl State {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.6,
-                            b: 0.2,
-                            a: 1.0
-                        }),
+                        load: wgpu::LoadOp::Load,
                         store: true
                     }
                 }
             ],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &gpu.depth_texture.view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: true
-                }),
-                stencil_ops: None
-            })
+            depth_stencil_attachment: None
         });
-
-        self.draw_opaque(&mut render_pass);
-        self.draw_transparent(&mut render_pass);
         self.draw_sprites(&mut render_pass);
     }
 
-    pub fn end_render(gpu: &GpuState, encoder: wgpu::CommandEncoder) {
-        gpu.queue.submit(std::iter::once(encoder.finish()));
+    pub fn end_render(gpu: &GpuState, encoders: Vec<wgpu::CommandEncoder>) {
+        let encoders: Vec<CommandBuffer> = encoders.into_iter().map(|encoder| encoder.finish()).collect();
+        gpu.queue.submit(encoders);
     }
 
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
@@ -828,7 +854,11 @@ impl State {
     pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use model::DrawSprite;
         render_pass.set_pipeline(&self.sprite_render_pipeline);
-        for (_name, instanced_sprite) in &self.instances.instances_2d {
+        let mut sorted_sprites: Vec<(&String, &InstancedSprite)> = self.instances.instances_2d.iter().collect();
+        sorted_sprites.sort_by(|(_n1, inst1), (_n2, inst2)| {
+            inst1.depth.partial_cmp(&inst2.depth).unwrap()
+        });
+        for (_name, instanced_sprite) in sorted_sprites {
             render_pass.set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
             render_pass.draw_sprite_instanced(
                 &instanced_sprite.sprite,
@@ -891,6 +921,60 @@ fn create_render_pipeline(
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None
+    })
+}
+
+fn create_2d_render_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    color_format: wgpu::TextureFormat,
+    depth_format: Option<wgpu::TextureFormat>,
+    vertex_layouts: &[wgpu::VertexBufferLayout],
+    shader: wgpu::ShaderModuleDescriptor,
+    transparent: bool
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(&shader);
+    let entry_point = match transparent {
+        true => "fs_main",
+        false => "fs_mask",
+    };
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: vertex_layouts,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point,
+            targets: &[wgpu::ColorTargetState {
+                format: color_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            }],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,//Some(wgpu::Face::Back),
+            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+            polygon_mode: wgpu::PolygonMode::Fill,
+            // Requires Features::DEPTH_CLIP_CONTROL
+            unclipped_depth: false,
+            // Requires Features::CONSERVATIVE_RASTERIZATION
+            conservative: false,
+        },
+        depth_stencil: None,
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,
