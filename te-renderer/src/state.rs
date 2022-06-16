@@ -521,6 +521,8 @@ pub struct State {
     pub mouse_pressed: bool,
     maps_path: String,
     sprite_vertices_buffer: wgpu::Buffer,
+    pub render_3d: bool,
+    pub render_2d: bool
 }
 
 impl State {
@@ -627,7 +629,9 @@ impl State {
             instances,
             mouse_pressed: false,
             maps_path,
-            sprite_vertices_buffer
+            sprite_vertices_buffer,
+            render_2d: true,
+            render_3d: true
         }
     }
 
@@ -763,7 +767,7 @@ impl State {
     }
 
     pub fn render(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoders: &mut Vec<wgpu::CommandEncoder>) {
-        {
+        if self.render_3d {
             let mut render_pass = encoders.get_mut(0).unwrap().begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
@@ -796,22 +800,24 @@ impl State {
             self.draw_transparent(&mut render_pass);
         }
         
-        let mut render_pass = encoders.get_mut(1).unwrap().begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[
-                // This is what [[location(0)]] in the fragment shader targets
-                wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true
+        if self.render_2d {
+            let mut render_pass = encoders.get_mut(1).unwrap().begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[
+                    // This is what [[location(0)]] in the fragment shader targets
+                    wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: true
+                        }
                     }
-                }
-            ],
-            depth_stencil_attachment: None
-        });
-        self.draw_sprites(&mut render_pass);
+                ],
+                depth_stencil_attachment: None
+            });
+            self.draw_sprites(&mut render_pass);
+        }
     }
 
     pub fn end_render(gpu: &GpuState, encoders: Vec<wgpu::CommandEncoder>) {
