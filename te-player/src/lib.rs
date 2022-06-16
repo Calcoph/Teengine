@@ -7,8 +7,11 @@ use image::io::Reader as ImageReader;
 
 use te_gamepad::gamepad::{self, ControllerEvent};
 
-pub async fn prepare(config: InitialConfiguration) -> Result<(EventLoop<ControllerEvent>, Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<State>>), Error> {
-    env_logger::init();
+pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLoop<ControllerEvent>, Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<State>>), Error> {
+    if log {
+        env_logger::init();
+    };
+
     let img = match ImageReader::open("icon.png")?.decode() {
         Ok(img) => img.to_rgba8(),
         Err(_) => panic!("Couldn't find icon"),
