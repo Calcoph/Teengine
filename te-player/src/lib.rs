@@ -7,7 +7,7 @@ use image::io::Reader as ImageReader;
 
 use te_gamepad::gamepad::{self, ControllerEvent};
 
-pub async fn prepare(config: InitialConfiguration) -> Result<(EventLoop<ControllerEvent>, Rc<RefCell<GpuState>>, Window, Rc<RefCell<State>>), Error> {
+pub async fn prepare(config: InitialConfiguration) -> Result<(EventLoop<ControllerEvent>, Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<State>>), Error> {
     env_logger::init();
     let img = match ImageReader::open("icon.png")?.decode() {
         Ok(img) => img.to_rgba8(),
@@ -29,5 +29,5 @@ pub async fn prepare(config: InitialConfiguration) -> Result<(EventLoop<Controll
     let gpu = GpuState::new(window.inner_size(), &window).await;
     let state = State::new(&window, &gpu, config).await;
 
-    Ok((event_loop, Rc::new(RefCell::new(gpu)), window, Rc::new(RefCell::new(state))))
+    Ok((event_loop, Rc::new(RefCell::new(gpu)), Rc::new(RefCell::new(window)), Rc::new(RefCell::new(state))))
 }

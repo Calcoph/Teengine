@@ -5,12 +5,12 @@ use te_renderer::state::{State, GpuState};
 use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
 pub use winit::event::Event as Event;
 
-pub fn run(event_loop: EventLoop<ControllerEvent>, window: Window, gpu: Rc<RefCell<GpuState>>, state: Rc<RefCell<State>>, mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>) {
+pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, gpu: Rc<RefCell<GpuState>>, state: Rc<RefCell<State>>, mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;
         match &event {
-            Event::WindowEvent { window_id, event } if *window_id == window.id() => {
+            Event::WindowEvent { window_id, event } if *window_id == window.borrow().id() => {
                 match event {
                     WindowEvent::Resized(size) => {
                         gpu.borrow_mut().resize(*size);
@@ -26,8 +26,8 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Window, gpu: Rc<RefCe
             },
             Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
             Event::Resumed => (), // TODO: confirm that it unpauses the game
-            Event::MainEventsCleared => window.request_redraw(),
-            Event::RedrawRequested(window_id) => if *window_id == window.id() {
+            Event::MainEventsCleared => window.borrow().request_redraw(),
+            Event::RedrawRequested(window_id) => if *window_id == window.borrow().id() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
