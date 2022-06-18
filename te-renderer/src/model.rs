@@ -1,6 +1,8 @@
-use std::ops::Range;
+use std::{ops::Range, collections::HashMap};
 
-use crate::texture;
+use image::{Rgba, ImageBuffer, buffer::Pixels};
+
+use crate::{texture, state::GpuState};
 
 pub trait Vertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
@@ -64,6 +66,7 @@ impl Vertex for SpriteVertex {
     }
 }
 
+#[derive(Debug)]
 pub struct Material {
     pub name: String,
     pub diffuse_texture: texture::Texture,
@@ -315,5 +318,96 @@ where
         self.set_bind_group(0, camera_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
         self.draw_indexed(0..mesh.num_elements, 0, instances);
+    }
+}
+
+pub trait DrawText<'a> {
+    fn draw_text(
+        &mut self,
+        material: &'a Material,
+        projection_bind_group: &'a wgpu::BindGroup,
+        vertex_buffer: &'a wgpu::Buffer
+    );
+}
+
+impl<'a, 'b> DrawText<'b> for wgpu::RenderPass<'a>
+where
+    'b: 'a
+{
+    fn draw_text(
+        &mut self,
+        material: &'a Material,
+        projection_bind_group: &'a wgpu::BindGroup,
+        vertex_buffer: &'a wgpu::Buffer
+    ) {
+        self.set_vertex_buffer(0, vertex_buffer.slice(..));
+        self.set_bind_group(0, projection_bind_group, &[]);
+        self.set_bind_group(1, &material.bind_group, &[]);
+        self.draw(0..6, 0..1);
+    }
+}
+
+pub struct Font {
+    characters: HashMap<String, image::ImageBuffer<Rgba<u8>, Vec<u8>>>
+}
+
+impl Font {
+    pub fn write_to_material(&self, characters: Vec<String>, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> (Material, f32, f32) {
+        let mut width = 0;
+        let mut height = 0;
+        let mut container = Vec::new();
+        for charac in characters.iter() {
+            let bitmap = self.characters.get(charac).unwrap().clone();
+            width += bitmap.width();
+            if bitmap.height() > height {
+                height = bitmap.height();
+            };
+        }
+
+        let mut v = Vec::new();
+        for _ in 0..height {
+            v.push(Vec::new())
+        }
+
+        for charac in characters.iter() {
+            let bitmap = self.characters.get(charac).unwrap().clone();
+            for (i, row) in  bitmap.enumerate_rows() {
+                for (_i, _j, pixel) in row {
+                    v.get_mut(i as usize).unwrap().push(pixel.clone())
+                }
+            }
+        }
+
+        for row in v {
+            for pixel in row {
+                container.push(pixel.0[0]);
+                container.push(pixel.0[1]);
+                container.push(pixel.0[2]);
+                container.push(pixel.0[3]);
+            }
+        }
+
+        let new_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(
+            width,
+            height,
+            container
+        ).unwrap();
+
+        let tex = texture::Texture::from_dyn_image(&gpu.device, &gpu.queue, &new_image, None).unwrap();
+        (Material::new(&gpu.device, "text", tex, layout), width as f32, height as f32)
+    }
+
+    pub fn new(font_dir_path: String) -> Font {
+        let mut characters = HashMap::new();
+        for file in std::fs::read_dir(font_dir_path.clone()).unwrap() {
+            let file_name = file.unwrap().file_name();
+            let file_name = file_name.to_str().unwrap();
+            if std::path::Path::new(&(font_dir_path.clone() + "/" + file_name)).is_file() && file_name.ends_with(".png") {
+                let img = image::io::Reader::open(font_dir_path.clone() + "/" + file_name).unwrap().decode().unwrap().into_rgba8();
+                characters.insert(String::from(file_name.trim_end_matches(".png")), img);
+            }
+        }
+
+        Font { characters }
     }
 }

@@ -59,6 +59,7 @@ pub trait Instance {
     fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P);
 }
 
+#[derive(Debug)]
 pub struct Instance2D {
     pub position: cgmath::Vector2<f32>,
     pub size: cgmath::Vector2<f32>
@@ -203,10 +204,6 @@ impl InstancedModel {
             }
         );
 
-        /* let instances = instances.into_iter().map(|instance| {
-            instance
-        }).collect(); */
-
         InstancedModel {
             model,
             instances,
@@ -276,10 +273,6 @@ impl InstancedSprite {
             }
         );
 
-        /* let instances = instances.into_iter().map(|instance| {
-            instance
-        }).collect(); */
-
         InstancedSprite {
             sprite,
             instances,
@@ -324,6 +317,53 @@ impl InstancedDraw for InstancedSprite {
     }
 }
 
+#[derive(Debug)]
+struct InstancedText {
+    image: model::Material,
+    instance: Instance2D,
+    instance_buffer: wgpu::Buffer,
+    depth: f32
+}
+
+impl InstancedText {
+    fn new(image: model::Material, device: &wgpu::Device, x: f32, y: f32, depth: f32, w: f32, h: f32) -> Self {
+        let instance = Instance2D {
+            position: cgmath::Vector2 { x, y },
+            size: cgmath::Vector2 { x: w, y: h },
+        };
+
+        let instance_data = [instance.to_raw()];
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
+            }
+        );
+
+        InstancedText {
+            image,
+            instance,
+            instance_buffer,
+            depth
+        }
+    }
+}
+
+impl InstancedDraw for InstancedText {
+    fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, direction: V, queue: &wgpu::Queue) {
+        self.instance.move_direction(direction);
+        let raw = self.instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
+
+    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue) {
+        self.instance.move_to(position);
+        let raw = self.instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
+}
+
 enum Dimension {
     D2,
     D3
@@ -345,13 +385,20 @@ impl InstanceReference {
     }
 }
 
+pub struct TextReference {
+    index: usize
+}
+
 pub struct InstancesState {
     instances: HashMap<String, InstancedModel>,
     instances_2d: HashMap<String, InstancedSprite>,
+    texts: Vec<Option<InstancedText>>,
+    deleted_texts: Vec<usize>,
     pub layout: wgpu::BindGroupLayout,
     tile_size: (f32, f32, f32),
     pub resources_path: String,
-    pub default_texture_path: String
+    pub default_texture_path: String,
+    font: model::Font
 }
 
 impl InstancesState {
@@ -359,17 +406,25 @@ impl InstancesState {
         layout: wgpu::BindGroupLayout,
         tile_size: (f32, f32, f32),
         resources_path: String,
-        default_texture_path: String
+        default_texture_path: String,
+        font_dir_path: String
     ) -> Self {
         let instances = HashMap::new();
         let instances_2d = HashMap::new();
+        let texts = Vec::new();
+        let deleted_texts = Vec::new();
+        let font = model::Font::new(font_dir_path);
+
         InstancesState {
             instances,
             instances_2d,
+            texts,
+            deleted_texts,
             layout,
             tile_size,
             resources_path,
-            default_texture_path
+            default_texture_path,
+            font
         }
     }
 
@@ -409,7 +464,6 @@ impl InstancesState {
         }
     }
 
-
     pub fn place_sprite(
         &mut self,
         sprite_name: &str,
@@ -440,6 +494,33 @@ impl InstancesState {
             index: self.instances_2d.get(&sprite_name.to_string()).unwrap().instances.len()-1,
             dimension: Dimension::D2
         }
+    }
+
+    pub fn place_text(&mut self, text: Vec<String>, gpu: &GpuState, size: Option<(f32, f32)>, position: (f32, f32, f32)) -> TextReference {
+        
+        let (text, w, h) = self.font.write_to_material(text, gpu, &self.layout);
+        let instanced_t = match size {
+            Some((w, h)) => InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h),
+            None => InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h),
+        };
+
+        let index = match self.deleted_texts.pop() {
+            Some(i) => {
+                self.texts.insert(i, Some(instanced_t));
+                i
+            },
+            None => {
+                self.texts.push(Some(instanced_t));
+                self.texts.len() - 1
+            },
+        };
+
+        TextReference { index }
+    }
+
+    pub fn forget_text(&mut self, text: TextReference) {
+        self.texts.get_mut(text.index).unwrap().take();
+        self.deleted_texts.push(text.index)
     }
 
     pub fn save_temap(&self, file_name: &str, maps_path: String) {
@@ -604,6 +685,7 @@ impl State {
             init_config.tile_size,
             resources_path,
             default_texture_path,
+            init_config.font_dir_path
         );
 
         let sprite_vertices = &[
@@ -859,20 +941,70 @@ impl State {
 
     pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use model::DrawSprite;
+        use model::DrawText;
         render_pass.set_pipeline(&self.sprite_render_pipeline);
+        let mut sorted_texts: Vec<&InstancedText> = self.instances.texts.iter()
+        .filter(|text| text.is_some())
+        .map(|text| text.as_ref().unwrap())
+        .collect();
+        sorted_texts.sort_by(|inst1, inst2| {
+            inst1.depth.partial_cmp(&inst2.depth).unwrap()
+        });
         let mut sorted_sprites: Vec<(&String, &InstancedSprite)> = self.instances.instances_2d.iter().collect();
         sorted_sprites.sort_by(|(_n1, inst1), (_n2, inst2)| {
             inst1.depth.partial_cmp(&inst2.depth).unwrap()
         });
-        for (_name, instanced_sprite) in sorted_sprites {
-            render_pass.set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
-            render_pass.draw_sprite_instanced(
-                &instanced_sprite.sprite,
-                0..instanced_sprite.instances.len() as u32,
-                &self.camera.projection_bind_group,
-                &self.sprite_vertices_buffer
-            );
-        }
+        let mut index_sprite = 0;
+        let mut index_text = 0;
+        loop {
+            match sorted_sprites.get(index_sprite) {
+                Some((_name, instanced_sprite)) => match sorted_texts.get(index_text) {
+                    Some(instanced_text) => match instanced_text.depth.partial_cmp(&instanced_sprite.depth).unwrap() {
+                        std::cmp::Ordering::Less => {
+                            render_pass.set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
+                            render_pass.draw_sprite_instanced(
+                                &instanced_sprite.sprite,
+                                0..instanced_sprite.instances.len() as u32,
+                                &self.camera.projection_bind_group,
+                                &self.sprite_vertices_buffer
+                            );
+                            index_sprite += 1;
+                        },
+                        std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => {
+                            render_pass.set_vertex_buffer(1, instanced_text.instance_buffer.slice(..));
+                            render_pass.draw_text(
+                                &instanced_text.image,
+                                &self.camera.projection_bind_group,
+                                &self.sprite_vertices_buffer
+                            );
+                            index_text += 1;
+                        },
+                    },
+                    None => {
+                        render_pass.set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
+                        render_pass.draw_sprite_instanced(
+                            &instanced_sprite.sprite,
+                            0..instanced_sprite.instances.len() as u32,
+                            &self.camera.projection_bind_group,
+                            &self.sprite_vertices_buffer
+                        );
+                        index_sprite += 1;
+                    },
+                },
+                None => match sorted_texts.get(index_text) {
+                    Some(instanced_text) => {
+                        render_pass.set_vertex_buffer(1, instanced_text.instance_buffer.slice(..));
+                        render_pass.draw_text(
+                            &instanced_text.image,
+                            &self.camera.projection_bind_group,
+                            &self.sprite_vertices_buffer
+                        );
+                        index_text += 1;
+                    },
+                    None => break,
+                },
+            }
+        };
     }
 }
 
