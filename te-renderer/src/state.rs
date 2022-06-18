@@ -961,6 +961,15 @@ impl State {
                 Some((_name, instanced_sprite)) => match sorted_texts.get(index_text) {
                     Some(instanced_text) => match instanced_text.depth.partial_cmp(&instanced_sprite.depth).unwrap() {
                         std::cmp::Ordering::Less => {
+                            render_pass.set_vertex_buffer(1, instanced_text.instance_buffer.slice(..));
+                            render_pass.draw_text(
+                                &instanced_text.image,
+                                &self.camera.projection_bind_group,
+                                &self.sprite_vertices_buffer
+                            );
+                            index_text += 1;
+                        },
+                        std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => {
                             render_pass.set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
                             render_pass.draw_sprite_instanced(
                                 &instanced_sprite.sprite,
@@ -969,15 +978,6 @@ impl State {
                                 &self.sprite_vertices_buffer
                             );
                             index_sprite += 1;
-                        },
-                        std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => {
-                            render_pass.set_vertex_buffer(1, instanced_text.instance_buffer.slice(..));
-                            render_pass.draw_text(
-                                &instanced_text.image,
-                                &self.camera.projection_bind_group,
-                                &self.sprite_vertices_buffer
-                            );
-                            index_text += 1;
                         },
                     },
                     None => {
