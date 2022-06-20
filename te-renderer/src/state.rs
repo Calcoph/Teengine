@@ -86,6 +86,7 @@ impl Instance for Instance2D {
     }
 }
 
+#[derive(Debug)]
 pub struct Instance3D {
     pub position: cgmath::Vector3<f32>,
 }
@@ -107,6 +108,7 @@ impl Instance for Instance3D {
     }
 }
 
+#[derive(Debug)]
 pub struct GpuState {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -179,6 +181,7 @@ trait InstancedDraw {
     fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, index: usize, position: P, queue: &wgpu::Queue);
 }
 
+#[derive(Debug)]
 struct InstancedModel {
     model: model::Model,
     instances: Vec<Instance3D>,
@@ -246,6 +249,7 @@ impl InstancedDraw for InstancedModel {
     }
 }
 
+#[derive(Debug)]
 struct InstancedSprite {
     sprite: model::Material,
     instances: Vec<Instance2D>,
@@ -389,6 +393,7 @@ pub struct TextReference {
     index: usize
 }
 
+#[derive(Debug)]
 pub struct InstancesState {
     instances: HashMap<String, InstancedModel>,
     instances_2d: HashMap<String, InstancedSprite>,
@@ -592,6 +597,7 @@ impl InstancesState {
     }
 }
 
+#[derive(Debug)]
 pub struct State {
     pub camera: camera::CameraState,
     pub size: winit::dpi::PhysicalSize<u32>,

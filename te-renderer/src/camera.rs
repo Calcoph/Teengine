@@ -56,6 +56,7 @@ impl ProjectionUniform {
     }
 }
 
+#[derive(Debug)]
 pub struct CameraState {
     projection: Projection,
     projection_uniform: ProjectionUniform,
@@ -263,6 +264,7 @@ impl Camera {
     }
 }
 
+#[derive(Debug)]
 pub struct Projection {
     width: u32,
     height: u32,

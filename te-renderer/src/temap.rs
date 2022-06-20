@@ -98,7 +98,7 @@ impl TeMap {
     pub fn save(&self, file_name: &str, maps_path: String) {
         let contents = self.get_json();
         let file_name = file_name.trim_end_matches(".temap");
-        std::fs::write(maps_path + file_name + ".temap", contents).unwrap();
+        std::fs::write(maps_path + "/" + file_name + ".temap", contents).unwrap();
     }
 
     fn get_json(&self) -> String {

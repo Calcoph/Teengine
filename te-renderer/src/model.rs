@@ -131,6 +131,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct Mesh {
     pub name: String,
     pub min_x: f32,
@@ -143,6 +144,7 @@ pub struct Mesh {
     pub material: usize
 }
 
+#[derive(Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub transparent_meshes: Vec<Mesh>,
@@ -347,6 +349,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct Font {
     characters: HashMap<String, image::ImageBuffer<Rgba<u8>, Vec<u8>>>
 }
@@ -371,9 +374,15 @@ impl Font {
 
         for charac in characters.iter() {
             let bitmap = self.characters.get(charac).unwrap().clone();
+            let height_diff = height - bitmap.height();
+            for i in 0..height_diff {
+                for _ in 0..bitmap.width() {
+                    v.get_mut(i as usize).unwrap().push(Rgba([0, 0, 0, 255]));
+                }
+            }
             for (i, row) in  bitmap.enumerate_rows() {
                 for (_i, _j, pixel) in row {
-                    v.get_mut(i as usize).unwrap().push(pixel.clone())
+                    v.get_mut((i+height_diff) as usize).unwrap().push(pixel.clone())
                 }
             }
         }
