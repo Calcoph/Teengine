@@ -252,6 +252,8 @@ impl InstancedDraw for InstancedModel {
 #[derive(Debug)]
 struct InstancedSprite {
     sprite: model::Material,
+    width: f32,
+    height: f32,
     instances: Vec<Instance2D>,
     instance_buffer: wgpu::Buffer,
     depth: f32
@@ -264,10 +266,10 @@ impl InstancedSprite {
             size: cgmath::Vector2 { x: w, y: h },
         }];
 
-        InstancedSprite::new_premade(sprite, device, instances, depth)
+        InstancedSprite::new_premade(sprite, device, instances, depth, w, h)
     }
 
-    fn new_premade(sprite: model::Material, device: &wgpu::Device, instances: Vec<Instance2D>, depth: f32) -> Self {
+    fn new_premade(sprite: model::Material, device: &wgpu::Device, instances: Vec<Instance2D>, depth: f32, w: f32, h: f32) -> Self {
         let instance_data = instances.iter().map(Instance2D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -279,13 +281,19 @@ impl InstancedSprite {
 
         InstancedSprite {
             sprite,
+            width: w,
+            height: h,
             instances,
             instance_buffer,
             depth
         }
     }
 
-    fn add_instance(&mut self, x: f32, y: f32, w: f32, h: f32, device: &wgpu::Device) {
+    fn add_instance(&mut self, x: f32, y: f32, size: Option<(f32, f32)>, device: &wgpu::Device) {
+        let (w, h) = match size {
+            Some((width, height)) => (width, height),
+            None => (self.width, self.height),
+        };
         let new_instance = Instance2D {
             position: cgmath::Vector2 { x, y },
             size: cgmath::Vector2 { x: w, y: h }
@@ -473,23 +481,27 @@ impl InstancesState {
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
-        size: (f32, f32),
+        size: Option<(f32, f32)>,
         position: (f32, f32, f32)
     ) -> InstanceReference {
         match self.instances_2d.contains_key(sprite_name) {
             true => {
                 let instanced_s = self.instances_2d.get_mut(sprite_name).unwrap();
-                instanced_s.add_instance(position.0, position.1, size.0, size.1, &gpu.device);
+                instanced_s.add_instance(position.0, position.1, size, &gpu.device);
             },
             false => {
-                let sprite = load_sprite(
+                let (sprite, width, height) = load_sprite(
                     sprite_name,
                     &gpu.device,
                     &gpu.queue,
                     &self.layout,
                     self.resources_path.clone(),
                 ).unwrap();
-                let instanced_s = InstancedSprite::new(sprite, &gpu.device, position.0, position.1, position.2, size.0, size.1);
+                let (width, height) = match size {
+                    Some((w, h)) => (w, h),
+                    None => (width, height),
+                };
+                let instanced_s = InstancedSprite::new(sprite, &gpu.device, position.0, position.1, position.2, width, height);
                 self.instances_2d.insert(sprite_name.to_string(), instanced_s);
             }
         }
@@ -502,7 +514,6 @@ impl InstancesState {
     }
 
     pub fn place_text(&mut self, text: Vec<String>, gpu: &GpuState, size: Option<(f32, f32)>, position: (f32, f32, f32)) -> TextReference {
-        
         let (text, w, h) = self.font.write_to_material(text, gpu, &self.layout);
         let instanced_t = match size {
             Some((w, h)) => InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h),
@@ -594,6 +605,16 @@ impl InstancesState {
                 model.set_instance_position(instance.index, position, queue);
             }
         };
+    }
+
+    pub fn move_text<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, direction: V, queue: &wgpu::Queue) {
+        let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
+        text.move_instance(0, direction, queue);
+    }
+
+    pub fn set_text_position<P: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, position: P, queue: &wgpu::Queue) {
+        let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
+        text.set_instance_position(0, position, queue);
     }
 }
 

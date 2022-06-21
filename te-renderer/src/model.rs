@@ -377,7 +377,7 @@ impl Font {
             let height_diff = height - bitmap.height();
             for i in 0..height_diff {
                 for _ in 0..bitmap.width() {
-                    v.get_mut(i as usize).unwrap().push(Rgba([0, 0, 0, 255]));
+                    v.get_mut(i as usize).unwrap().push(Rgba([0, 0, 0, 0]));
                 }
             }
             for (i, row) in  bitmap.enumerate_rows() {
