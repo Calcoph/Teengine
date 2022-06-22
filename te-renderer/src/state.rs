@@ -522,7 +522,10 @@ impl InstancesState {
 
         let index = match self.deleted_texts.pop() {
             Some(i) => {
-                self.texts.insert(i, Some(instanced_t));
+                self.texts.push(Some(instanced_t));
+                let last_item = self.texts.len()-1;
+                self.texts.swap(i, last_item);
+                self.texts.pop();
                 i
             },
             None => {
