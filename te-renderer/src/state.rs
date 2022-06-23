@@ -65,6 +65,13 @@ pub struct Instance2D {
     pub size: cgmath::Vector2<f32>
 }
 
+impl Instance2D {
+    fn resize<V: Into<cgmath::Vector2<f32>>>(&mut self, new_size: V) {
+        let size = new_size.into();
+        self.size = size;
+    }
+}
+
 impl Instance for Instance2D {
     fn to_raw(&self) -> InstanceRaw {
         let sprite = cgmath::Matrix4::from_translation(Vector3{x: self.position.x, y: self.position.y, z: 0.0})
@@ -311,6 +318,13 @@ impl InstancedSprite {
         );
         self.instance_buffer = instance_buffer;
     }
+
+    fn resize<V: Into<cgmath::Vector2<f32>>>(&mut self, index: usize, new_size: V, queue: &wgpu::Queue) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.resize(new_size);
+        let raw = instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
+    }
 }
 
 impl InstancedDraw for InstancedSprite {
@@ -359,6 +373,12 @@ impl InstancedText {
             instance_buffer,
             depth
         }
+    }
+
+    fn resize<V: Into<cgmath::Vector2<f32>>>(&mut self, index: usize, new_size: V, queue: &wgpu::Queue) {
+        self.instance.resize(new_size);
+        let raw = self.instance.to_raw();
+        queue.write_buffer(&self.instance_buffer, (index*std::mem::size_of::<InstanceRaw>()).try_into().unwrap(), bytemuck::cast_slice(&[raw]));
     }
 }
 
@@ -610,6 +630,16 @@ impl InstancesState {
         };
     }
 
+    pub fn resize_sprite<V: Into<cgmath::Vector2<f32>>>(&mut self, instance: &InstanceReference, new_size: V, queue: &wgpu::Queue) {
+        match instance.dimension {
+            Dimension::D2 => {
+                let model = self.instances_2d.get_mut(&instance.name).unwrap();
+                model.resize(instance.index, new_size, queue);
+            },
+            Dimension::D3 => panic!("That is not a sprite")
+        };
+    }
+
     pub fn move_text<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, direction: V, queue: &wgpu::Queue) {
         let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
         text.move_instance(0, direction, queue);
@@ -618,6 +648,11 @@ impl InstancesState {
     pub fn set_text_position<P: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, position: P, queue: &wgpu::Queue) {
         let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
         text.set_instance_position(0, position, queue);
+    }
+
+    pub fn resize_text<V: Into<cgmath::Vector2<f32>>>(&mut self, instance: &TextReference, new_size: V, queue: &wgpu::Queue) {
+        let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
+        text.resize(0, new_size, queue);
     }
 }
 
