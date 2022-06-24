@@ -630,6 +630,20 @@ impl InstancesState {
         };
     }
 
+    pub fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
+        match instance.dimension {
+            Dimension::D2 => {
+                let model = self.instances_2d.get(&instance.name).unwrap();
+                let position = model.instances.get(instance.index).unwrap().position;
+                (position.x, position.y, model.depth)
+            },
+            Dimension::D3 => {
+                let model = self.instances.get(&instance.name).unwrap();
+                model.instances.get(instance.index).unwrap().position.into()
+            }
+        }
+    }
+
     pub fn resize_sprite<V: Into<cgmath::Vector2<f32>>>(&mut self, instance: &InstanceReference, new_size: V, queue: &wgpu::Queue) {
         match instance.dimension {
             Dimension::D2 => {
@@ -638,6 +652,16 @@ impl InstancesState {
             },
             Dimension::D3 => panic!("That is not a sprite")
         };
+    }
+
+    pub fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
+        match instance.dimension {
+            Dimension::D2 => {
+                let model = self.instances_2d.get(&instance.name).unwrap();
+                model.instances.get(instance.index).unwrap().size.into()
+            },
+            Dimension::D3 => panic!("That is not a sprite")
+        }
     }
 
     pub fn move_text<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, direction: V, queue: &wgpu::Queue) {
@@ -650,9 +674,19 @@ impl InstancesState {
         text.set_instance_position(0, position, queue);
     }
 
+    pub fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
+        let text = self.texts.get(instance.index).unwrap().as_ref().unwrap();
+        text.instance.position.into()
+    }
+
     pub fn resize_text<V: Into<cgmath::Vector2<f32>>>(&mut self, instance: &TextReference, new_size: V, queue: &wgpu::Queue) {
         let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
         text.resize(0, new_size, queue);
+    }
+
+    pub fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
+        let text = self.texts.get(instance.index).unwrap().as_ref().unwrap();
+        text.instance.size.into()
     }
 }
 
