@@ -23,10 +23,10 @@ pub fn load_glb_model(
     resources_path: String,
     default_texture_path: &str
 ) -> std::result::Result<model::Model, Box<dyn std::error::Error>> {
-    let (document, buffers, images) = match gltf::import(resources_path.clone() + "/" + file_name) {
+    let (document, buffers, images) = match gltf::import(resources_path + "/" + file_name) {
         Ok(result) => Ok(result),
         Err(err) => {
-            eprintln!("Failed to load {}", resources_path);
+            eprintln!("Failed to load {}", file_name);
             Err(err)
         },
     }.unwrap(); // TODO: don't hardcode the path
