@@ -8,7 +8,8 @@ mod mapmaker;
 mod modifiying_instance;
 
 pub fn start_mapmaker(
-    config: InitialConfiguration
+    config: InitialConfiguration,
+    default_model: &str
 ) -> Result<(), Error> {
-    pollster::block_on(event_loop::run(config))
+    pollster::block_on(event_loop::run(config, default_model))
 }

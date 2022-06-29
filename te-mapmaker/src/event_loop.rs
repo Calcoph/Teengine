@@ -8,7 +8,7 @@ use te_gamepad::gamepad;
 
 use crate::mapmaker;
 
-pub async fn run(config: InitialConfiguration) -> Result<(), Error> {
+pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<(), Error> {
     env_logger::init();
     let img = match ImageReader::open("icon.png")?.decode() {
         Ok(img) => img.to_rgba8(),
@@ -27,7 +27,7 @@ pub async fn run(config: InitialConfiguration) -> Result<(), Error> {
     let window = wb.build(&event_loop)
         .unwrap();
 
-    let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone(), "box02.glb").await;
+    let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone(), default_model).await;
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;
