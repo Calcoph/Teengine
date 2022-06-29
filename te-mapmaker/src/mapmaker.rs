@@ -442,9 +442,11 @@ fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directo
                 "" => "".to_string(),
                 s => s.to_string() + "/" // TODO: don't hardcode "/"
             };
+            let file_path = std::path::Path::new(&(file_name));
             let full_path = name + &file_name;
             let full_path = std::path::Path::new(&(full_path));
-            if path.join(full_path).is_dir() {
+            dbg!(path.join(file_path).to_str().unwrap());
+            if path.join(file_path).is_dir() {
                 dir.files.push(File::D(get_resource_names(resource_files_directory, full_path.to_str().unwrap())))
             } else if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
                 dir.files.push(File::F(file_name));
