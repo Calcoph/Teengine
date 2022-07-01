@@ -128,11 +128,34 @@ impl Instance for Instance2D {
 #[derive(Debug)]
 pub struct Instance3D {
     pub position: cgmath::Vector3<f32>,
+    pub animation: Option<Animation>
+}
+
+impl Instance3D {
+    fn get_animated(&mut self) -> Instance3D {
+        let animation = self.animation.as_mut().unwrap();
+        let translation = animation.get_translation();
+        let x = self.position.x + translation.x;
+        let y = self.position.y + translation.y;
+        let z = self.position.z + translation.z;
+        let position = cgmath::Vector3{ x, y, z };
+        Instance3D {
+            position,
+            animation: None
+        }
+    }
 }
 
 impl Instance for Instance3D {
     fn to_raw(&mut self) -> InstanceRaw {
-        let model = cgmath::Matrix4::from_translation(self.position);
+        let animation;
+        let instance = if self.animation.is_some() {
+            animation = self.get_animated();
+            &animation
+        } else {
+            self
+        };
+        let model = cgmath::Matrix4::from_translation(instance.position);
         InstanceRaw {
             model: model.into(),
         }
@@ -174,6 +197,7 @@ impl InstancedModel {
     fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
         let instances = vec![Instance3D {
             position: cgmath::Vector3 { x, y, z },
+            animation: None
         }];
 
         InstancedModel::new_premade(model, device, instances)
@@ -197,6 +221,7 @@ impl InstancedModel {
     fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
         let new_instance = Instance3D {
             position: cgmath::Vector3 { x, y, z },
+            animation: None
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
@@ -482,7 +507,6 @@ impl InstancedDraw for InstancedText {
         );
     }
 }
-
 enum Dimension {
     D2,
     D3,
@@ -729,6 +753,7 @@ impl InstancesState {
                                 y: offset.y,
                                 z: offset.z,
                             },
+                            animation: None
                         };
                         instance_vec.push(instance);
                     }
@@ -821,8 +846,8 @@ impl InstancesState {
     pub fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
         match instance.dimension {
             Dimension::D2 => {
-                let sprite = self.instances_2d.get(&instance.name).unwrap();
-                sprite.instances.get(instance.index).unwrap().size.into()
+                let sprite = self.get_sprite(instance);
+                sprite.size.into()
             }
             Dimension::D3 => panic!("That is not a sprite"),
         }
@@ -864,8 +889,8 @@ impl InstancesState {
 
     /// Gets a 2D text's position
     pub fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
-        let text = self.texts.get(instance.index).unwrap().as_ref().unwrap();
-        text.instance.position.into()
+        let text = self.get_text(instance);
+        text.position.into()
     }
 
     /// Resizes a 2D text
@@ -886,7 +911,48 @@ impl InstancesState {
 
     /// Gets a 2D text's size
     pub fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
-        let text = self.texts.get(instance.index).unwrap().as_ref().unwrap();
-        text.instance.size.into()
+        let text = self.get_text(instance);
+        text.size.into()
+    }
+
+    pub fn set_instance_animation(&mut self, instance: &InstanceReference, animation: Animation) {
+        match instance.dimension {
+            Dimension::D2 => self.get_mut_sprite(instance).animation = Some(animation),
+            Dimension::D3 => self.get_mut_model(instance).animation = Some(animation),
+        }
+    }
+
+    pub fn set_text_animation(&mut self, text: &TextReference, animation: Animation) {
+        self.get_mut_text(text).animation = Some(animation)
+    }
+
+    fn get_sprite(&self, instance: &InstanceReference) -> &Instance2D {
+        let sprite = self.instances_2d.get(&instance.name).unwrap();
+        sprite.instances.get(instance.index).unwrap()
+    }
+
+    fn get_model(&self, instance: &InstanceReference) -> &Instance3D {
+        let model = self.instances.get(&instance.name).unwrap();
+        model.instances.get(instance.index).unwrap()
+    }
+
+    fn get_text(&self, text: &TextReference) -> &Instance2D {
+        let text = self.texts.get(text.index).unwrap().as_ref().unwrap();
+        &text.instance
+    }
+
+    fn get_mut_sprite(&mut self, instance: &InstanceReference) -> &mut Instance2D {
+        let sprite = self.instances_2d.get_mut(&instance.name).unwrap();
+        sprite.instances.get_mut(instance.index).unwrap()
+    }
+
+    fn get_mut_model(&mut self, instance: &InstanceReference) -> &mut Instance3D {
+        let model = self.instances.get_mut(&instance.name).unwrap();
+        model.instances.get_mut(instance.index).unwrap()
+    }
+
+    fn get_mut_text(&mut self, text: &TextReference) -> &mut Instance2D {
+        let text = self.texts.get_mut(text.index).unwrap().as_mut().unwrap();
+        &mut text.instance
     }
 }

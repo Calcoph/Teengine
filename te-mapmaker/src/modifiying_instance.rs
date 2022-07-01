@@ -47,6 +47,7 @@ impl ModifyingInstance {
     pub fn into_renderable(&mut self, device: &wgpu::Device, tile_size: (f32, f32, f32)) -> usize {
         let mut instances = vec![Instance3D {
             position: cgmath::Vector3 { x: self.x*tile_size.0, y: self.y*tile_size.1, z: self.z*tile_size.2 },
+            animation: None
         }];
 
         use te_renderer::instances::Instance;
