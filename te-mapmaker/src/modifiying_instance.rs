@@ -1,4 +1,4 @@
-use te_renderer::{resources, state::{GpuState, Instance3D}, model};
+use te_renderer::{resources, state::GpuState, model, instances::Instance3D};
 use wgpu::util::DeviceExt;
 pub struct InstancesState {
     pub modifying_name: String,
@@ -49,7 +49,7 @@ impl ModifyingInstance {
             position: cgmath::Vector3 { x: self.x*tile_size.0, y: self.y*tile_size.1, z: self.z*tile_size.2 },
         }];
 
-        use te_renderer::state::Instance;
+        use te_renderer::instances::Instance;
         let instance_data = instances.iter().map(Instance3D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {

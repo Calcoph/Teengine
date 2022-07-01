@@ -16,7 +16,7 @@ pub struct InitialConfiguration {
     pub camera_speed: f32,
     pub camera_sensitivity: f32,
     pub screen_width: u32,
-    pub screen_height: u32
+    pub screen_height: u32,
 }
 
 impl Default for InitialConfiguration {
@@ -38,7 +38,7 @@ impl Default for InitialConfiguration {
             camera_speed: 10.0,
             camera_sensitivity: 0.5,
             screen_width: 1280,
-            screen_height: 720
+            screen_height: 720,
         }
     }
 }

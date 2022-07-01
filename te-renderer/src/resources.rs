@@ -1,6 +1,6 @@
-use gltf::buffer;
-use gltf::{Semantic, Accessor, Texture};
 use gltf;
+use gltf::buffer;
+use gltf::{Accessor, Semantic, Texture};
 
 use wgpu::util::DeviceExt;
 
@@ -21,15 +21,16 @@ pub fn load_glb_model(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     resources_path: String,
-    default_texture_path: &str
+    default_texture_path: &str,
 ) -> std::result::Result<model::Model, Box<dyn std::error::Error>> {
     let (document, buffers, images) = match gltf::import(resources_path + "/" + file_name) {
         Ok(result) => Ok(result),
         Err(err) => {
             eprintln!("Failed to load {}", file_name);
             Err(err)
-        },
-    }.unwrap(); // TODO: don't hardcode the path
+        }
+    }
+    .unwrap(); // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();
     let mut transparent_meshes = Vec::new();
@@ -57,53 +58,50 @@ pub fn load_glb_model(
                             // base color multiplier is so close to being 1 that it's not worth to process it
                             let image = images.get(image_index).unwrap();
                             load_texture(image, device, queue, texture_name).unwrap()
-                        },
-                        [_,_,_,_] => {
+                        }
+                        [_, _, _, _] => {
                             let image = images.get(image_index).unwrap();
                             let image = apply_base_color(image, glb_color);
                             load_texture(&image, device, queue, texture_name).unwrap()
                         }
                     }
-                },
+                }
                 None => {
                     let texture_name = "default_texture.png";
-                    let image = image::io::Reader::open(default_texture_path)?.decode()?.into_rgba8();
+                    let image = image::io::Reader::open(default_texture_path)?
+                        .decode()?
+                        .into_rgba8();
                     let width = image.width();
                     let height = image.height();
                     let pixels = image.into_raw();
                     let image = gltf::image::Data {
                         pixels,
                         format: gltf::image::Format::R8G8B8A8, // TODO: change this placeholder when we actually take into account the format
-                        width, 
-                        height
+                        width,
+                        height,
                     };
                     match glb_color {
                         [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
                             // base color multiplier is so close to being 1 that it's not worth to process it
                             load_texture(&image, device, queue, texture_name).unwrap()
-                        },
-                        [_,_,_,_] => {
+                        }
+                        [_, _, _, _] => {
                             let image = apply_base_color(&image, glb_color);
                             load_texture(&image, device, queue, texture_name).unwrap()
                         }
                     }
-                },
+                }
             };
             let material = mat_index;
             mat_index += 1;
 
-            materials.push(model::Material::new(
-                device,
-                &name,
-                diffuse_texture,
-                layout
-            ));
+            materials.push(model::Material::new(device, &name, diffuse_texture, layout));
 
             // get the indices of the triangles
             let indices_accessor = glb_primitive.indices().unwrap();
             let indices_buffer_index = get_buffer_index(&indices_accessor);
             let indices = load_scalar(indices_accessor, &buffers[indices_buffer_index]); // TODO: handle the case of no indices
-            
+
             // get the rest of mesh info
             let mut positions = None;
             let mut tex_coords = None;
@@ -113,58 +111,61 @@ pub fn load_glb_model(
                     Semantic::Positions => {
                         let index = get_buffer_index(&accessor);
                         positions = Some(load_vec3(accessor, &buffers[index]));
-                    },
+                    }
                     Semantic::Normals => (), // ignoring since there is no light
                     Semantic::Tangents => (), // ignoring since there is no light
-                    Semantic::Colors(_) => (),//println!("this model had colors and you ignored them!"), // TODO: ignore colors, they should be overwritten by textures
+                    Semantic::Colors(_) => (), //println!("this model had colors and you ignored them!"), // TODO: ignore colors, they should be overwritten by textures
                     Semantic::TexCoords(_) => {
                         let index = get_buffer_index(&accessor);
                         tex_coords = Some(load_vec2(accessor, &buffers[index]));
-                    }, //TODO: use the TexCoords parameter
-                    Semantic::Joints(_) => (),//println!("this model had joints and you ignored them!"), // TODO: ignore animations for now
-                    Semantic::Weights(_) => (),//println!("this model had weights and you ignored them!"), // TODO: ignore animations for now
+                    } //TODO: use the TexCoords parameter
+                    Semantic::Joints(_) => (), //println!("this model had joints and you ignored them!"), // TODO: ignore animations for now
+                    Semantic::Weights(_) => (), //println!("this model had weights and you ignored them!"), // TODO: ignore animations for now
                 }
             }
             let tex_coords = match tex_coords {
                 Some(coords) => coords,
-                None => positions.as_ref().unwrap().iter().map(|[x, y, _z]| [*x, *y]).collect::<Vec<[f32;2]>>() // it doesn't matter what tex_coords are since the model doesn't have a texture anyway
+                None => positions
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|[x, y, _z]| [*x, *y])
+                    .collect::<Vec<[f32; 2]>>(), // it doesn't matter what tex_coords are since the model doesn't have a texture anyway
             };
-            let vertices = positions.unwrap()
+            let vertices = positions
+                .unwrap()
                 .into_iter()
                 .zip(tex_coords)
-                .map(|(position, tex_coords)| {
-                    model::ModelVertex {
-                        position,
-                        tex_coords
-                    }
-                }).collect::<Vec<model::ModelVertex>>();
+                .map(|(position, tex_coords)| model::ModelVertex {
+                    position,
+                    tex_coords,
+                })
+                .collect::<Vec<model::ModelVertex>>();
 
             let mut max_x = f32::NEG_INFINITY;
             let mut min_x = f32::INFINITY;
             let mut max_z = f32::NEG_INFINITY;
             let mut min_z = f32::INFINITY;
-            vertices.iter().map(|vertex| {
-                (
-                    vertex.position[0],
-                    vertex.position[2]
-                )
-            }).for_each(|(x, z)| {
-                max_x = f32::max(max_x, x);
-                min_x = f32::min(min_x, x);
-                max_z = f32::max(max_z, z);
-                min_z = f32::min(min_z, z);
-            });
+            vertices
+                .iter()
+                .map(|vertex| (vertex.position[0], vertex.position[2]))
+                .for_each(|(x, z)| {
+                    max_x = f32::max(max_x, x);
+                    min_x = f32::min(min_x, x);
+                    max_z = f32::max(max_z, z);
+                    min_z = f32::min(min_z, z);
+                });
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{:?} Vertex Buffer", file_name)),
                 contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX
+                usage: wgpu::BufferUsages::VERTEX,
             });
-            
+
             let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{:?} Index Buffer", file_name)),
                 contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX
+                usage: wgpu::BufferUsages::INDEX,
             });
 
             let num_elements = indices.len() as u32;
@@ -177,35 +178,39 @@ pub fn load_glb_model(
                 vertex_buffer,
                 index_buffer,
                 num_elements,
-                material
+                material,
             };
             match alpha {
-                gltf::material::AlphaMode::Opaque =>  meshes.push(mesh),
+                gltf::material::AlphaMode::Opaque => meshes.push(mesh),
                 gltf::material::AlphaMode::Mask => meshes.push(mesh),
                 gltf::material::AlphaMode::Blend => transparent_meshes.push(mesh),
-            }  
+            }
         }
     }
-    Ok(model::Model {meshes, transparent_meshes, materials})
+    Ok(model::Model {
+        meshes,
+        transparent_meshes,
+        materials,
+    })
 }
 
 fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
     match accessor.data_type() {
-        gltf::accessor::DataType::F32 => {},
-        _ => panic!("vertex data should be F32!")
+        gltf::accessor::DataType::F32 => {}
+        _ => panic!("vertex data should be F32!"),
     }
     match accessor.dimensions() {
-        gltf::accessor::Dimensions::Vec3 => {},
-        _ => panic!("vertex data should be Vec3!")
+        gltf::accessor::Dimensions::Vec3 => {}
+        _ => panic!("vertex data should be Vec3!"),
     }
-    let offset = accessor.offset()+accessor.view().unwrap().offset();
+    let offset = accessor.offset() + accessor.view().unwrap().offset();
     let readable_size = accessor.count() * accessor.size();
-    let vec3_data = &buffer[offset..offset+readable_size];
+    let vec3_data = &buffer[offset..offset + readable_size];
     let mut vec3 = Vec::new();
     for v in vec3_data.chunks_exact(12) {
-        let x = f32::from_le_bytes([v[0],v[1],v[2],v[3]]);
-        let y = f32::from_le_bytes([v[4],v[5],v[6],v[7]]);
-        let z = f32::from_le_bytes([v[8],v[9],v[10],v[11]]);
+        let x = f32::from_le_bytes([v[0], v[1], v[2], v[3]]);
+        let y = f32::from_le_bytes([v[4], v[5], v[6], v[7]]);
+        let z = f32::from_le_bytes([v[8], v[9], v[10], v[11]]);
         vec3.push([x, y, z]);
     }
 
@@ -214,20 +219,20 @@ fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
 
 fn load_vec2(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 2]> {
     match accessor.data_type() {
-        gltf::accessor::DataType::F32 => {},
-        _ => panic!("tex coords should be F32!")
+        gltf::accessor::DataType::F32 => {}
+        _ => panic!("tex coords should be F32!"),
     }
     match accessor.dimensions() {
-        gltf::accessor::Dimensions::Vec2 => {},
-        _ => panic!("tex coords should be Vec2!")
+        gltf::accessor::Dimensions::Vec2 => {}
+        _ => panic!("tex coords should be Vec2!"),
     }
-    let offset = accessor.offset()+accessor.view().unwrap().offset();
+    let offset = accessor.offset() + accessor.view().unwrap().offset();
     let readable_size = accessor.count() * accessor.size();
-    let vec2_data = &buffer[offset..offset+readable_size];
+    let vec2_data = &buffer[offset..offset + readable_size];
     let mut vec2 = Vec::new();
     for c in vec2_data.chunks_exact(8) {
-        let x = f32::from_le_bytes([c[0],c[1],c[2],c[3]]);
-        let y = f32::from_le_bytes([c[4],c[5],c[6],c[7]]);
+        let x = f32::from_le_bytes([c[0], c[1], c[2], c[3]]);
+        let y = f32::from_le_bytes([c[4], c[5], c[6], c[7]]);
         vec2.push([x, y]);
     }
 
@@ -236,22 +241,22 @@ fn load_vec2(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 2]> {
 
 fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
     match accessor.data_type() {
-        gltf::accessor::DataType::U16 => {},
+        gltf::accessor::DataType::U16 => {}
         _ => {
-            println!("{:?}",accessor.data_type());
+            println!("{:?}", accessor.data_type());
             panic!("scalars should be U16!")
         }
     }
     match accessor.dimensions() {
-        gltf::accessor::Dimensions::Scalar => {},
-        _ => panic!("scalars should be Scalar!")
+        gltf::accessor::Dimensions::Scalar => {}
+        _ => panic!("scalars should be Scalar!"),
     }
-    let offset = accessor.offset()+accessor.view().unwrap().offset();
+    let offset = accessor.offset() + accessor.view().unwrap().offset();
     let readable_size = accessor.count() * accessor.size();
-    let scalar_data = &buffer[offset..offset+readable_size];
+    let scalar_data = &buffer[offset..offset + readable_size];
     let mut scalar = Vec::new();
     for v in scalar_data.chunks_exact(2) {
-        let x = u16::from_le_bytes([v[0],v[1]]) as u32;
+        let x = u16::from_le_bytes([v[0], v[1]]) as u32;
         scalar.push(x);
     }
 
@@ -271,23 +276,26 @@ fn get_texture_name(tex: Texture) -> &str {
 
 fn apply_base_color(image: &gltf::image::Data, color: [f32; 4]) -> gltf::image::Data {
     assert!(image.format == gltf::image::Format::R8G8B8A8);
-    let new_pixels = image.pixels.chunks_exact(4).into_iter()
+    let new_pixels = image
+        .pixels
+        .chunks_exact(4)
+        .into_iter()
         .map(|c| {
             [
-             ((f32::from(c[0]) * color[0]).floor() as u8),
-             ((f32::from(c[1]) * color[1]).floor() as u8),
-             ((f32::from(c[2]) * color[2]).floor() as u8),
-             ((f32::from(c[3]) * color[3]).floor() as u8)
+                ((f32::from(c[0]) * color[0]).floor() as u8),
+                ((f32::from(c[1]) * color[1]).floor() as u8),
+                ((f32::from(c[2]) * color[2]).floor() as u8),
+                ((f32::from(c[3]) * color[3]).floor() as u8),
             ]
         })
         .flatten()
         .collect();
-    
+
     gltf::image::Data {
         pixels: new_pixels,
         format: image.format,
         width: image.width,
-        height: image.height
+        height: image.height,
     }
 }
 
@@ -301,5 +309,9 @@ pub fn load_sprite(
     let img = image::open(resources_path + "/" + file_name)?;
     let img = img.as_rgba8().unwrap();
     let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name))?;
-    Ok((model::Material::new(device, file_name, diffuse_texture, layout), img.width() as f32, img.height() as f32))
+    Ok((
+        model::Material::new(device, file_name, diffuse_texture, layout),
+        img.width() as f32,
+        img.height() as f32,
+    ))
 }

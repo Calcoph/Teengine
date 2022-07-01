@@ -1,8 +1,8 @@
 use cgmath::*;
-use winit::{event::*, dpi};
-use std::time::Duration;
 use std::f32::consts::FRAC_PI_2;
+use std::time::Duration;
 use wgpu::util::DeviceExt;
+use winit::{dpi, event::*};
 
 use crate::initial_config::InitialConfiguration;
 
@@ -24,14 +24,14 @@ struct CameraUniform {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
     view_position: [f32; 4],
-    view_proj: [[f32; 4]; 4]
+    view_proj: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     fn new() -> Self {
         Self {
             view_position: [0.0; 4],
-            view_proj: cgmath::Matrix4::identity().into()
+            view_proj: cgmath::Matrix4::identity().into(),
         }
     }
 
@@ -47,12 +47,14 @@ impl CameraUniform {
 struct ProjectionUniform {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
-    projection: [[f32; 4]; 4]
+    projection: [[f32; 4]; 4],
 }
 
 impl ProjectionUniform {
     fn new(matrix: Matrix4<f32>) -> Self {
-        ProjectionUniform { projection: matrix.into() }
+        ProjectionUniform {
+            projection: matrix.into(),
+        }
     }
 }
 
@@ -66,7 +68,7 @@ pub struct CameraState {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
-    pub (crate) camera_controller: CameraController,
+    pub(crate) camera_controller: CameraController,
 }
 
 impl CameraState {
@@ -75,60 +77,50 @@ impl CameraState {
         device: &wgpu::Device,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
         projection_bind_group_layout: &wgpu::BindGroupLayout,
-        init_config: InitialConfiguration
+        init_config: InitialConfiguration,
     ) -> Self {
         let camera = Camera::new(
             init_config.camera_position,
             cgmath::Deg(init_config.camera_yaw),
-            cgmath::Deg(init_config.camera_pitch)
+            cgmath::Deg(init_config.camera_pitch),
         );
         let projection = Projection::new(
             config.width,
             config.height,
             init_config.camera_fovy,
             init_config.camera_znear,
-            init_config.camera_zfar
+            init_config.camera_zfar,
         );
         let projection_uniform = ProjectionUniform::new(projection.calc_2d_matrix());
-        let projection_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Projection Buffer"),
-                contents: bytemuck::cast_slice(&[projection_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-            }
-        );
+        let projection_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Projection Buffer"),
+            contents: bytemuck::cast_slice(&[projection_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         let projection_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &projection_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: projection_buffer.as_entire_binding()
-                }
-            ],
-            label: Some("projeciton_bind_group")
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: projection_buffer.as_entire_binding(),
+            }],
+            label: Some("projeciton_bind_group"),
         });
-        let camera_controller = CameraController::new(
-                init_config.camera_speed,
-                init_config.camera_sensitivity
-            );
+        let camera_controller =
+            CameraController::new(init_config.camera_speed, init_config.camera_sensitivity);
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera, &projection);
-        let camera_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Camera Buffer"),
-                contents: bytemuck::cast_slice(&[camera_uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-            }
-        );
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &camera_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding()
-                }
-            ],
-            label: Some("camera_bind_group")
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
         });
 
         CameraState {
@@ -146,8 +138,13 @@ impl CameraState {
 
     pub fn update(&mut self, dt: std::time::Duration, queue: &wgpu::Queue) {
         self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
-        queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
+        queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera_uniform]),
+        );
     }
 
     pub fn resize(&mut self, new_size: dpi::PhysicalSize<u32>) {
@@ -161,7 +158,7 @@ impl CameraState {
     pub fn get_znear(&self) -> f32 {
         self.projection.znear
     }
-    
+
     pub fn get_zfar(&self) -> f32 {
         self.projection.zfar
     }
@@ -185,7 +182,7 @@ impl CameraState {
     pub fn set_fovy(&mut self, fovy: f32) {
         self.projection.fovy = fovy;
     }
-    
+
     pub fn set_znear(&mut self, znear: f32) {
         self.projection.znear = znear;
     }
@@ -229,7 +226,11 @@ impl CameraState {
     pub fn resize_2d_space(&mut self, width: u32, height: u32, queue: &wgpu::Queue) {
         self.projection.resize_2d(width, height);
         self.projection_uniform = ProjectionUniform::new(self.projection.calc_2d_matrix());
-        queue.write_buffer(&self.projection_buffer, 0, bytemuck::cast_slice(&[self.projection_uniform]))
+        queue.write_buffer(
+            &self.projection_buffer,
+            0,
+            bytemuck::cast_slice(&[self.projection_uniform]),
+        )
     }
 }
 
@@ -237,7 +238,7 @@ impl CameraState {
 pub(crate) struct Camera {
     position: Point3<f32>,
     yaw: f32,
-    pitch: f32
+    pitch: f32,
 }
 
 impl Camera {
@@ -245,21 +246,24 @@ impl Camera {
         Camera {
             position: position.into(),
             yaw: yaw.into().0,
-            pitch: pitch.into().0
+            pitch: pitch.into().0,
         }
     }
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         Matrix4::look_to_rh(
-            self.position, Vector3::new(
+            self.position,
+            Vector3::new(
                 self.yaw.cos() * self.pitch.cos(),
                 self.pitch.sin(),
-                self.yaw.sin() * self.pitch.cos()
-            ).normalize(),
-            Vector3::unit_y())
+                self.yaw.sin() * self.pitch.cos(),
+            )
+            .normalize(),
+            Vector3::unit_y(),
+        )
     }
 
-    pub fn get_homogeneous(&self) -> [f32; 4]{
+    pub fn get_homogeneous(&self) -> [f32; 4] {
         self.position.to_homogeneous().into()
     }
 }
@@ -271,24 +275,18 @@ pub struct Projection {
     aspect: f32,
     fovy: f32,
     znear: f32,
-    zfar: f32
+    zfar: f32,
 }
 
 impl Projection {
-    pub fn new(
-        width: u32,
-        height: u32,
-        fovy: f32,
-        znear: f32,
-        zfar: f32
-    ) -> Self {
+    pub fn new(width: u32, height: u32, fovy: f32, znear: f32, zfar: f32) -> Self {
         Self {
             width,
             height,
             aspect: width as f32 / height as f32,
             fovy: fovy,
             znear,
-            zfar
+            zfar,
         }
     }
 
@@ -302,7 +300,8 @@ impl Projection {
     }
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
-        OPENGL_TO_WGPU_MATRIX * perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar)
+        OPENGL_TO_WGPU_MATRIX
+            * perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar)
     }
 
     pub fn calc_2d_matrix(&self) -> Matrix4<f32> {
@@ -342,8 +341,12 @@ impl CameraController {
         }
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool{
-        let amount = if state == ElementState::Pressed { 1.0 } else { 0.0 };
+    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
+        let amount = if state == ElementState::Pressed {
+            1.0
+        } else {
+            0.0
+        };
         match key {
             VirtualKeyCode::W | VirtualKeyCode::Up => {
                 self.amount_forward = amount;
@@ -362,27 +365,27 @@ impl CameraController {
                 true
             }
             VirtualKeyCode::Q => {
-                self.rotate_horizontal -= amount/2.0;
+                self.rotate_horizontal -= amount / 2.0;
                 true
             }
             VirtualKeyCode::E => {
-                self.rotate_horizontal += amount/2.0;
+                self.rotate_horizontal += amount / 2.0;
                 true
             }
             VirtualKeyCode::X => {
-                self.rotate_vertical -= amount/2.0;
+                self.rotate_vertical -= amount / 2.0;
                 true
             }
             VirtualKeyCode::Z => {
-                self.rotate_vertical += amount/2.0;
+                self.rotate_vertical += amount / 2.0;
                 true
             }
             VirtualKeyCode::R => {
-                self.scroll += amount/2.0;
+                self.scroll += amount / 2.0;
                 true
             }
             VirtualKeyCode::F => {
-                self.scroll -= amount/2.0;
+                self.scroll -= amount / 2.0;
                 true
             }
             VirtualKeyCode::Space => {
@@ -412,7 +415,8 @@ impl CameraController {
         // changes when zooming. I've added this to make it easier
         // to get closer to an object you want to focus on.
         let (pitch_sin, pitch_cos) = camera.pitch.sin_cos();
-        let scrollward = Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
+        let scrollward =
+            Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
         camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
         self.scroll = 0.0;
 
