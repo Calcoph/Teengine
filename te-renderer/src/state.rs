@@ -431,7 +431,7 @@ impl State {
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &gpu.depth_texture.view,
                             depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(1.0),
+                                load: wgpu::LoadOp::Load,
                                 store: true,
                             }),
                             stencil_ops: None,
@@ -495,15 +495,13 @@ impl State {
             .iter_mut()
             .filter(|(_name, instanced_model)| instanced_model.model.transparent_meshes.len() > 0)
         {
-            if instanced_model.model.transparent_meshes.len() > 0 {
-                instanced_model.animate(queue);
-                render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
-                render_pass.tdraw_model_instanced(
-                    &instanced_model.model,
-                    0..instanced_model.instances.len() as u32,
-                    &self.camera.camera_bind_group,
-                );
-            }
+            instanced_model.animate(queue);
+            render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
+            render_pass.tdraw_model_instanced(
+                &instanced_model.model,
+                0..instanced_model.instances.len() as u32,
+                &self.camera.camera_bind_group,
+            );
         }
     }
 
