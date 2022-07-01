@@ -45,12 +45,12 @@ pub struct ModifyingInstance {
 
 impl ModifyingInstance {
     pub fn into_renderable(&mut self, device: &wgpu::Device, tile_size: (f32, f32, f32)) -> usize {
-        let instances = vec![Instance3D {
+        let mut instances = vec![Instance3D {
             position: cgmath::Vector3 { x: self.x*tile_size.0, y: self.y*tile_size.1, z: self.z*tile_size.2 },
         }];
 
         use te_renderer::instances::Instance;
-        let instance_data = instances.iter().map(Instance3D::to_raw).collect::<Vec<_>>();
+        let instance_data = instances.iter_mut().map(Instance3D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),

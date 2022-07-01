@@ -8,7 +8,7 @@ use crate::{
     model,
     resources::{load_glb_model, load_sprite},
     state::GpuState,
-    temap, texture,
+    temap, texture, animation::Animation,
 };
 
 #[repr(C)]
@@ -56,7 +56,7 @@ impl model::Vertex for InstanceRaw {
 }
 
 pub trait Instance {
-    fn to_raw(&self) -> InstanceRaw;
+    fn to_raw(&mut self) -> InstanceRaw;
 
     fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V);
 
@@ -67,6 +67,7 @@ pub trait Instance {
 pub struct Instance2D {
     pub position: cgmath::Vector2<f32>,
     pub size: cgmath::Vector2<f32>,
+    animation: Option<Animation>
 }
 
 impl Instance2D {
@@ -74,15 +75,39 @@ impl Instance2D {
         let size = new_size.into();
         self.size = size;
     }
+
+    fn get_animated(&mut self) -> Instance2D {
+        let animation = self.animation.as_mut().unwrap();
+        let translation = animation.get_translation();
+        let scale = animation.get_scale();
+        let x = self.position.x + translation.x;
+        let y = self.position.y + translation.y;
+        let w = self.size.x + scale.x;
+        let h = self.size.y + scale.y;
+        let position = cgmath::Vector2{ x, y };
+        let size = cgmath::Vector2 { x: w, y: h };
+        Instance2D {
+            position,
+            size,
+            animation: None
+        }
+    }
 }
 
 impl Instance for Instance2D {
-    fn to_raw(&self) -> InstanceRaw {
+    fn to_raw(&mut self) -> InstanceRaw {
+        let animation;
+        let instance = if self.animation.is_some() {
+            animation = self.get_animated();
+            &animation
+        } else {
+            self
+        };
         let sprite = cgmath::Matrix4::from_translation(Vector3 {
-            x: self.position.x,
-            y: self.position.y,
+            x: instance.position.x,
+            y: instance.position.y,
             z: 0.0,
-        }) * cgmath::Matrix4::from_nonuniform_scale(self.size.x, self.size.y, 1.0);
+        }) * cgmath::Matrix4::from_nonuniform_scale(instance.size.x, instance.size.y, 1.0);
 
         InstanceRaw {
             model: sprite.into(),
@@ -106,7 +131,7 @@ pub struct Instance3D {
 }
 
 impl Instance for Instance3D {
-    fn to_raw(&self) -> InstanceRaw {
+    fn to_raw(&mut self) -> InstanceRaw {
         let model = cgmath::Matrix4::from_translation(self.position);
         InstanceRaw {
             model: model.into(),
@@ -154,8 +179,8 @@ impl InstancedModel {
         InstancedModel::new_premade(model, device, instances)
     }
 
-    fn new_premade(model: model::Model, device: &wgpu::Device, instances: Vec<Instance3D>) -> Self {
-        let instance_data = instances.iter().map(Instance3D::to_raw).collect::<Vec<_>>();
+    fn new_premade(model: model::Model, device: &wgpu::Device, mut instances: Vec<Instance3D>) -> Self {
+        let instance_data = instances.iter_mut().map(Instance3D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instance_data),
@@ -178,7 +203,7 @@ impl InstancedModel {
         self.instance_buffer.destroy();
         let instance_data = self
             .instances
-            .iter()
+            .iter_mut()
             .map(|instance| instance.to_raw())
             .collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -251,6 +276,7 @@ impl InstancedSprite {
         let instances = vec![Instance2D {
             position: cgmath::Vector2 { x, y },
             size: cgmath::Vector2 { x: w, y: h },
+            animation: None
         }];
 
         InstancedSprite::new_premade(sprite, device, instances, depth, w, h)
@@ -259,12 +285,12 @@ impl InstancedSprite {
     fn new_premade(
         sprite: model::Material,
         device: &wgpu::Device,
-        instances: Vec<Instance2D>,
+        mut instances: Vec<Instance2D>,
         depth: f32,
         w: f32,
         h: f32,
     ) -> Self {
-        let instance_data = instances.iter().map(Instance2D::to_raw).collect::<Vec<_>>();
+        let instance_data = instances.iter_mut().map(Instance2D::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instance_data),
@@ -289,13 +315,14 @@ impl InstancedSprite {
         let new_instance = Instance2D {
             position: cgmath::Vector2 { x, y },
             size: cgmath::Vector2 { x: w, y: h },
+            animation: None
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
         self.instance_buffer.destroy();
         let instance_data = self
             .instances
-            .iter()
+            .iter_mut()
             .map(|instance| instance.to_raw())
             .collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -381,9 +408,10 @@ impl InstancedText {
         w: f32,
         h: f32,
     ) -> Self {
-        let instance = Instance2D {
+        let mut instance = Instance2D {
             position: cgmath::Vector2 { x, y },
             size: cgmath::Vector2 { x: w, y: h },
+            animation: None
         };
 
         let instance_data = [instance.to_raw()];
