@@ -361,6 +361,10 @@ impl State {
                 }),
             gpu.device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Transparent Render Encoder"),
+                }),
+            gpu.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("2D Render Encoder"),
                 }),
         ]
@@ -409,7 +413,7 @@ impl State {
             }
             let mut render_pass =
                 encoders
-                    .get_mut(0)
+                    .get_mut(1)
                     .unwrap()
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("Render Pass"),
@@ -439,7 +443,7 @@ impl State {
         if self.render_2d {
             let mut render_pass =
                 encoders
-                    .get_mut(1)
+                    .get_mut(2)
                     .unwrap()
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("Render Pass"),
