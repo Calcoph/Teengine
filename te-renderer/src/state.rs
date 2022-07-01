@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 
-use cgmath::Vector3;
 use wgpu::{util::DeviceExt, CommandBuffer};
 use winit::{
     dpi,
-    event::{ElementState, KeyboardInput, WindowEvent},
+    event::{KeyboardInput, WindowEvent},
     window::Window,
 };
 
@@ -12,9 +10,8 @@ use crate::model::Vertex;
 use crate::{
     camera,
     initial_config::InitialConfiguration,
-    instances::{InstanceRaw, InstancedSprite, InstancedText, InstancesState},
+    instances::{InstanceRaw, sprite::InstancedSprite, text::InstancedText, InstancesState},
     model,
-    resources::{load_glb_model, load_sprite},
     temap, texture,
 };
 

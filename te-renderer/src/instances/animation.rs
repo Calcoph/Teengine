@@ -84,7 +84,7 @@ impl Animation {
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0),
             duration,
-            Instant::now(),
+            start_time,
             looping,
         )
     }
@@ -115,7 +115,7 @@ impl Animation {
             rotation,
             (0.0, 0.0, 0.0),
             duration,
-            Instant::now(),
+            start_time,
             looping,
         )
     }
@@ -146,7 +146,7 @@ impl Animation {
             (0.0, 0.0, 0.0),
             scale,
             duration,
-            Instant::now(),
+            start_time,
             looping,
         )
     }

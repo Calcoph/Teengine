@@ -1,15 +1,19 @@
 use std::collections::HashMap;
 
 use cgmath::Vector3;
-use wgpu::util::DeviceExt;
-use winit::{dpi, window::Window};
+
+pub mod animation;
+pub mod model;
+pub mod sprite;
+pub mod text;
 
 use crate::{
-    model,
     resources::{load_glb_model, load_sprite},
     state::GpuState,
-    temap, texture, animation::Animation,
+    temap
 };
+
+use self::{animation::Animation, model::InstancedModel, sprite::InstancedSprite, text::{InstancedText, TextReference}};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -17,7 +21,7 @@ pub struct InstanceRaw {
     model: [[f32; 4]; 4],
 }
 
-impl model::Vertex for InstanceRaw {
+impl crate::model::Vertex for InstanceRaw {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         use std::mem;
         wgpu::VertexBufferLayout {
@@ -186,327 +190,6 @@ trait InstancedDraw {
     );
 }
 
-#[derive(Debug)]
-pub struct InstancedModel {
-    pub model: model::Model,
-    pub instances: Vec<Instance3D>,
-    pub instance_buffer: wgpu::Buffer,
-}
-
-impl InstancedModel {
-    fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
-        let instances = vec![Instance3D {
-            position: cgmath::Vector3 { x, y, z },
-            animation: None
-        }];
-
-        InstancedModel::new_premade(model, device, instances)
-    }
-
-    fn new_premade(model: model::Model, device: &wgpu::Device, mut instances: Vec<Instance3D>) -> Self {
-        let instance_data = instances.iter_mut().map(Instance3D::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
-        InstancedModel {
-            model,
-            instances,
-            instance_buffer,
-        }
-    }
-
-    fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
-        let new_instance = Instance3D {
-            position: cgmath::Vector3 { x, y, z },
-            animation: None
-        };
-        //TODO: see if there is a better way than replacing the buffer with a new one
-        self.instances.push(new_instance);
-        self.instance_buffer.destroy();
-        let instance_data = self
-            .instances
-            .iter_mut()
-            .map(|instance| instance.to_raw())
-            .collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        self.instance_buffer = instance_buffer;
-    }
-}
-
-impl InstancedDraw for InstancedModel {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        index: usize,
-        direction: V,
-        queue: &wgpu::Queue,
-    ) {
-        let instance = self.instances.get_mut(index).unwrap();
-        instance.move_direction(direction);
-        let raw = instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        index: usize,
-        position: P,
-        queue: &wgpu::Queue,
-    ) {
-        let instance = self.instances.get_mut(index).unwrap();
-        instance.move_to(position);
-        let raw = instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-}
-
-#[derive(Debug)]
-pub struct InstancedSprite {
-    pub sprite: model::Material,
-    width: f32,
-    height: f32,
-    pub instances: Vec<Instance2D>,
-    pub instance_buffer: wgpu::Buffer,
-    pub depth: f32,
-}
-
-impl InstancedSprite {
-    fn new(
-        sprite: model::Material,
-        device: &wgpu::Device,
-        x: f32,
-        y: f32,
-        depth: f32,
-        w: f32,
-        h: f32,
-    ) -> Self {
-        let instances = vec![Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        }];
-
-        InstancedSprite::new_premade(sprite, device, instances, depth, w, h)
-    }
-
-    fn new_premade(
-        sprite: model::Material,
-        device: &wgpu::Device,
-        mut instances: Vec<Instance2D>,
-        depth: f32,
-        w: f32,
-        h: f32,
-    ) -> Self {
-        let instance_data = instances.iter_mut().map(Instance2D::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
-        InstancedSprite {
-            sprite,
-            width: w,
-            height: h,
-            instances,
-            instance_buffer,
-            depth,
-        }
-    }
-
-    fn add_instance(&mut self, x: f32, y: f32, size: Option<(f32, f32)>, device: &wgpu::Device) {
-        let (w, h) = match size {
-            Some((width, height)) => (width, height),
-            None => (self.width, self.height),
-        };
-        let new_instance = Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        };
-        //TODO: see if there is a better way than replacing the buffer with a new one
-        self.instances.push(new_instance);
-        self.instance_buffer.destroy();
-        let instance_data = self
-            .instances
-            .iter_mut()
-            .map(|instance| instance.to_raw())
-            .collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-        self.instance_buffer = instance_buffer;
-    }
-
-    fn resize<V: Into<cgmath::Vector2<f32>>>(
-        &mut self,
-        index: usize,
-        new_size: V,
-        queue: &wgpu::Queue,
-    ) {
-        let instance = self.instances.get_mut(index).unwrap();
-        instance.resize(new_size);
-        let raw = instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-}
-
-impl InstancedDraw for InstancedSprite {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        index: usize,
-        direction: V,
-        queue: &wgpu::Queue,
-    ) {
-        let instance = self.instances.get_mut(index).unwrap();
-        instance.move_direction(direction);
-        let raw = instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        index: usize,
-        position: P,
-        queue: &wgpu::Queue,
-    ) {
-        let instance = self.instances.get_mut(index).unwrap();
-        instance.move_to(position);
-        let raw = instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-}
-
-#[derive(Debug)]
-pub struct InstancedText {
-    pub image: model::Material,
-    pub instance: Instance2D,
-    pub instance_buffer: wgpu::Buffer,
-    pub depth: f32,
-}
-
-impl InstancedText {
-    fn new(
-        image: model::Material,
-        device: &wgpu::Device,
-        x: f32,
-        y: f32,
-        depth: f32,
-        w: f32,
-        h: f32,
-    ) -> Self {
-        let mut instance = Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        };
-
-        let instance_data = [instance.to_raw()];
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
-        InstancedText {
-            image,
-            instance,
-            instance_buffer,
-            depth,
-        }
-    }
-
-    fn resize<V: Into<cgmath::Vector2<f32>>>(
-        &mut self,
-        index: usize,
-        new_size: V,
-        queue: &wgpu::Queue,
-    ) {
-        self.instance.resize(new_size);
-        let raw = self.instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-}
-
-impl InstancedDraw for InstancedText {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        index: usize,
-        direction: V,
-        queue: &wgpu::Queue,
-    ) {
-        self.instance.move_direction(direction);
-        let raw = self.instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        index: usize,
-        position: P,
-        queue: &wgpu::Queue,
-    ) {
-        self.instance.move_to(position);
-        let raw = self.instance.to_raw();
-        queue.write_buffer(
-            &self.instance_buffer,
-            (index * std::mem::size_of::<InstanceRaw>())
-                .try_into()
-                .unwrap(),
-            bytemuck::cast_slice(&[raw]),
-        );
-    }
-}
 enum Dimension {
     D2,
     D3,
@@ -529,11 +212,6 @@ impl InstanceReference {
     }
 }
 
-/// Handle of a 2D text. You will need it when changing its properties.
-pub struct TextReference {
-    index: usize,
-}
-
 /// Manages the window's 3D models, 2D sprites and 2D texts
 #[derive(Debug)]
 pub struct InstancesState {
@@ -545,7 +223,7 @@ pub struct InstancesState {
     tile_size: (f32, f32, f32),
     pub resources_path: String,
     pub default_texture_path: String,
-    font: model::Font,
+    font: crate::model::Font,
 }
 
 impl InstancesState {
@@ -560,7 +238,7 @@ impl InstancesState {
         let instances_2d = HashMap::new();
         let texts = Vec::new();
         let deleted_texts = Vec::new();
-        let font = model::Font::new(font_dir_path);
+        let font = crate::model::Font::new(font_dir_path);
 
         InstancesState {
             instances,
@@ -931,7 +609,7 @@ impl InstancesState {
         sprite.instances.get(instance.index).unwrap()
     }
 
-    fn get_model(&self, instance: &InstanceReference) -> &Instance3D {
+    fn _get_model(&self, instance: &InstanceReference) -> &Instance3D {
         let model = self.instances.get(&instance.name).unwrap();
         model.instances.get(instance.index).unwrap()
     }

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
-use image::{buffer::Pixels, ImageBuffer, Rgba};
+use image::{ImageBuffer, Rgba};
 
 use crate::{state::GpuState, texture};
 
