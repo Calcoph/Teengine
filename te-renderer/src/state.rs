@@ -401,6 +401,7 @@ enum Dimension {
     D3
 }
 
+/// Handle of a 3D model or 2D sprite. You will need it when changing their properties.
 pub struct InstanceReference {
     name: String,
     index: usize,
@@ -417,10 +418,12 @@ impl InstanceReference {
     }
 }
 
+/// Handle of a 2D text. You will need it when changing its properties.
 pub struct TextReference {
     index: usize
 }
 
+/// Manages the window's 3D models, 2D sprites and 2D texts
 #[derive(Debug)]
 pub struct InstancesState {
     instances: HashMap<String, InstancedModel>,
@@ -461,6 +464,9 @@ impl InstancesState {
         }
     }
 
+    /// Creates a new 3D model at the specifiec position.
+    /// ### PANICS
+    /// Will panic if the model's file is not found
     pub fn place_model(
         &mut self,
         model_name: &str,
@@ -497,6 +503,10 @@ impl InstancesState {
         }
     }
 
+    /// Creates a new 2D sprite at the specified position.
+    /// All 2D sprites created from the same file will have the same "z" position. And cannot be changed once set.
+    /// ### PANICS
+    /// Will panic if the sprite's file is not found 
     pub fn place_sprite(
         &mut self,
         sprite_name: &str,
@@ -533,6 +543,10 @@ impl InstancesState {
         }
     }
 
+    /// Creates a new text at the specified position
+    /// ### PANICS
+    /// will panic if the characters' files are not found
+    /// see: model::Font
     pub fn place_text(&mut self, text: Vec<String>, gpu: &GpuState, size: Option<(f32, f32)>, position: (f32, f32, f32)) -> TextReference {
         let (text, w, h) = self.font.write_to_material(text, gpu, &self.layout);
         let instanced_t = match size {
@@ -557,11 +571,13 @@ impl InstancesState {
         TextReference { index }
     }
 
+    /// Eliminates the text from screen and memory.
     pub fn forget_text(&mut self, text: TextReference) {
         self.texts.get_mut(text.index).unwrap().take();
         self.deleted_texts.push(text.index)
     }
 
+    /// Saves all the 3D models' positions in a .temap file.
     pub fn save_temap(&self, file_name: &str, maps_path: String) {
         let mut map = temap::TeMap::new();
         for (name, instance) in &self.instances {
@@ -574,6 +590,7 @@ impl InstancesState {
         map.save(&file_name, maps_path);
     }
 
+    /// Load all 3D models from a .temap file.
     fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
         for (name, te_model) in map.models {
             let model = load_glb_model(
@@ -604,6 +621,8 @@ impl InstancesState {
         }
     }
 
+    /// Move a 3D model or a 2D sprite relative to its current position.
+    /// Ignores z value on 2D sprites.
     pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &InstanceReference, direction: V, queue: &wgpu::Queue) {
         match instance.dimension {
             Dimension::D2 => {
@@ -617,6 +636,8 @@ impl InstancesState {
         };
     }
 
+    /// Move a 3D model or a 2D sprite to an absolute position.
+    /// /// Ignores z value on 2D sprites.
     pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(&mut self, instance: &InstanceReference, position: P, queue: &wgpu::Queue) {
         match instance.dimension {
             Dimension::D2 => {
@@ -630,12 +651,13 @@ impl InstancesState {
         };
     }
 
+    /// Get a 3D model's or 2D sprite's position.
     pub fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
         match instance.dimension {
             Dimension::D2 => {
-                let model = self.instances_2d.get(&instance.name).unwrap();
-                let position = model.instances.get(instance.index).unwrap().position;
-                (position.x, position.y, model.depth)
+                let sprite = self.instances_2d.get(&instance.name).unwrap();
+                let position = sprite.instances.get(instance.index).unwrap().position;
+                (position.x, position.y, sprite.depth)
             },
             Dimension::D3 => {
                 let model = self.instances.get(&instance.name).unwrap();
@@ -644,46 +666,59 @@ impl InstancesState {
         }
     }
 
+    /// Changes the sprite's size. Using TODO algorithm
+    /// ### PANICS
+    /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
     pub fn resize_sprite<V: Into<cgmath::Vector2<f32>>>(&mut self, instance: &InstanceReference, new_size: V, queue: &wgpu::Queue) {
         match instance.dimension {
             Dimension::D2 => {
-                let model = self.instances_2d.get_mut(&instance.name).unwrap();
-                model.resize(instance.index, new_size, queue);
+                let sprite = self.instances_2d.get_mut(&instance.name).unwrap();
+                sprite.resize(instance.index, new_size, queue);
             },
             Dimension::D3 => panic!("That is not a sprite")
         };
     }
 
+    /// Get the sprite's size
+    /// ### PANICS
+    /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
     pub fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
         match instance.dimension {
             Dimension::D2 => {
-                let model = self.instances_2d.get(&instance.name).unwrap();
-                model.instances.get(instance.index).unwrap().size.into()
+                let sprite = self.instances_2d.get(&instance.name).unwrap();
+                sprite.instances.get(instance.index).unwrap().size.into()
             },
             Dimension::D3 => panic!("That is not a sprite")
         }
     }
 
+    /// Move a 2D text relative to it's current position.
+    /// Ignores the z value.
     pub fn move_text<V: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, direction: V, queue: &wgpu::Queue) {
         let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
         text.move_instance(0, direction, queue);
     }
 
+    /// Move a 2D text to an absolute position.
+    /// Ignores the z value.
     pub fn set_text_position<P: Into<cgmath::Vector3<f32>>>(&mut self, instance: &TextReference, position: P, queue: &wgpu::Queue) {
         let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
         text.set_instance_position(0, position, queue);
     }
 
+    /// Gets a 2D text's position
     pub fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
         let text = self.texts.get(instance.index).unwrap().as_ref().unwrap();
         text.instance.position.into()
     }
 
+    /// Resizes a 2D text
     pub fn resize_text<V: Into<cgmath::Vector2<f32>>>(&mut self, instance: &TextReference, new_size: V, queue: &wgpu::Queue) {
         let text = self.texts.get_mut(instance.index).unwrap().as_mut().unwrap();
         text.resize(0, new_size, queue);
     }
 
+    /// Gets a 2D text's size
     pub fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
         let text = self.texts.get(instance.index).unwrap().as_ref().unwrap();
         text.instance.size.into()
@@ -692,16 +727,20 @@ impl InstancesState {
 
 #[derive(Debug)]
 pub struct State {
+    /// Manages the camera
     pub camera: camera::CameraState,
+    /// The window's size
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
     transparent_render_pipeline: wgpu::RenderPipeline,
     sprite_render_pipeline: wgpu::RenderPipeline,
+    /// Manages 3D models, 2D sprites and 2D texts
     pub instances: InstancesState,
-    pub mouse_pressed: bool,
     maps_path: String,
     sprite_vertices_buffer: wgpu::Buffer,
+    /// Whether to render 3d models
     pub render_3d: bool,
+    /// Whether to render 2D sprites and texts.
     pub render_2d: bool
 }
 
@@ -808,7 +847,6 @@ impl State {
             transparent_render_pipeline,
             sprite_render_pipeline,
             instances,
-            mouse_pressed: false,
             maps_path,
             sprite_vertices_buffer,
             render_2d: true,
@@ -920,14 +958,6 @@ impl State {
                     },
                 ..
             } => self.camera.camera_controller.process_keyboard(*key, *state),
-            WindowEvent::MouseInput {
-                button: winit::event::MouseButton::Left,
-                state,
-                ..
-            } => {
-                self.mouse_pressed = *state == ElementState::Pressed;
-                true
-            },
             _ => false
         }
     }

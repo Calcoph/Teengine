@@ -7,6 +7,7 @@ use image::io::Reader as ImageReader;
 
 use te_gamepad::gamepad::{self, ControllerEvent};
 
+/// Get all the structs needed to start the engine, skipping the boilerplate.
 pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLoop<ControllerEvent>, Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<State>>), Error> {
     if log {
         env_logger::init();
@@ -36,6 +37,7 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLo
     Ok((event_loop, Rc::new(RefCell::new(gpu)), Rc::new(RefCell::new(window)), Rc::new(RefCell::new(state))))
 }
 
+/// After calling prepare() call new_window() for each extra window.
 pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<State>>), Error> {
     let img = match ImageReader::open(&config.icon_path)?.decode() {
         Ok(img) => img.to_rgba8(),
