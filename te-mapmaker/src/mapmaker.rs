@@ -281,7 +281,7 @@ impl ImguiState {
     pub fn render(&mut self, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str) -> Result<(), wgpu::SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.renderer_s.render_state(&view, tile_size, &self.state, &self.gpu, &mut self.mod_instance.modifying_instance);
+        self.renderer_s.render_state(&view, tile_size, &mut self.state, &self.gpu, &mut self.mod_instance.modifying_instance);
         self.render_imgui(&view, window, resource_files_directory, map_files_directory);
         output.present();
 
@@ -344,11 +344,118 @@ struct RendererState {
 }
 
 impl RendererState {
-    fn render_state(&mut self, view: &wgpu::TextureView, tile_size: (f32, f32, f32), state: &State, gpu: &GpuState, modifying_instance: &mut ModifyingInstance) {
+    fn render_state(&mut self, view: &wgpu::TextureView, tile_size: (f32, f32, f32), state: &mut State, gpu: &GpuState, modifying_instance: &mut ModifyingInstance) {
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
-        {
+        {    
+            use te_renderer::model::DrawModel;
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.0,
+                                    g: 0.0,
+                                    b: 0.0,
+                                    a: 1.0
+                                }),
+                                store: true
+                            }
+                        }
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &gpu.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true
+                        }),
+                        stencil_ops: None
+                    })
+                });
+                state.draw_opaque(&mut render_pass, &gpu.queue);
+            }
+            let time_elapsed = std::time::Instant::now() - self.blink_time;
+            let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
+            let mut instances = 0;
+            let mut buffer = None;
+            let mut model = None;
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.0,
+                                    g: 0.0,
+                                    b: 0.0,
+                                    a: 1.0
+                                }),
+                                store: true
+                            }
+                        }
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &gpu.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true
+                        }),
+                        stencil_ops: None
+                    })
+                });
+                if model_visible {
+                    instances = modifying_instance.into_renderable(&gpu.device, tile_size);
+                    buffer = modifying_instance.buffer.as_ref();
+                    model = Some(&modifying_instance.model);
+                    render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                    render_pass.draw_model_instanced(
+                        &model.unwrap(),
+                        0..instances as u32,
+                        &state.camera.camera_bind_group,
+                    );
+                // 1 second = 1_000_000_000 nanoseconds
+                // 500_000_000ns = 1/2 seconds
+                } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
+                    self.blink_time = std::time::Instant::now();
+                }
+            }
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.0,
+                                    g: 0.0,
+                                    b: 0.0,
+                                    a: 1.0
+                                }),
+                                store: true
+                            }
+                        }
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &gpu.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true
+                        }),
+                        stencil_ops: None
+                    })
+                });
+                state.draw_transparent(&mut render_pass, &gpu.queue);
+            }
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
@@ -375,32 +482,7 @@ impl RendererState {
                     stencil_ops: None
                 })
             });
-    
-            use te_renderer::model::DrawModel;
-            state.draw_opaque(&mut render_pass);
-            let time_elapsed = std::time::Instant::now() - self.blink_time;
-            let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
-            let mut instances = 0;
-            let mut buffer = None;
-            let mut model = None;
-            if model_visible {
-                instances = modifying_instance.into_renderable(&gpu.device, tile_size);
-                buffer = modifying_instance.buffer.as_ref();
-                model = Some(&modifying_instance.model);
-                render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
-                render_pass.draw_model_instanced(
-                    &model.unwrap(),
-                    0..instances as u32,
-                    &state.camera.camera_bind_group,
-                );
-            // 1 second = 1_000_000_000 nanoseconds
-            // 500_000_000ns = 1/2 seconds
-            } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
-                self.blink_time = std::time::Instant::now();
-            }
-    
             use te_renderer::model::DrawTransparentModel;
-            state.draw_transparent(&mut render_pass);
             if model_visible {
                 if model.unwrap().transparent_meshes.len() > 0 {
                     render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));

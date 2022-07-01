@@ -59,6 +59,16 @@ impl InstancedText {
             bytemuck::cast_slice(&[raw]),
         );
     }
+
+    pub(crate) fn animate(&mut self, queue: &wgpu::Queue) {
+        queue.write_buffer(
+            &self.instance_buffer,
+            (0 * std::mem::size_of::<InstanceRaw>())
+                .try_into()
+                .unwrap(),
+            bytemuck::cast_slice(&[self.instance.to_raw()]),
+        );
+    }
 }
 
 impl InstancedDraw for InstancedText {

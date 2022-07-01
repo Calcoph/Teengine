@@ -101,6 +101,20 @@ impl InstancedSprite {
             bytemuck::cast_slice(&[raw]),
         );
     }
+
+    pub(crate) fn animate(&mut self, queue: &wgpu::Queue) {
+        for (index, i) in self.instances.iter_mut().enumerate() {
+            if i.animation.is_some() {
+                queue.write_buffer(
+                    &self.instance_buffer,
+                    (index * std::mem::size_of::<InstanceRaw>())
+                        .try_into()
+                        .unwrap(),
+                    bytemuck::cast_slice(&[i.to_raw()]),
+                );
+            }
+        }
+    }
 }
 
 impl InstancedDraw for InstancedSprite {
