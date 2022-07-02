@@ -351,6 +351,7 @@ impl State {
 
     pub fn update(&mut self, dt: std::time::Duration, gpu: &GpuState) {
         self.camera.update(dt, &gpu.queue);
+        self.animate(&gpu.queue);
     }
 
     pub fn prepare_render(gpu: &GpuState) -> Vec<wgpu::CommandEncoder> {
@@ -361,13 +362,29 @@ impl State {
                 }),
             gpu.device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Transparent Render Encoder"),
-                }),
-            gpu.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("2D Render Encoder"),
                 }),
         ]
+    }
+
+    pub fn animate(&mut self, queue: &wgpu::Queue) {
+        if self.render_3d {
+            for (_name, instanced_model) in self.instances.instances.iter_mut() {
+                instanced_model.animate(queue);
+            }
+        }
+
+        if self.render_2d {
+            for text in &mut self.instances.texts {
+                if let Some(txt) = text.as_mut() {
+                    txt.animate(queue);
+                }
+            }
+    
+            for (_name, sprite) in &mut self.instances.instances_2d {
+                sprite.animate(queue);
+            }
+        }
     }
 
     pub fn render(
@@ -377,43 +394,9 @@ impl State {
         encoders: &mut Vec<wgpu::CommandEncoder>,
     ) {
         if self.render_3d {
-            {
-                let mut render_pass =
-                    encoders
-                        .get_mut(0)
-                        .unwrap()
-                        .begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("Render Pass"),
-                            color_attachments: &[
-                                // This is what [[location(0)]] in the fragment shader targets
-                                wgpu::RenderPassColorAttachment {
-                                    view: &view,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                                            r: 0.0,
-                                            g: 0.0,
-                                            b: 0.0,
-                                            a: 1.0,
-                                        }),
-                                        store: true,
-                                    },
-                                },
-                            ],
-                            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                                view: &gpu.depth_texture.view,
-                                depth_ops: Some(wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(1.0),
-                                    store: true,
-                                }),
-                                stencil_ops: None,
-                            }),
-                        });
-                self.draw_opaque(&mut render_pass, &gpu.queue);
-            }
             let mut render_pass =
                 encoders
-                    .get_mut(1)
+                    .get_mut(0)
                     .unwrap()
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("Render Pass"),
@@ -423,7 +406,12 @@ impl State {
                                 view: &view,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
+                                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                                        r: 0.0,
+                                        g: 0.0,
+                                        b: 0.0,
+                                        a: 1.0,
+                                    }),
                                     store: true,
                                 },
                             },
@@ -431,19 +419,20 @@ impl State {
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &gpu.depth_texture.view,
                             depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
+                                load: wgpu::LoadOp::Clear(1.0),
                                 store: true,
                             }),
                             stencil_ops: None,
                         }),
                     });
+            self.draw_opaque(&mut render_pass, &gpu.queue);
             self.draw_transparent(&mut render_pass, &gpu.queue);
         }
 
         if self.render_2d {
             let mut render_pass =
                 encoders
-                    .get_mut(2)
+                    .get_mut(1)
                     .unwrap()
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("Render Pass"),
@@ -472,11 +461,10 @@ impl State {
         gpu.queue.submit(encoders);
     }
 
-    pub fn draw_opaque<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
+    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
         use model::DrawModel;
         render_pass.set_pipeline(&self.render_pipeline);
-        for (_name, instanced_model) in self.instances.instances.iter_mut() {
-            instanced_model.animate(queue);
+        for (_name, instanced_model) in self.instances.instances.iter() {
             render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
             render_pass.draw_model_instanced(
                 &instanced_model.model,
@@ -486,16 +474,15 @@ impl State {
         }
     }
 
-    pub fn draw_transparent<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
+    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
         use model::DrawTransparentModel;
         render_pass.set_pipeline(&self.transparent_render_pipeline);
         for (_name, instanced_model) in self
             .instances
             .instances
-            .iter_mut()
+            .iter()
             .filter(|(_name, instanced_model)| instanced_model.model.transparent_meshes.len() > 0)
         {
-            instanced_model.animate(queue);
             render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
             render_pass.tdraw_model_instanced(
                 &instanced_model.model,
@@ -505,17 +492,7 @@ impl State {
         }
     }
 
-    pub fn draw_sprites<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
-        for text in &mut self.instances.texts {
-            if let Some(txt) = text.as_mut() {
-                txt.animate(queue);
-            }
-        }
-
-        for (_name, sprite) in &mut self.instances.instances_2d {
-            sprite.animate(queue);
-        }
-        
+    pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
         use model::DrawSprite;
         use model::DrawText;
         render_pass.set_pipeline(&self.sprite_render_pipeline);
