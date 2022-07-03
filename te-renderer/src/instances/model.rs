@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use wgpu::util::DeviceExt;
 
 use crate::model;
@@ -10,13 +12,15 @@ pub struct InstancedModel {
     pub model: model::Model,
     pub instances: Vec<Instance3D>,
     pub instance_buffer: wgpu::Buffer,
+    pub unculled_instances: usize,
+    unculled_indices: HashSet<usize>
 }
 
 impl InstancedModel {
-    pub fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
+    pub fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32, chunk_size: (f32, f32, f32)) -> Self {
         let instances = vec![Instance3D {
             position: cgmath::Vector3 { x, y, z },
-            animation: None
+            animation: None,
         }];
 
         InstancedModel::new_premade(model, device, instances)
@@ -34,13 +38,15 @@ impl InstancedModel {
             model,
             instances,
             instance_buffer,
+            unculled_instances: 0,
+            unculled_indices: HashSet::new()
         }
     }
 
-    pub fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
+    pub fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device, chunk_size: (f32, f32, f32)) {
         let new_instance = Instance3D {
             position: cgmath::Vector3 { x, y, z },
-            animation: None
+            animation: None,
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
@@ -53,23 +59,28 @@ impl InstancedModel {
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
         self.instance_buffer = instance_buffer;
     }
 
-    pub(crate) fn animate(&mut self, queue: &wgpu::Queue) {
-        for (index, i) in self.instances.iter_mut().enumerate() {
-            if i.animation.is_some() {
-                queue.write_buffer(
-                    &self.instance_buffer,
-                    (index * std::mem::size_of::<InstanceRaw>())
-                        .try_into()
-                        .unwrap(),
-                    bytemuck::cast_slice(&[i.to_raw()]),
-                );
-            }
+    pub(crate) fn uncull_instance(&mut self, queue: &wgpu::Queue, index: usize) {
+        if !self.unculled_indices.contains(&index) {
+            queue.write_buffer(
+                &self.instance_buffer,
+                (self.unculled_instances * std::mem::size_of::<InstanceRaw>())
+                    .try_into()
+                    .unwrap(),
+                bytemuck::cast_slice(&[self.instances.get_mut(index).unwrap().to_raw()]),
+            );
+            self.unculled_instances += 1;
+            self.unculled_indices.insert(index);
         }
+    }
+
+    pub(crate) fn cull_all(&mut self) {
+        self.unculled_instances = 0;
+        self.unculled_indices = HashSet::new();
     }
 }
 

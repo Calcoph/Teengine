@@ -21,7 +21,7 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, 
                         gpu.borrow_mut().resize(**new_inner_size);
                         state.borrow_mut().resize(**new_inner_size)
                     },
-                    _ => ()
+                    _ => (),
                 }
             },
             Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game

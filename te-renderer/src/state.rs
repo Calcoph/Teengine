@@ -1,5 +1,5 @@
 
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::HashSet};
 
 use wgpu::{util::DeviceExt, CommandBuffer};
 use winit::{
@@ -8,7 +8,7 @@ use winit::{
     window::Window,
 };
 
-use crate::model::Vertex;
+use crate::{model::Vertex, instances::{Instance3D, InstanceReference}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -183,6 +183,7 @@ impl State {
         let instances = InstancesState::new(
             texture_bind_group_layout,
             init_config.tile_size,
+            init_config.chunk_size,
             resources_path,
             default_texture_path,
             init_config.font_dir_path,
@@ -350,8 +351,12 @@ impl State {
     }
 
     pub fn update(&mut self, dt: std::time::Duration, gpu: &GpuState) {
-        self.camera.update(dt, &gpu.queue);
         self.animate(&gpu.queue);
+        if self.render_3d {
+            self.camera.update(dt, &gpu.queue);
+            self.cull_all();
+            self.instances.update_rendered(&self.camera.frustum, &gpu.queue);
+        }
     }
 
     pub fn prepare_render(gpu: &GpuState) -> Vec<wgpu::CommandEncoder> {
@@ -368,12 +373,6 @@ impl State {
     }
 
     pub fn animate(&mut self, queue: &wgpu::Queue) {
-        if self.render_3d {
-            for (_name, instanced_model) in self.instances.instances.iter_mut() {
-                instanced_model.animate(queue);
-            }
-        }
-
         if self.render_2d {
             for text in &mut self.instances.texts {
                 if let Some(txt) = text.as_mut() {
@@ -464,11 +463,11 @@ impl State {
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
         use model::DrawModel;
         render_pass.set_pipeline(&self.render_pipeline);
-        for (_name, instanced_model) in self.instances.instances.iter() {
+        for (_name, instanced_model) in self.instances.instances.iter().filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0) {
             render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
             render_pass.draw_model_instanced(
                 &instanced_model.model,
-                0..instanced_model.instances.len() as u32,
+                0..instanced_model.unculled_instances as u32,
                 &self.camera.camera_bind_group,
             );
         }
@@ -481,12 +480,13 @@ impl State {
             .instances
             .instances
             .iter()
+            .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0)
             .filter(|(_name, instanced_model)| instanced_model.model.transparent_meshes.len() > 0)
         {
             render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
             render_pass.tdraw_model_instanced(
                 &instanced_model.model,
-                0..instanced_model.instances.len() as u32,
+                0..instanced_model.unculled_instances as u32,
                 &self.camera.camera_bind_group,
             );
         }
@@ -567,6 +567,12 @@ impl State {
             }
         }
     }
+
+    fn cull_all(&mut self) {
+        for (_name, model) in self.instances.instances.iter_mut() {
+            model.cull_all();
+        }
+    }
 }
 
 fn create_render_pipeline(
@@ -605,7 +611,7 @@ fn create_render_pipeline(
             topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: None, //Some(wgpu::Face::Back),
+            cull_mode: Some(wgpu::Face::Back),
             // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
             polygon_mode: wgpu::PolygonMode::Fill,
             // Requires Features::DEPTH_CLIP_CONTROL
@@ -665,7 +671,7 @@ fn create_2d_render_pipeline(
             topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: None, //Some(wgpu::Face::Back),
+            cull_mode: Some(wgpu::Face::Back),
             // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
             polygon_mode: wgpu::PolygonMode::Fill,
             // Requires Features::DEPTH_CLIP_CONTROL

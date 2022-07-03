@@ -16,6 +16,125 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 
 pub const SAFE_CAMERA_ANGLE: f32 = FRAC_PI_2 - 0.0001;
 
+#[derive(Debug)]
+struct Plan {
+    normal:cgmath::Vector3<f32>,
+    distance: f32
+}
+
+impl Plan {
+    fn new(p1: cgmath::Point3<f32>, norm: cgmath::Vector3<f32>) -> Self {
+        let normal = norm.normalize();
+        Plan { normal, distance: p1.dot(normal) }
+    }
+
+    fn is_in_or_forward(&self, corner: &Point3<f32>, tolerance: f32) -> bool {
+        (corner.dot(self.normal) - self.distance) >= -tolerance
+    }
+}
+
+#[derive(Debug)]
+pub struct Frustum {
+    top_face: Plan,
+    bottom_face: Plan,
+    right_face: Plan,
+    left_face: Plan,
+    far_face: Plan,
+    near_face: Plan,
+    chunk_size: (f32, f32, f32)
+}
+
+impl Frustum {
+    fn new(camera: &Camera, projection: &Projection, config: InitialConfiguration) -> Self {
+        let chunk_size = config.chunk_size;
+
+        let (top_face, bottom_face, right_face, left_face, far_face, near_face) = Frustum::make_faces(camera, projection);
+
+        Frustum {
+            top_face,
+            bottom_face,
+            right_face,
+            left_face,
+            far_face,
+            near_face,
+            chunk_size
+        }
+    }
+
+    pub fn is_inside(&self, row: usize, col: usize) -> bool {
+        let max_x = (col+1) as f32 * self.chunk_size.0;
+        let min_x = col as f32 * self.chunk_size.0;
+        let max_z = (row+1) as f32 * self.chunk_size.2;
+        let min_z = row as f32 * self.chunk_size.2;
+        let corners = vec![
+            cgmath::point3(max_x, 0.0, max_z),
+            cgmath::point3(max_x, 0.0, min_z),
+            cgmath::point3(min_x, 0.0, max_z),
+            cgmath::point3(min_x, 0.0, min_z)
+        ];
+
+        corners.iter().any(|corner| {
+            self.top_face.is_in_or_forward(corner, self.chunk_size.0) &&
+            self.bottom_face.is_in_or_forward(corner, self.chunk_size.0) &&
+            self.right_face.is_in_or_forward(corner, self.chunk_size.0) &&
+            self.left_face.is_in_or_forward(corner, self.chunk_size.0) &&
+            self.near_face.is_in_or_forward(corner, 0.0) &&
+            self.far_face.is_in_or_forward(corner, 0.0)
+        })
+    }
+
+    fn update(&mut self, camera: &Camera, projection: &Projection) {
+        let (top_face, bottom_face, right_face, left_face, far_face, near_face) = Frustum::make_faces(camera, projection);
+        self.top_face = top_face;
+        self.bottom_face = bottom_face;
+        self.right_face = right_face;
+        self.left_face = left_face;
+        self.far_face = far_face;
+        self.near_face = near_face;
+    }
+
+    fn make_faces(camera: &Camera, projection: &Projection) -> (Plan, Plan, Plan, Plan, Plan, Plan) {
+        let x = camera.yaw.cos() * camera.pitch.cos();
+        let y = camera.pitch.sin();
+        let z = camera.yaw.sin() * camera.pitch.cos();
+        let front = cgmath::vec3(x, y, z).normalize();
+        let up = Vector3::unit_y();
+        let right = front.cross(up);
+        let up = right.cross(front);
+
+        let half_v_side = projection.zfar * (projection.fovy * 0.5).tan();
+        let half_h_side = half_v_side * projection.aspect;
+        let front_mult_far = projection.zfar * front;
+
+        let top_face = Plan::new(
+            camera.position,
+            (front_mult_far + up * half_v_side).cross(right)
+        );
+        let bottom_face = Plan::new(
+            camera.position,
+            right.cross(front_mult_far - up * half_v_side)
+        );
+        let right_face = Plan::new(
+            camera.position,
+            up.cross(front_mult_far + right * half_h_side)
+        );
+        let left_face = Plan::new(
+            camera.position,
+            (front_mult_far - right * half_h_side).cross(up)
+        );
+        let far_face = Plan::new(
+            camera.position + front_mult_far,
+            -front
+        );
+        let near_face = Plan::new(
+            camera.position + projection.znear * front,
+            front
+        );
+
+        (top_face, bottom_face, right_face, left_face, far_face, near_face)
+    }
+}
+
 // We need this for Rust to store our data correctly for the shaders
 #[repr(C)]
 // This is so we can store this in a buffer
@@ -69,6 +188,7 @@ pub struct CameraState {
     camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
     pub(crate) camera_controller: CameraController,
+    pub(crate) frustum: Frustum
 }
 
 impl CameraState {
@@ -123,6 +243,8 @@ impl CameraState {
             label: Some("camera_bind_group"),
         });
 
+        let frustum = Frustum::new(&camera, &projection, init_config);
+
         CameraState {
             projection,
             projection_uniform,
@@ -133,11 +255,13 @@ impl CameraState {
             camera_buffer,
             camera_bind_group,
             camera_controller,
+            frustum
         }
     }
 
     pub fn update(&mut self, dt: std::time::Duration, queue: &wgpu::Queue) {
         self.camera_controller.update_camera(&mut self.camera, dt);
+        self.frustum.update(&self.camera, &self.projection);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
         queue.write_buffer(

@@ -1,6 +1,7 @@
 #[derive(Debug, Clone)]
 pub struct InitialConfiguration {
     pub tile_size: (f32, f32, f32),
+    pub chunk_size: (f32, f32, f32),
     pub resource_files_directory: String,
     pub map_files_directory: String,
     pub font_dir_path: String,
@@ -23,6 +24,7 @@ impl Default for InitialConfiguration {
     fn default() -> Self {
         InitialConfiguration {
             tile_size: (1.0, 1.0, 1.0),
+            chunk_size: (16.0, 16.0, 16.0),
             resource_files_directory: String::from("resources"),
             map_files_directory: String::from("maps"),
             font_dir_path: String::from("resources/font"),

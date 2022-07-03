@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cgmath::Vector3;
 
@@ -10,10 +10,105 @@ pub mod text;
 use crate::{
     resources::{load_glb_model, load_sprite},
     state::GpuState,
-    temap
+    temap, camera
 };
 
 use self::{animation::Animation, model::InstancedModel, sprite::InstancedSprite, text::{InstancedText, TextReference}};
+
+#[derive(Debug)]
+struct RenderMatrix {
+    cells: Vec<Vec<Vec<InstanceReference>>>,
+    cols: usize,
+    chunk_size: (f32, f32, f32)
+}
+
+impl RenderMatrix {
+    fn new(chunk_size: (f32, f32, f32)) -> Self {
+        RenderMatrix {
+            cells: Vec::new(),
+            cols: 0,
+            chunk_size
+        }
+    }
+
+    fn register_instance(&mut self, reference: InstanceReference, position: cgmath::Vector3<f32>, (max_x, min_x, max_z, min_z): (f32, f32, f32, f32)) {
+        let max_x = max_x + position.x;
+        let min_x = min_x + position.x;
+        let max_z = max_z + position.z;
+        let min_z = min_z + position.z;
+        let corners = vec![
+            (max_x, max_z),
+            (max_x, min_z),
+            (min_x, max_z),
+            (min_x, min_z)
+        ];
+        let chunks = corners.into_iter().map(|(x, z)| {
+            // TODO: take into account that f32 can be negative, but row and col can never be negative
+            let row = ((z/self.chunk_size.2).floor()) as usize;
+            let col = ((x/self.chunk_size.0).floor()) as usize;
+            (row, col)
+        }).collect::<HashSet<(usize, usize)>>();
+        chunks.into_iter().for_each(|(row, col)| {
+            while self.cells.len() <= row {
+                self.cells.push(Vec::new())
+            };
+            let row_vec = self.cells.get_mut(row).unwrap();
+            while row_vec.len() <= col {
+                row_vec.push(Vec::new());
+            };
+            row_vec.get_mut(col).unwrap().push(reference.clone());
+            if col+1 > self.cols {
+                self.cols = col+1
+            }
+        });
+    }
+
+    fn unregister_instance(&mut self, reference: &InstanceReference, position: cgmath::Vector3<f32>, (max_x, min_x, max_z, min_z): (f32, f32, f32, f32)) {
+        let max_x = max_x + position.x;
+        let min_x = min_x + position.x;
+        let max_z = max_z + position.z;
+        let min_z = min_z + position.z;
+        let corners = vec![
+            (max_x, max_z),
+            (max_x, min_z),
+            (min_x, max_z),
+            (min_x, min_z)
+        ];
+        let chunks = corners.into_iter().map(|(x, z)| {
+            // TODO: take into account that f32 can be negative, but row and col can never be negative
+            let row = ((z/self.chunk_size.2).floor()) as usize;
+            let col = ((x/self.chunk_size.0).floor()) as usize;
+            (row, col)
+        }).collect::<HashSet<(usize, usize)>>();
+        chunks.into_iter().for_each(|(row, col)| {
+            let row_vec = self.cells.get_mut(row).unwrap();
+            let chunk = row_vec.get_mut(col).unwrap();
+            let pos = chunk.iter().enumerate().find(|(_, item)| **item == *reference).unwrap().0;
+            chunk.remove(pos);
+        });
+    }
+
+    fn update_rendered(&self, view_cone: &camera::Frustum) -> Vec<InstanceReference> {
+        let mut v = Vec::new();
+        for row in 0..self.cells.len() {
+            for col in 0..self.cols {
+                let cell = self.cells.get(row).unwrap().get(col);
+                match cell {
+                    Some(references )if references.len() > 0 => {
+                        if view_cone.is_inside(row, col) {
+                            for reference in references {
+                                v.push(reference.clone());
+                            }
+                        }
+                    },
+                    _ => (),
+                }
+            }
+        }
+
+        v
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -132,7 +227,7 @@ impl Instance for Instance2D {
 #[derive(Debug)]
 pub struct Instance3D {
     pub position: cgmath::Vector3<f32>,
-    pub animation: Option<Animation>
+    pub animation: Option<Animation>,
 }
 
 impl Instance3D {
@@ -145,7 +240,7 @@ impl Instance3D {
         let position = cgmath::Vector3{ x, y, z };
         Instance3D {
             position,
-            animation: None
+            animation: None,
         }
     }
 }
@@ -190,12 +285,14 @@ trait InstancedDraw {
     );
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Dimension {
     D2,
     D3,
 }
 
 /// Handle of a 3D model or 2D sprite. You will need it when changing their properties.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceReference {
     name: String,
     index: usize,
@@ -221,15 +318,18 @@ pub struct InstancesState {
     deleted_texts: Vec<usize>,
     pub layout: wgpu::BindGroupLayout,
     tile_size: (f32, f32, f32),
+    chunk_size: (f32, f32, f32),
     pub resources_path: String,
     pub default_texture_path: String,
     font: crate::model::Font,
+    render_matrix: RenderMatrix
 }
 
 impl InstancesState {
     pub fn new(
         layout: wgpu::BindGroupLayout,
         tile_size: (f32, f32, f32),
+        chunk_size: (f32, f32, f32),
         resources_path: String,
         default_texture_path: String,
         font_dir_path: String,
@@ -239,6 +339,7 @@ impl InstancesState {
         let texts = Vec::new();
         let deleted_texts = Vec::new();
         let font = crate::model::Font::new(font_dir_path);
+        let render_matrix = RenderMatrix::new(chunk_size);
 
         InstancesState {
             instances,
@@ -247,9 +348,11 @@ impl InstancesState {
             deleted_texts,
             layout,
             tile_size,
+            chunk_size,
             resources_path,
             default_texture_path,
             font,
+            render_matrix
         }
     }
 
@@ -266,10 +369,19 @@ impl InstancesState {
         let x = tile_position.0 * self.tile_size.0;
         let y = tile_position.1 * self.tile_size.1;
         let z = tile_position.2 * self.tile_size.2;
+        self.place_model_absolute(model_name, gpu, (x, y, z))
+    }
+
+    fn place_model_absolute(
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        (x, y, z): (f32, f32, f32),
+    ) -> InstanceReference {
         match self.instances.contains_key(model_name) {
             true => {
                 let instanced_m = self.instances.get_mut(model_name).unwrap();
-                instanced_m.add_instance(x, y, z, &gpu.device);
+                instanced_m.add_instance(x, y, z, &gpu.device, self.chunk_size);
             }
             false => {
                 let model = load_glb_model(
@@ -281,12 +393,12 @@ impl InstancesState {
                     &self.default_texture_path,
                 )
                 .unwrap();
-                let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
+                let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z, self.chunk_size);
                 self.instances.insert(model_name.to_string(), instanced_m);
             }
         }
 
-        InstanceReference {
+        let reference = InstanceReference {
             name: model_name.to_string(),
             index: self
                 .instances
@@ -296,7 +408,11 @@ impl InstancesState {
                 .len()
                 - 1,
             dimension: Dimension::D3,
-        }
+        };
+
+        self.render_matrix.register_instance(reference.clone(), cgmath::vec3(x, y, z), self.instances.get(model_name).unwrap().model.get_extremes());
+
+        reference
     }
 
     /// Creates a new 2D sprite at the specified position.
@@ -413,34 +529,8 @@ impl InstancesState {
     /// Load all 3D models from a .temap file.
     pub fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
         for (name, te_model) in map.models {
-            let model = load_glb_model(
-                &name,
-                &gpu.device,
-                &gpu.queue,
-                &self.layout,
-                self.resources_path.clone(),
-                &self.default_texture_path,
-            );
-            match model {
-                Ok(m) => {
-                    let mut instance_vec = Vec::new();
-                    for offset in te_model.offsets {
-                        let instance = Instance3D {
-                            position: cgmath::Vector3 {
-                                x: offset.x,
-                                y: offset.y,
-                                z: offset.z,
-                            },
-                            animation: None
-                        };
-                        instance_vec.push(instance);
-                    }
-                    self.instances.insert(
-                        name,
-                        InstancedModel::new_premade(m, &gpu.device, instance_vec),
-                    );
-                }
-                _ => (),
+            for offset in te_model.offsets {
+                self.place_model_absolute(&name, gpu, (offset.x, offset.y, offset.z));
             }
         }
     }
@@ -460,7 +550,9 @@ impl InstancesState {
             }
             Dimension::D3 => {
                 let model = self.instances.get_mut(&instance.name).unwrap();
+                self.render_matrix.unregister_instance(instance, model.instances.get(instance.index).unwrap().position, model.model.get_extremes());
                 model.move_instance(instance.index, direction, queue);
+                self.render_matrix.register_instance(instance.clone(), model.instances.get(instance.index).unwrap().position, model.model.get_extremes());
             }
         };
     }
@@ -480,7 +572,9 @@ impl InstancesState {
             }
             Dimension::D3 => {
                 let model = self.instances.get_mut(&instance.name).unwrap();
+                self.render_matrix.unregister_instance(instance, model.instances.get(instance.index).unwrap().position, model.model.get_extremes());
                 model.set_instance_position(instance.index, position, queue);
+                self.render_matrix.register_instance(instance.clone(), model.instances.get(instance.index).unwrap().position, model.model.get_extremes());
             }
         };
     }
@@ -624,7 +718,7 @@ impl InstancesState {
         sprite.instances.get_mut(instance.index).unwrap()
     }
 
-    fn get_mut_model(&mut self, instance: &InstanceReference) -> &mut Instance3D {
+    pub(crate) fn get_mut_model(&mut self, instance: &InstanceReference) -> &mut Instance3D {
         let model = self.instances.get_mut(&instance.name).unwrap();
         model.instances.get_mut(instance.index).unwrap()
     }
@@ -632,5 +726,16 @@ impl InstancesState {
     fn get_mut_text(&mut self, text: &TextReference) -> &mut Instance2D {
         let text = self.texts.get_mut(text.index).unwrap().as_mut().unwrap();
         &mut text.instance
+    }
+
+    pub(crate) fn mark_unculled(&mut self, instance: &mut InstanceReference, queue: &wgpu::Queue) {
+        let model = self.instances.get_mut(&instance.name).unwrap();
+        model.uncull_instance(queue, instance.index);
+    }
+
+    pub(crate) fn update_rendered(&mut self, frustum: &crate::camera::Frustum, queue: &wgpu::Queue) {
+        for mut instance in self.render_matrix.update_rendered(frustum) {
+            self.mark_unculled(&mut instance, queue)
+        }
     }
 }

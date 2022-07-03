@@ -144,6 +144,12 @@ pub struct Mesh {
     pub material: usize,
 }
 
+impl Mesh {
+    fn get_extremes(&self) -> (f32, f32, f32, f32) {
+        (self.max_x, self.min_x, self.max_z, self.min_z)
+    }
+}
+
 #[derive(Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
@@ -151,17 +157,38 @@ pub struct Model {
     pub materials: Vec<Material>,
 }
 
+impl Model {
+    pub fn get_extremes(&self) -> (f32, f32, f32, f32) {
+        let mut max_x = f32::NEG_INFINITY;
+        let mut min_x = f32::INFINITY;
+        let mut max_z = f32::NEG_INFINITY;
+        let mut min_z = f32::INFINITY;
+        self.meshes.iter().map(|mesh| {
+            mesh.get_extremes()
+        }).for_each(|(max, mix, maz, miz)| {
+            max_x = f32::max(max_x, max);
+            min_x = f32::min(min_x, mix);
+            max_z = f32::max(max_z, maz);
+            min_z = f32::min(min_z, miz);
+        });
+
+        self.transparent_meshes.iter().map(|mesh| {
+            mesh.get_extremes()
+        }).for_each(|(max, mix, maz, miz)| {
+            max_x = f32::max(max_x, max);
+            min_x = f32::min(min_x, mix);
+            max_z = f32::max(max_z, maz);
+            min_z = f32::min(min_z, miz);
+        });
+
+        (max_x, min_x, max_z, min_z)
+    }
+}
+
 pub trait DrawModel<'a> {
     fn draw_model_instanced(
         &mut self,
         model: &'a Model,
-        instances: Range<u32>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_model_instanced_with_material(
-        &mut self,
-        model: &'a Model,
-        material: &'a Material,
         instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
@@ -196,18 +223,6 @@ where
         }
     }
 
-    fn draw_model_instanced_with_material(
-        &mut self,
-        model: &'b Model,
-        material: &'b Material,
-        instances: Range<u32>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.meshes {
-            self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group)
-        }
-    }
-
     fn draw_mesh(
         &mut self,
         mesh: &'b Mesh,
@@ -239,13 +254,6 @@ pub trait DrawTransparentModel<'a> {
         instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
-    fn tdraw_model_instanced_with_material(
-        &mut self,
-        model: &'a Model,
-        material: &'a Material,
-        instances: Range<u32>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
     fn tdraw_mesh(
         &mut self,
         mesh: &'a Mesh,
@@ -274,18 +282,6 @@ where
         for mesh in &model.transparent_meshes {
             let material = &model.materials[mesh.material];
             self.tdraw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
-        }
-    }
-
-    fn tdraw_model_instanced_with_material(
-        &mut self,
-        model: &'b Model,
-        material: &'b Material,
-        instances: Range<u32>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.meshes {
-            self.tdraw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group)
         }
     }
 
