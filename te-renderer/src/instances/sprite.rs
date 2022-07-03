@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use wgpu::util::DeviceExt;
 
 use crate::model;
@@ -155,24 +157,28 @@ impl InstancedDraw for InstancedSprite {
     }
 }
 
+#[derive(Debug)]
 pub struct AnimatedSprite {
-    pub sprite: model::Material,
-    width: f32,
-    height: f32,
+    sprites: Vec<model::Material>,
     pub instance: Instance2D,
     pub instance_buffer: wgpu::Buffer,
     pub depth: f32,
+    start_time: RefCell<std::time::Instant>,
+    frame_delay: std::time::Duration,
+    looping: bool
 }
 
 impl AnimatedSprite {
     pub fn new(
-        sprite: model::Material,
+        sprites: Vec<model::Material>,
         device: &wgpu::Device,
         x: f32,
         y: f32,
         depth: f32,
         w: f32,
         h: f32,
+        frame_delay: std::time::Duration,
+        looping: bool
     ) -> Self {
         let mut instance = Instance2D {
             position: cgmath::Vector2 { x, y },
@@ -188,12 +194,36 @@ impl AnimatedSprite {
         });
 
         AnimatedSprite {
-            sprite,
-            width: w,
-            height: h,
+            sprites,
             instance,
             instance_buffer,
             depth,
+            start_time: RefCell::new(std::time::Instant::now()),
+            frame_delay,
+            looping
+        }
+    }
+
+    pub fn play_animation(&mut self) {
+        self.start_time = RefCell::new(std::time::Instant::now())
+    }
+
+    pub fn get_sprite(&self) -> &model::Material {
+        let now = std::time::Instant::now();
+        self.get_sprite_rec(now)
+    }
+
+    fn get_sprite_rec(&self, now: std::time::Instant) -> &model::Material {
+        let dt = now - *self.start_time.borrow();
+        let frame = (dt.as_secs_f32() / self.frame_delay.as_secs_f32()).floor() as usize;
+        match self.sprites.get(frame) {
+            Some(frame) => frame,
+            None => if self.looping {
+                *self.start_time.borrow_mut() += self.frame_delay * self.sprites.len() as u32;
+                self.get_sprite_rec(now)
+            } else {
+                self.sprites.last().unwrap()
+            },
         }
     }
 

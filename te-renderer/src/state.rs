@@ -493,78 +493,22 @@ impl State {
     }
 
     pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
-        use model::DrawSprite;
-        use model::DrawText;
+        use crate::instances::Draw2D;
         render_pass.set_pipeline(&self.sprite_render_pipeline);
-        let mut sorted_texts: Vec<&InstancedText> = self
+        let mut sorted_2d: Vec<&dyn Draw2D> = self
             .instances
             .texts
             .iter()
             .filter(|text| text.is_some())
-            .map(|text| text.as_ref().unwrap())
+            .map(|text| text.as_ref().unwrap() as &dyn Draw2D)
             .collect();
-        sorted_texts.sort_by(|inst1, inst2| inst1.depth.partial_cmp(&inst2.depth).unwrap());
-        let mut sorted_sprites: Vec<(&String, &InstancedSprite)> =
-            self.instances.instances_2d.iter().collect();
-        sorted_sprites
-            .sort_by(|(_n1, inst1), (_n2, inst2)| inst1.depth.partial_cmp(&inst2.depth).unwrap());
-        let mut index_sprite = 0;
-        let mut index_text = 0;
-        loop {
-            match sorted_sprites.get(index_sprite) {
-                Some((_name, instanced_sprite)) => match sorted_texts.get(index_text) {
-                    Some(instanced_text) => match instanced_text
-                        .depth
-                        .partial_cmp(&instanced_sprite.depth)
-                        .unwrap()
-                    {
-                        std::cmp::Ordering::Less => {
-                            render_pass
-                                .set_vertex_buffer(1, instanced_text.instance_buffer.slice(..));
-                            render_pass.draw_text(
-                                &instanced_text.image,
-                                &self.camera.projection_bind_group,
-                                &self.sprite_vertices_buffer,
-                            );
-                            index_text += 1;
-                        }
-                        std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => {
-                            render_pass
-                                .set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
-                            render_pass.draw_sprite_instanced(
-                                &instanced_sprite.sprite,
-                                0..instanced_sprite.instances.len() as u32,
-                                &self.camera.projection_bind_group,
-                                &self.sprite_vertices_buffer,
-                            );
-                            index_sprite += 1;
-                        }
-                    },
-                    None => {
-                        render_pass
-                            .set_vertex_buffer(1, instanced_sprite.instance_buffer.slice(..));
-                        render_pass.draw_sprite_instanced(
-                            &instanced_sprite.sprite,
-                            0..instanced_sprite.instances.len() as u32,
-                            &self.camera.projection_bind_group,
-                            &self.sprite_vertices_buffer,
-                        );
-                        index_sprite += 1;
-                    }
-                },
-                None => match sorted_texts.get(index_text) {
-                    Some(instanced_text) => {
-                        render_pass.set_vertex_buffer(1, instanced_text.instance_buffer.slice(..));
-                        render_pass.draw_text(
-                            &instanced_text.image,
-                            &self.camera.projection_bind_group,
-                            &self.sprite_vertices_buffer,
-                        );
-                        index_text += 1;
-                    }
-                    None => break,
-                },
-            }
+        let sprites: Vec<&dyn Draw2D> = self.instances.instances_2d.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
+        sorted_2d.extend(sprites.into_iter());
+        let anim_sprites: Vec<&dyn Draw2D> = self.instances.animated_sprites.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
+        sorted_2d.extend(anim_sprites.into_iter());
+        sorted_2d.sort_by(|inst1, inst2| inst1.get_depth().partial_cmp(&inst2.get_depth()).unwrap());
+        for draw in sorted_2d {
+            draw.draw(render_pass, &self.camera.projection_bind_group, &self.sprite_vertices_buffer)
         }
     }
 

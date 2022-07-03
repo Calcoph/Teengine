@@ -13,7 +13,7 @@ use crate::{
     temap, camera
 };
 
-use self::{animation::Animation, model::InstancedModel, sprite::InstancedSprite, text::{InstancedText, TextReference}};
+use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, TextReference}};
 
 #[derive(Debug)]
 struct RenderMatrix {
@@ -288,6 +288,7 @@ trait InstancedDraw {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Dimension {
     D2,
+    Anim2D,
     D3,
 }
 
@@ -314,6 +315,7 @@ impl InstanceReference {
 pub struct InstancesState {
     pub instances: HashMap<String, InstancedModel>,
     pub instances_2d: HashMap<String, InstancedSprite>,
+    pub animated_sprites: HashMap<String, AnimatedSprite>,
     pub texts: Vec<Option<InstancedText>>,
     deleted_texts: Vec<usize>,
     pub layout: wgpu::BindGroupLayout,
@@ -336,6 +338,7 @@ impl InstancesState {
     ) -> Self {
         let instances = HashMap::new();
         let instances_2d = HashMap::new();
+        let animated_sprites = HashMap::new();
         let texts = Vec::new();
         let deleted_texts = Vec::new();
         let font = crate::model::Font::new(font_dir_path);
@@ -344,6 +347,7 @@ impl InstancesState {
         InstancesState {
             instances,
             instances_2d,
+            animated_sprites,
             texts,
             deleted_texts,
             layout,
@@ -471,6 +475,63 @@ impl InstancesState {
         }
     }
 
+    pub fn place_animated_sprite(
+        &mut self,
+        sprite_names: Vec<&str>,
+        gpu: &GpuState,
+        size: Option<(f32, f32)>,
+        position: (f32, f32, f32),
+        frame_delay: std::time::Duration,
+        looping: bool
+    ) -> InstanceReference {
+        let mut name = sprite_names.get(0).unwrap().to_string();
+        while self.animated_sprites.contains_key(&name) {
+            name += "A" ;
+        }
+        let sprites = sprite_names.into_iter()
+            .map(|sprite_name|
+                load_sprite(
+                    sprite_name,
+                    &gpu.device,
+                    &gpu.queue,
+                    &self.layout,
+                    self.resources_path.clone(),
+                )
+                .unwrap()
+            ).collect::<Vec<_>>();
+        let (width, height) = (sprites.get(0).unwrap().1, sprites.get(0).unwrap().2);
+        let sprites = sprites.into_iter().map(|(sprite, _, _)| sprite).collect();
+        let (width, height) = match size {
+            Some((w, h)) => (w, h),
+            None => (width, height),
+        };
+        let instanced_s = AnimatedSprite::new(
+            sprites,
+            &gpu.device,
+            position.0,
+            position.1,
+            position.2,
+            width,
+            height,
+            frame_delay,
+            looping
+        );
+        self.animated_sprites
+            .insert(name.clone(), instanced_s);
+
+        InstanceReference {
+            name: name.clone(),
+            index: self
+                .instances_2d
+                .get(&name)
+                .unwrap()
+                .instances
+                .len()
+                - 1,
+            dimension: Dimension::Anim2D,
+        }
+    }
+
     /// Creates a new text at the specified position
     /// ### PANICS
     /// will panic if the characters' files are not found
@@ -554,11 +615,15 @@ impl InstancesState {
                 model.move_instance(instance.index, direction, queue);
                 self.render_matrix.register_instance(instance.clone(), model.instances.get(instance.index).unwrap().position, model.model.get_extremes());
             }
+            Dimension::Anim2D => {
+                let model = self.animated_sprites.get_mut(&instance.name).unwrap();
+                model.move_instance(instance.index, direction, queue);
+            },
         };
     }
 
     /// Move a 3D model or a 2D sprite to an absolute position.
-    /// /// Ignores z value on 2D sprites.
+    /// Ignores z value on 2D sprites.
     pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
         &mut self,
         instance: &InstanceReference,
@@ -576,6 +641,10 @@ impl InstancesState {
                 model.set_instance_position(instance.index, position, queue);
                 self.render_matrix.register_instance(instance.clone(), model.instances.get(instance.index).unwrap().position, model.model.get_extremes());
             }
+            Dimension::Anim2D => {
+                let model = self.animated_sprites.get_mut(&instance.name).unwrap();
+                model.set_instance_position(instance.index, position, queue)
+            },
         };
     }
 
@@ -591,6 +660,11 @@ impl InstancesState {
                 let model = self.instances.get(&instance.name).unwrap();
                 model.instances.get(instance.index).unwrap().position.into()
             }
+            Dimension::Anim2D => {
+                let sprite = self.animated_sprites.get(&instance.name).unwrap();
+                let position = sprite.instance.position;
+                (position.x, position.y, sprite.depth)
+            },
         }
     }
 
@@ -609,6 +683,10 @@ impl InstancesState {
                 sprite.resize(instance.index, new_size, queue);
             }
             Dimension::D3 => panic!("That is not a sprite"),
+            Dimension::Anim2D => {
+                let sprite = self.animated_sprites.get_mut(&instance.name).unwrap();
+                sprite.resize(instance.index, new_size, queue);
+            },
         };
     }
 
@@ -622,6 +700,10 @@ impl InstancesState {
                 sprite.size.into()
             }
             Dimension::D3 => panic!("That is not a sprite"),
+            Dimension::Anim2D => {
+                let sprite = self.get_anim_sprite(instance);
+                sprite.size.into()
+            },
         }
     }
 
@@ -691,6 +773,7 @@ impl InstancesState {
         match instance.dimension {
             Dimension::D2 => self.get_mut_sprite(instance).animation = Some(animation),
             Dimension::D3 => self.get_mut_model(instance).animation = Some(animation),
+            Dimension::Anim2D => todo!(),
         }
     }
 
@@ -737,5 +820,64 @@ impl InstancesState {
         for mut instance in self.render_matrix.update_rendered(frustum) {
             self.mark_unculled(&mut instance, queue)
         }
+    }
+
+    fn get_anim_sprite(&self, instance: &InstanceReference) -> &Instance2D {
+        let sprite = self.animated_sprites.get(&instance.name).unwrap();
+        &sprite.instance
+    }
+}
+
+pub(crate) trait Draw2D {
+    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer);
+    fn get_depth(&self) -> f32;
+}
+
+impl Draw2D for InstancedText {
+    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer) {
+        use crate::model::DrawText;
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        render_pass.draw_text(
+            &self.image,
+            projection_bind_group,
+            buffer,
+        );
+    }
+
+    fn get_depth(&self) -> f32 {
+        self.depth
+    }
+}
+
+impl Draw2D for InstancedSprite {
+    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer) {
+        use crate::model::DrawSprite;
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        render_pass.draw_sprite_instanced(
+            &self.sprite,
+            0..self.instances.len() as u32,
+            projection_bind_group,
+            buffer,
+        );
+    }
+
+    fn get_depth(&self) -> f32 {
+        self.depth
+    }
+}
+
+impl Draw2D for AnimatedSprite {
+    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer) {
+        use crate::model::DrawText;
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        render_pass.draw_text(
+            &self.get_sprite(),
+            projection_bind_group,
+            buffer,
+        );
+    }
+
+    fn get_depth(&self) -> f32 {
+        self.depth
     }
 }
