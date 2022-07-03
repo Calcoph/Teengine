@@ -520,14 +520,8 @@ impl InstancesState {
             .insert(name.clone(), instanced_s);
 
         InstanceReference {
-            name: name.clone(),
-            index: self
-                .instances_2d
-                .get(&name)
-                .unwrap()
-                .instances
-                .len()
-                - 1,
+            name,
+            index: 0,
             dimension: Dimension::Anim2D,
         }
     }
