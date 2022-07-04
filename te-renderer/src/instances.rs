@@ -143,6 +143,12 @@ impl RenderMatrix {
         self.viewed_chunks_cache = Some(viewed_chunks);
         v
     }
+
+    fn empty(&mut self) {
+        self.cells = Vec::new();
+        self.cols = 0;
+        self.viewed_chunks_cache = Some(HashSet::new());
+    }
 }
 
 #[repr(C)]
@@ -608,6 +614,14 @@ impl InstancesState {
     pub fn forget_text(&mut self, text: TextReference) {
         self.texts.get_mut(text.index).unwrap().take();
         self.deleted_texts.push(text.index)
+    }
+
+    pub fn forget_all_instances(&mut self) {
+        self.animated_sprites = HashMap::new();
+        self.sprite_instances = HashMap::new();
+        self.opaque_instances = HashMap::new();
+        self.transparent_instances = HashSet::new();
+        self.render_matrix.empty();
     }
 
     /// Saves all the 3D models' positions in a .temap file.
