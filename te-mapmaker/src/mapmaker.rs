@@ -377,7 +377,7 @@ impl RendererState {
                         stencil_ops: None
                     })
                 });
-                state.draw_opaque(&mut render_pass, &gpu.queue);
+                state.draw_opaque(&mut render_pass);
             }
             let time_elapsed = std::time::Instant::now() - self.blink_time;
             let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
@@ -454,7 +454,7 @@ impl RendererState {
                         stencil_ops: None
                     })
                 });
-                state.draw_transparent(&mut render_pass, &gpu.queue);
+                state.draw_transparent(&mut render_pass);
             }
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),

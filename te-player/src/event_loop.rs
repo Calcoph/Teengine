@@ -42,6 +42,6 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, 
             _ => ()
         }
 
-        event_handler(event)
+        event_handler(event);
     })
 }

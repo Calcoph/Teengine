@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use wgpu::util::DeviceExt;
 
 use crate::model;
@@ -13,7 +11,7 @@ pub struct InstancedModel {
     pub instances: Vec<Instance3D>,
     pub instance_buffer: wgpu::Buffer,
     pub unculled_instances: usize,
-    unculled_indices: HashSet<usize>
+    unculled_indices: Vec<usize>
 }
 
 impl InstancedModel {
@@ -39,7 +37,7 @@ impl InstancedModel {
             instances,
             instance_buffer,
             unculled_instances: 0,
-            unculled_indices: HashSet::new()
+            unculled_indices: Vec::new()
         }
     }
 
@@ -74,13 +72,13 @@ impl InstancedModel {
                 bytemuck::cast_slice(&[self.instances.get_mut(index).unwrap().to_raw()]),
             );
             self.unculled_instances += 1;
-            self.unculled_indices.insert(index);
+            self.unculled_indices.push(index);
         }
     }
 
     pub(crate) fn cull_all(&mut self) {
         self.unculled_instances = 0;
-        self.unculled_indices = HashSet::new();
+        self.unculled_indices = Vec::new();
     }
 }
 

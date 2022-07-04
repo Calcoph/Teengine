@@ -380,7 +380,7 @@ impl State {
                 }
             }
     
-            for (_name, sprite) in &mut self.instances.instances_2d {
+            for (_name, sprite) in &mut self.instances.sprite_instances {
                 sprite.animate(queue);
             }
         }
@@ -424,8 +424,8 @@ impl State {
                             stencil_ops: None,
                         }),
                     });
-            self.draw_opaque(&mut render_pass, &gpu.queue);
-            self.draw_transparent(&mut render_pass, &gpu.queue);
+            self.draw_opaque(&mut render_pass);
+            self.draw_transparent(&mut render_pass);
         }
 
         if self.render_2d {
@@ -448,7 +448,7 @@ impl State {
                         ],
                         depth_stencil_attachment: None,
                     });
-            self.draw_sprites(&mut render_pass, &gpu.queue);
+            self.draw_sprites(&mut render_pass);
         }
     }
 
@@ -460,10 +460,10 @@ impl State {
         gpu.queue.submit(encoders);
     }
 
-    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
+    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use model::DrawModel;
         render_pass.set_pipeline(&self.render_pipeline);
-        for (_name, instanced_model) in self.instances.instances.iter().filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0) {
+        for (_name, instanced_model) in self.instances.opaque_instances.iter().filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0) {
             render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
             render_pass.draw_model_instanced(
                 &instanced_model.model,
@@ -473,15 +473,15 @@ impl State {
         }
     }
 
-    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
+    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use model::DrawTransparentModel;
         render_pass.set_pipeline(&self.transparent_render_pipeline);
-        for (_name, instanced_model) in self
+        for instanced_model in self
             .instances
-            .instances
+            .transparent_instances
             .iter()
-            .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0)
-            .filter(|(_name, instanced_model)| instanced_model.model.transparent_meshes.len() > 0)
+            .map(|name| self.instances.opaque_instances.get(name).unwrap())
+            .filter(|instanced_model| instanced_model.unculled_instances > 0)
         {
             render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
             render_pass.tdraw_model_instanced(
@@ -492,7 +492,7 @@ impl State {
         }
     }
 
-    pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, queue: &wgpu::Queue) {
+    pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use crate::instances::Draw2D;
         render_pass.set_pipeline(&self.sprite_render_pipeline);
         let mut sorted_2d: Vec<&dyn Draw2D> = self
@@ -502,7 +502,7 @@ impl State {
             .filter(|text| text.is_some())
             .map(|text| text.as_ref().unwrap() as &dyn Draw2D)
             .collect();
-        let sprites: Vec<&dyn Draw2D> = self.instances.instances_2d.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
+        let sprites: Vec<&dyn Draw2D> = self.instances.sprite_instances.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
         sorted_2d.extend(sprites.into_iter());
         let anim_sprites: Vec<&dyn Draw2D> = self.instances.animated_sprites.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
         sorted_2d.extend(anim_sprites.into_iter());
@@ -513,7 +513,7 @@ impl State {
     }
 
     fn cull_all(&mut self) {
-        for (_name, model) in self.instances.instances.iter_mut() {
+        for (_name, model) in self.instances.opaque_instances.iter_mut() {
             model.cull_all();
         }
     }
