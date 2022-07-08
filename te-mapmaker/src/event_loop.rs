@@ -81,8 +81,7 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     gilrs_core::EventType::Disconnected => (),//println!("TODO: Disconnected ({:?})", event.device_id), // TODO
                 }
             },
-            Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
-            Event::Resumed => (), // TODO: confirm that it unpauses the game
+            Event::Suspended => *control_flow = ControlFlow::Wait,
             Event::MainEventsCleared => window.request_redraw(),
             Event::RedrawRequested(window_id) => if *window_id == window.id() {
                 let now = std::time::Instant::now();
@@ -99,8 +98,6 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     Err(e) => eprintln!("{:?}", e), 
                 }
             },
-            Event::RedrawEventsCleared => (), // TODO
-            Event::LoopDestroyed => (),//println!("TODO: LoopDestroyed"), // TODO: clean memory or save settings or whatever
             _ => () // ignore windowevents that aren't for current window
         }
 

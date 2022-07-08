@@ -328,6 +328,7 @@ fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &Mode
                 };
                 if name.contains(&window_state.search_str_temap) && name != "" {
                     if ui.button(name) {
+                        state.instances.forget_all_instances();
                         state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu); // TODO: don't hardcode "/"
                     };
                 }
@@ -350,35 +351,6 @@ impl RendererState {
         });
         {    
             use te_renderer::model::DrawModel;
-            {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Render Pass"),
-                    color_attachments: &[
-                        wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: 0.0,
-                                    g: 0.0,
-                                    b: 0.0,
-                                    a: 1.0
-                                }),
-                                store: true
-                            }
-                        }
-                    ],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &gpu.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true
-                        }),
-                        stencil_ops: None
-                    })
-                });
-                state.draw_opaque(&mut render_pass);
-            }
             let time_elapsed = std::time::Instant::now() - self.blink_time;
             let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
             let mut instances = 0;
@@ -411,6 +383,7 @@ impl RendererState {
                         stencil_ops: None
                     })
                 });
+                state.draw_opaque(&mut render_pass);
                 if model_visible {
                     instances = modifying_instance.into_renderable(&gpu.device, tile_size);
                     buffer = modifying_instance.buffer.as_ref();
@@ -426,71 +399,17 @@ impl RendererState {
                 } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
                     self.blink_time = std::time::Instant::now();
                 }
-            }
-            {
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Render Pass"),
-                    color_attachments: &[
-                        wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: 0.0,
-                                    g: 0.0,
-                                    b: 0.0,
-                                    a: 1.0
-                                }),
-                                store: true
-                            }
-                        }
-                    ],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &gpu.depth_texture.view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true
-                        }),
-                        stencil_ops: None
-                    })
-                });
                 state.draw_transparent(&mut render_pass);
-            }
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[
-                    wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0
-                            }),
-                            store: true
-                        }
+                use te_renderer::model::DrawTransparentModel;
+                if model_visible {
+                    if model.unwrap().transparent_meshes.len() > 0 {
+                        render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                        render_pass.tdraw_model_instanced(
+                            &model.unwrap(),
+                            0..instances as u32,
+                            &state.camera.camera_bind_group,
+                        );
                     }
-                ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &gpu.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true
-                    }),
-                    stencil_ops: None
-                })
-            });
-            use te_renderer::model::DrawTransparentModel;
-            if model_visible {
-                if model.unwrap().transparent_meshes.len() > 0 {
-                    render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
-                    render_pass.tdraw_model_instanced(
-                        &model.unwrap(),
-                        0..instances as u32,
-                        &state.camera.camera_bind_group,
-                    );
                 }
             }
         }
