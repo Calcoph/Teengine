@@ -248,14 +248,14 @@ impl ImguiState {
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
             self.renderer.render(ui.render(), &self.gpu.queue, &self.gpu.device, &mut render_pass).expect("Rendering failed");
@@ -360,7 +360,7 @@ impl RendererState {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
                     color_attachments: &[
-                        wgpu::RenderPassColorAttachment {
+                        Some(wgpu::RenderPassColorAttachment {
                             view: &view,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -372,7 +372,7 @@ impl RendererState {
                                 }),
                                 store: true
                             }
-                        }
+                        })
                     ],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &gpu.depth_texture.view,

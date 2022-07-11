@@ -13,7 +13,7 @@ gilrs-core = "0.4.0"
 # renderer
 env_logger = "0.9"
 log = "0.4"
-wgpu = "0.12"
+wgpu = "0.13.1"
 pollster = "0.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 cgmath = "0.18"
@@ -31,9 +31,6 @@ version = "1.0"
 version = "0.24"
 default-features = false
 features = ["png", "jpeg"]
-
-[dependencies.imgui-wgpu]
-git = "https://github.com/Yatekii/imgui-wgpu-rs.git"
 
 [dependencies.te-renderer]
 path = "../te-renderer"

@@ -62,7 +62,7 @@ impl GpuState {
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_preferred_format(&adapter).unwrap(),
+            format: surface.get_supported_formats(&adapter)[0],
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
@@ -401,7 +401,7 @@ impl State {
                         label: Some("Render Pass"),
                         color_attachments: &[
                             // This is what [[location(0)]] in the fragment shader targets
-                            wgpu::RenderPassColorAttachment {
+                            Some(wgpu::RenderPassColorAttachment {
                                 view: &view,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
@@ -413,7 +413,7 @@ impl State {
                                     }),
                                     store: true,
                                 },
-                            },
+                            }),
                         ],
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                             view: &gpu.depth_texture.view,
@@ -437,14 +437,14 @@ impl State {
                         label: Some("Render Pass"),
                         color_attachments: &[
                             // This is what [[location(0)]] in the fragment shader targets
-                            wgpu::RenderPassColorAttachment {
+                            Some(wgpu::RenderPassColorAttachment {
                                 view: &view,
                                 resolve_target: None,
                                 ops: wgpu::Operations {
                                     load: wgpu::LoadOp::Load,
                                     store: true,
                                 },
-                            },
+                            }),
                         ],
                         depth_stencil_attachment: None,
                     });
@@ -528,7 +528,7 @@ fn create_render_pipeline(
     shader: wgpu::ShaderModuleDescriptor,
     transparent: bool,
 ) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(&shader);
+    let shader = device.create_shader_module(shader);
     let entry_point = match transparent {
         true => "fs_main",
         false => "fs_mask",
@@ -545,11 +545,11 @@ fn create_render_pipeline(
         fragment: Some(wgpu::FragmentState {
             module: &shader,
             entry_point,
-            targets: &[wgpu::ColorTargetState {
+            targets: &[Some(wgpu::ColorTargetState {
                 format: color_format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
-            }],
+            })],
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -588,7 +588,7 @@ fn create_2d_render_pipeline(
     shader: wgpu::ShaderModuleDescriptor,
     transparent: bool,
 ) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(&shader);
+    let shader = device.create_shader_module(shader);
     let entry_point = match transparent {
         true => "fs_main",
         false => "fs_mask",
@@ -605,11 +605,11 @@ fn create_2d_render_pipeline(
         fragment: Some(wgpu::FragmentState {
             module: &shader,
             entry_point,
-            targets: &[wgpu::ColorTargetState {
+            targets: &[Some(wgpu::ColorTargetState {
                 format: color_format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
-            }],
+            })],
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,

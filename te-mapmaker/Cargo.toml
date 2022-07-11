@@ -11,18 +11,16 @@ gilrs-core = "0.4.0"
 imgui = "0.8"
 imgui-winit-support = { version = "0.8", default-features = false, features = ["winit-26"] }
 env_logger = "0.9"
-wgpu = "0.12"
+wgpu = "0.13.1"
 cgmath = "0.18"
 pollster = "0.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
+imgui-wgpu = "0.20.0"
 
 [dependencies.image]
 version = "0.24"
 default-features = false
 features = ["png", "jpeg"]
-
-[dependencies.imgui-wgpu]
-git = "https://github.com/Yatekii/imgui-wgpu-rs.git#fb2858db38ea38c3de89c1e6999638e07b3ed756"
 
 [dependencies.te-renderer]
 path = "../te-renderer"
