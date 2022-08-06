@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Range};
 
 use image::{ImageBuffer, Rgba};
 
-use crate::{state::GpuState, texture};
+use crate::{state::GpuState, texture, instances};
 
 pub trait Vertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
@@ -193,6 +193,73 @@ impl Mesh {
 }
 
 #[derive(Debug)]
+pub struct AnimatedMesh {
+    pub name: String,
+    pub min_x: f32,
+    pub max_x: f32,
+    pub min_z: f32,
+    pub max_z: f32,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_elements: u32,
+    pub materials: Vec<usize>,
+    pub selected_material: usize
+}
+
+impl AnimatedMesh {
+    pub fn new(name: String, model_name: &str, vertices: Vec<ModelVertex>, indices: Vec<u32>, materials: Vec<usize>, device: &wgpu::Device) -> AnimatedMesh {
+        let mut max_x = f32::NEG_INFINITY;
+        let mut min_x = f32::INFINITY;
+        let mut max_z = f32::NEG_INFINITY;
+        let mut min_z = f32::INFINITY;
+        vertices
+            .iter()
+            .map(|vertex| (vertex.position[0], vertex.position[2]))
+            .for_each(|(x, z)| {
+                max_x = f32::max(max_x, x);
+                min_x = f32::min(min_x, x);
+                max_z = f32::max(max_z, z);
+                min_z = f32::min(min_z, z);
+            });
+
+        use wgpu::util::DeviceExt;
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{:?} Vertex Buffer", model_name)),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{:?} Index Buffer", model_name)),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_elements = indices.len() as u32;
+        AnimatedMesh {
+            name: name.clone(),
+            max_x,
+            min_x,
+            max_z,
+            min_z,
+            vertex_buffer,
+            index_buffer,
+            num_elements,
+            materials,
+            selected_material: 0
+        }
+    }
+
+    fn get_extremes(&self) -> (f32, f32, f32, f32) {
+        (self.max_x, self.min_x, self.max_z, self.min_z)
+    }
+
+    fn animate(&mut self, material_index: usize) {
+        self.selected_material = material_index;
+    }
+}
+
+#[derive(Debug)]
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub transparent_meshes: Vec<Mesh>,
@@ -227,6 +294,109 @@ impl Model {
     }
 }
 
+#[derive(Debug)]
+pub struct AnimatedModel {
+    pub meshes: Vec<AnimatedMesh>,
+    pub transparent_meshes: Vec<AnimatedMesh>,
+    pub materials: Vec<Material>,
+    pub instance: instances::Instance3D,
+    pub instance_buffer: wgpu::Buffer,
+    pub unculled_instance: bool
+}
+
+impl AnimatedModel {
+    pub fn get_extremes(&self) -> (f32, f32, f32, f32) {
+        let mut max_x = f32::NEG_INFINITY;
+        let mut min_x = f32::INFINITY;
+        let mut max_z = f32::NEG_INFINITY;
+        let mut min_z = f32::INFINITY;
+        self.meshes.iter().map(|mesh| {
+            mesh.get_extremes()
+        }).for_each(|(max, mix, maz, miz)| {
+            max_x = f32::max(max_x, max);
+            min_x = f32::min(min_x, mix);
+            max_z = f32::max(max_z, maz);
+            min_z = f32::min(min_z, miz);
+        });
+
+        self.transparent_meshes.iter().map(|mesh| {
+            mesh.get_extremes()
+        }).for_each(|(max, mix, maz, miz)| {
+            max_x = f32::max(max_x, max);
+            min_x = f32::min(min_x, mix);
+            max_z = f32::max(max_z, maz);
+            min_z = f32::min(min_z, miz);
+        });
+
+        (max_x, min_x, max_z, min_z)
+    }
+
+    pub fn animate(&mut self, mesh_index: usize, material_index: usize) {
+        self.meshes.get_mut(mesh_index).unwrap().animate(material_index);
+    }
+
+    pub(crate) fn uncull_instance(&mut self, queue: &wgpu::Queue) {
+        if !self.unculled_instance {
+            let unculled_instances = if self.unculled_instance {
+                1
+            } else {
+                0
+            };
+            queue.write_buffer(
+                &self.instance_buffer,
+                (unculled_instances * std::mem::size_of::<InstanceRaw>())
+                    .try_into()
+                    .unwrap(),
+                bytemuck::cast_slice(&[self.instance.to_raw()]),
+            );
+            self.unculled_instance = true;
+        }
+    }
+
+    pub(crate) fn cull_all(&mut self) {
+        self.unculled_instance = true;
+    }
+}
+
+use crate::instances::{InstancedDraw, InstanceRaw};
+use crate::instances::Instance;
+impl InstancedDraw for AnimatedModel {
+    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        index: usize,
+        direction: V,
+        queue: &wgpu::Queue,
+    ) {
+        self.instance.move_direction(direction);
+        let raw = self.instance.to_raw();
+        queue.write_buffer(
+            &self.instance_buffer,
+            (index * std::mem::size_of::<InstanceRaw>())
+                .try_into()
+                .unwrap(),
+            bytemuck::cast_slice(&[raw]),
+        );
+    }
+
+    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        index: usize,
+        position: P,
+        queue: &wgpu::Queue,
+    ) {
+        self.instance.move_to(position);
+        let raw = self.instance.to_raw();
+        queue.write_buffer(
+            &self.instance_buffer,
+            (index * std::mem::size_of::<InstanceRaw>())
+                .try_into()
+                .unwrap(),
+            bytemuck::cast_slice(&[raw]),
+        );
+    }
+}
+
+
 pub trait DrawModel<'a> {
     fn draw_model_instanced(
         &mut self,
@@ -234,10 +404,23 @@ pub trait DrawModel<'a> {
         instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
+    fn draw_animated_model_instanced(
+        &mut self,
+        model: &'a AnimatedModel,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
     fn draw_mesh(
         &mut self,
         mesh: &'a Mesh,
         material: &'a Material,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
+    fn draw_animated_mesh_instanced(
+        &mut self,
+        mesh: &'a AnimatedMesh,
+        material: &'a Material,
+        instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_mesh_instanced(
@@ -265,6 +448,19 @@ where
         }
     }
 
+    fn draw_animated_model_instanced(
+        &mut self,
+        model: &'b AnimatedModel,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        for mesh in &model.meshes {
+            let material = mesh.materials[mesh.selected_material];
+            let material = &model.materials[material];
+            self.draw_animated_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+        }
+    }
+
     fn draw_mesh(
         &mut self,
         mesh: &'b Mesh,
@@ -274,6 +470,20 @@ where
         self.draw_mesh_instanced(mesh, material, 0..1, camera_bind_group);
     }
 
+    fn draw_animated_mesh_instanced(
+        &mut self,
+        mesh: &'b AnimatedMesh,
+        material: &'b Material,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_bind_group(0, camera_bind_group, &[]);
+        self.set_bind_group(1, &material.bind_group, &[]);
+        self.draw_indexed(0..mesh.num_elements, 0, instances);
+    }
+    
     fn draw_mesh_instanced(
         &mut self,
         mesh: &'b Mesh,
@@ -296,10 +506,23 @@ pub trait DrawTransparentModel<'a> {
         instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
+    fn tdraw_animated_model_instanced(
+        &mut self,
+        model: &'a AnimatedModel,
+        instances: Range<u32>,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
     fn tdraw_mesh(
         &mut self,
         mesh: &'a Mesh,
         material: &'a Material,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
+    fn tdraw_animated_mesh_instanced(
+        &mut self,
+        mesh: &'a AnimatedMesh,
+        material: &'a Material,
+        instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
     fn tdraw_mesh_instanced(
@@ -327,6 +550,19 @@ where
         }
     }
 
+    fn tdraw_animated_model_instanced(
+        &mut self,
+        model: &'b AnimatedModel,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        for mesh in &model.transparent_meshes {
+            let material = mesh.materials[mesh.selected_material];
+            let material = &model.materials[material];
+            self.tdraw_animated_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+        }
+    }
+
     fn tdraw_mesh(
         &mut self,
         mesh: &'b Mesh,
@@ -334,6 +570,20 @@ where
         camera_bind_group: &'b wgpu::BindGroup,
     ) {
         self.tdraw_mesh_instanced(mesh, material, 0..1, camera_bind_group);
+    }
+
+    fn tdraw_animated_mesh_instanced(
+        &mut self,
+        mesh: &'b AnimatedMesh,
+        material: &'b Material,
+        instances: Range<u32>,
+        camera_bind_group: &'b wgpu::BindGroup,
+    ) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_bind_group(0, camera_bind_group, &[]);
+        self.set_bind_group(1, &material.bind_group, &[]);
+        self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 
     fn tdraw_mesh_instanced(

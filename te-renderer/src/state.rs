@@ -460,32 +460,75 @@ impl State {
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use model::DrawModel;
         render_pass.set_pipeline(&self.render_pipeline);
-        for (_name, instanced_model) in self.instances.opaque_instances.iter().filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0) {
-            render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
-            render_pass.draw_model_instanced(
-                &instanced_model.model,
-                0..instanced_model.unculled_instances as u32,
-                &self.camera.camera_bind_group,
-            );
+        let iter = self.instances.opaque_instances
+            .iter()
+            .filter(|(_name, instanced_model)| {
+                match instanced_model {
+                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                    crate::instances::DrawModel::A(a) => a.unculled_instance,
+                }
+            });
+        for (_name, instanced_model) in iter {
+            let instance_buffer = match instanced_model {
+                crate::instances::DrawModel::M(m) => &m.instance_buffer,
+                crate::instances::DrawModel::A(a) => &a.instance_buffer,
+            };
+            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            match instanced_model {
+                crate::instances::DrawModel::M(m) => {
+                    render_pass.draw_model_instanced(
+                        &m.model,
+                        0..m.unculled_instances as u32,
+                        &self.camera.camera_bind_group,
+                    );
+                },
+                crate::instances::DrawModel::A(a) => {
+                    render_pass.draw_animated_model_instanced(
+                        &a,
+                        0..1,
+                        &self.camera.camera_bind_group,
+                    );
+                },
+            }
         }
     }
 
     pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         use model::DrawTransparentModel;
         render_pass.set_pipeline(&self.transparent_render_pipeline);
-        for instanced_model in self
+        let iter = self
             .instances
             .transparent_instances
             .iter()
             .map(|name| self.instances.opaque_instances.get(name).unwrap())
-            .filter(|instanced_model| instanced_model.unculled_instances > 0)
-        {
-            render_pass.set_vertex_buffer(1, instanced_model.instance_buffer.slice(..));
-            render_pass.tdraw_model_instanced(
-                &instanced_model.model,
-                0..instanced_model.unculled_instances as u32,
-                &self.camera.camera_bind_group,
-            );
+            .filter(|instanced_model| {
+                match instanced_model {
+                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                    crate::instances::DrawModel::A(a) => a.unculled_instance,
+                }
+            });
+        for instanced_model in iter {
+            let instance_buffer = match instanced_model {
+                crate::instances::DrawModel::M(m) => &m.instance_buffer,
+                crate::instances::DrawModel::A(a) => &a.instance_buffer,
+            };
+            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            match instanced_model {
+                crate::instances::DrawModel::M(m) => {
+                    render_pass.tdraw_model_instanced(
+                        &m.model,
+                        0..m.unculled_instances as u32,
+                        &self.camera.camera_bind_group,
+                    );
+                },
+                crate::instances::DrawModel::A(a) => {
+                    render_pass.tdraw_animated_model_instanced(
+                        &a,
+                        0..1,
+                        &self.camera.camera_bind_group,
+                    );
+                },
+            }
         }
     }
 
@@ -511,7 +554,10 @@ impl State {
 
     fn cull_all(&mut self) {
         for (_name, model) in self.instances.opaque_instances.iter_mut() {
-            model.cull_all();
+            match model {
+                crate::instances::DrawModel::M(m) => m.cull_all(),
+                crate::instances::DrawModel::A(a) => a.cull_all(),
+            }
         }
     }
 }
