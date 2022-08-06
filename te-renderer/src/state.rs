@@ -1,6 +1,3 @@
-
-use std::{cell::RefCell, collections::HashSet};
-
 use wgpu::{util::DeviceExt, CommandBuffer};
 use winit::{
     dpi,
@@ -8,11 +5,11 @@ use winit::{
     window::Window,
 };
 
-use crate::{model::Vertex, instances::{Instance3D, InstanceReference}};
+use crate::model::Vertex;
 use crate::{
     camera,
     initial_config::InitialConfiguration,
-    instances::{InstanceRaw, sprite::InstancedSprite, text::InstancedText, InstancesState},
+    instances::{InstanceRaw, InstancesState},
     model,
     temap, texture,
 };
@@ -355,7 +352,7 @@ impl State {
         if self.render_3d {
             self.camera.update(dt, &gpu.queue);
             self.cull_all();
-            self.instances.update_rendered(&self.camera.frustum, &gpu.queue);
+            //self.instances.update_rendered(&self.camera.frustum, &gpu.queue);
         }
     }
 

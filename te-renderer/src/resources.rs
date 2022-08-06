@@ -142,44 +142,8 @@ pub fn load_glb_model(
                 })
                 .collect::<Vec<model::ModelVertex>>();
 
-            let mut max_x = f32::NEG_INFINITY;
-            let mut min_x = f32::INFINITY;
-            let mut max_z = f32::NEG_INFINITY;
-            let mut min_z = f32::INFINITY;
-            vertices
-                .iter()
-                .map(|vertex| (vertex.position[0], vertex.position[2]))
-                .for_each(|(x, z)| {
-                    max_x = f32::max(max_x, x);
-                    min_x = f32::min(min_x, x);
-                    max_z = f32::max(max_z, z);
-                    min_z = f32::min(min_z, z);
-                });
+            let mesh = model::Mesh::new(name.clone(), file_name, vertices, indices, material, device);
 
-            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Vertex Buffer", file_name)),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{:?} Index Buffer", file_name)),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-            let num_elements = indices.len() as u32;
-            let mesh = model::Mesh {
-                name: name.clone(),
-                max_x,
-                min_x,
-                max_z,
-                min_z,
-                vertex_buffer,
-                index_buffer,
-                num_elements,
-                material,
-            };
             match alpha {
                 gltf::material::AlphaMode::Opaque => meshes.push(mesh),
                 gltf::material::AlphaMode::Mask => meshes.push(mesh),

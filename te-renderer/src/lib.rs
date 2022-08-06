@@ -5,4 +5,4 @@ pub mod model;
 pub mod resources;
 pub mod state;
 pub mod temap;
-mod texture;
+pub mod texture;

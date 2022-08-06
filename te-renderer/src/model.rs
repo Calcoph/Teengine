@@ -145,6 +145,48 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    pub fn new(name: String, model_name: &str, vertices: Vec<ModelVertex>, indices: Vec<u32>, material: usize, device: &wgpu::Device) -> Mesh {
+        let mut max_x = f32::NEG_INFINITY;
+        let mut min_x = f32::INFINITY;
+        let mut max_z = f32::NEG_INFINITY;
+        let mut min_z = f32::INFINITY;
+        vertices
+            .iter()
+            .map(|vertex| (vertex.position[0], vertex.position[2]))
+            .for_each(|(x, z)| {
+                max_x = f32::max(max_x, x);
+                min_x = f32::min(min_x, x);
+                max_z = f32::max(max_z, z);
+                min_z = f32::min(min_z, z);
+            });
+
+        use wgpu::util::DeviceExt;
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{:?} Vertex Buffer", model_name)),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{:?} Index Buffer", model_name)),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_elements = indices.len() as u32;
+        Mesh {
+            name: name.clone(),
+            max_x,
+            min_x,
+            max_z,
+            min_z,
+            vertex_buffer,
+            index_buffer,
+            num_elements,
+            material,
+        }
+    }
+
     fn get_extremes(&self) -> (f32, f32, f32, f32) {
         (self.max_x, self.min_x, self.max_z, self.min_z)
     }

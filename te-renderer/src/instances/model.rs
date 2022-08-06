@@ -15,7 +15,7 @@ pub struct InstancedModel {
 }
 
 impl InstancedModel {
-    pub fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32, chunk_size: (f32, f32, f32)) -> Self {
+    pub fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
         let instances = vec![Instance3D {
             position: cgmath::Vector3 { x, y, z },
             animation: None,
@@ -41,7 +41,7 @@ impl InstancedModel {
         }
     }
 
-    pub fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device, chunk_size: (f32, f32, f32)) {
+    pub fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
         let new_instance = Instance3D {
             position: cgmath::Vector3 { x, y, z },
             animation: None,
@@ -77,8 +77,11 @@ impl InstancedModel {
     }
 
     pub(crate) fn cull_all(&mut self) {
-        self.unculled_instances = 0;
+        self.unculled_instances = self.instances.len();
         self.unculled_indices = Vec::new();
+        for i in 0..self.instances.len() {
+            self.unculled_indices.push(i)
+        }
     }
 }
 

@@ -10,7 +10,7 @@ pub mod text;
 use crate::{
     resources::{load_glb_model, load_sprite},
     state::GpuState,
-    temap, camera
+    temap, camera, model::Model
 };
 
 use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, TextReference}};
@@ -404,7 +404,7 @@ impl InstancesState {
         }
     }
 
-    /// Creates a new 3D model at the specifiec position.
+    /// Creates a new 3D model at the specific position.
     /// ### PANICS
     /// Will panic if the model's file is not found
     pub fn place_model(
@@ -413,11 +413,67 @@ impl InstancesState {
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
     ) -> InstanceReference {
-        // TODO: Option to pass model instead of name of model
         let x = tile_position.0 * self.tile_size.0;
         let y = tile_position.1 * self.tile_size.1;
         let z = tile_position.2 * self.tile_size.2;
         self.place_model_absolute(model_name, gpu, (x, y, z))
+    }
+
+    /// Places an already created model at the specific position.
+    /// If that model has not been forgotten, you can place another with just its name, so model can be None
+    /// ### PANICS
+    /// Will panic if model is None and the model has been forgotten (or was never created)
+    pub fn place_custom_model (
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        tile_position: (f32, f32, f32),
+        model: Option<Model>
+    ) -> InstanceReference {
+        let x = tile_position.0 * self.tile_size.0;
+        let y = tile_position.1 * self.tile_size.1;
+        let z = tile_position.2 * self.tile_size.2;
+        self.place_custom_model_absolute(model_name, gpu, (x, y, z), model)
+    }
+
+    fn place_custom_model_absolute (
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        (x, y, z): (f32, f32, f32),
+        model: Option<Model>
+    ) -> InstanceReference {
+        match self.opaque_instances.contains_key(model_name) {
+            true => {
+                let instanced_m = self.opaque_instances.get_mut(model_name).unwrap();
+                instanced_m.add_instance(x, y, z, &gpu.device);
+            }
+            false => {
+                let model = model.unwrap();
+                let transparent_meshes = model.transparent_meshes.len();
+                let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
+                self.opaque_instances.insert(model_name.to_string(), instanced_m);
+                if transparent_meshes > 0 {
+                    self.transparent_instances.insert(model_name.to_string());
+                }
+            }
+        }
+
+        let reference = InstanceReference {
+            name: model_name.to_string(),
+            index: self
+                .opaque_instances
+                .get(&model_name.to_string())
+                .unwrap()
+                .instances
+                .len()
+                - 1,
+            dimension: InstanceType::Opaque3D,
+        };
+
+        self.render_matrix.register_instance(reference.clone(), cgmath::vec3(x, y, z), self.opaque_instances.get(model_name).unwrap().model.get_extremes());
+
+        reference
     }
 
     fn place_model_absolute(
@@ -429,7 +485,7 @@ impl InstancesState {
         match self.opaque_instances.contains_key(model_name) {
             true => {
                 let instanced_m = self.opaque_instances.get_mut(model_name).unwrap();
-                instanced_m.add_instance(x, y, z, &gpu.device, self.chunk_size);
+                instanced_m.add_instance(x, y, z, &gpu.device);
             }
             false => {
                 let model = load_glb_model(
@@ -442,7 +498,7 @@ impl InstancesState {
                 )
                 .unwrap();
                 let transparent_meshes = model.transparent_meshes.len();
-                let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z, self.chunk_size);
+                let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
                 self.opaque_instances.insert(model_name.to_string(), instanced_m);
                 if transparent_meshes > 0 {
                     self.transparent_instances.insert(model_name.to_string());
@@ -614,6 +670,17 @@ impl InstancesState {
     pub fn forget_text(&mut self, text: TextReference) {
         self.texts.get_mut(text.index).unwrap().take();
         self.deleted_texts.push(text.index)
+    }
+
+    pub fn forget_all_2d_instances(&mut self) {
+        self.animated_sprites = HashMap::new();
+        self.sprite_instances = HashMap::new();
+    }
+
+    pub fn forget_all_3d_instances(&mut self) {
+        self.opaque_instances = HashMap::new();
+        self.transparent_instances = HashSet::new();
+        self.render_matrix.empty();
     }
 
     pub fn forget_all_instances(&mut self) {
