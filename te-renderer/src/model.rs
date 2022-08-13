@@ -305,6 +305,28 @@ pub struct AnimatedModel {
 }
 
 impl AnimatedModel {
+    pub fn new(meshes: Vec<AnimatedMesh>, transparent_meshes: Vec<AnimatedMesh>, materials: Vec<Material>, device: &wgpu::Device) -> AnimatedModel {
+        let mut instance = instances::Instance3D {
+            position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
+            animation: None,
+        };
+        use wgpu::util::DeviceExt;
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&[instance.to_raw()]),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        AnimatedModel {
+            meshes,
+            transparent_meshes,
+            materials,
+            instance,
+            instance_buffer,
+            unculled_instance: true,
+        }
+    }
+
     pub fn get_extremes(&self) -> (f32, f32, f32, f32) {
         let mut max_x = f32::NEG_INFINITY;
         let mut min_x = f32::INFINITY;
@@ -354,7 +376,7 @@ impl AnimatedModel {
     }
 
     pub(crate) fn cull_all(&mut self) {
-        self.unculled_instance = true;
+        self.unculled_instance = false;
     }
 }
 
@@ -407,7 +429,6 @@ pub trait DrawModel<'a> {
     fn draw_animated_model_instanced(
         &mut self,
         model: &'a AnimatedModel,
-        instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_mesh(
@@ -420,7 +441,6 @@ pub trait DrawModel<'a> {
         &mut self,
         mesh: &'a AnimatedMesh,
         material: &'a Material,
-        instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
     fn draw_mesh_instanced(
@@ -451,13 +471,12 @@ where
     fn draw_animated_model_instanced(
         &mut self,
         model: &'b AnimatedModel,
-        instances: Range<u32>,
         camera_bind_group: &'b wgpu::BindGroup,
     ) {
         for mesh in &model.meshes {
             let material = mesh.materials[mesh.selected_material];
             let material = &model.materials[material];
-            self.draw_animated_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+            self.draw_animated_mesh_instanced(mesh, material, camera_bind_group);
         }
     }
 
@@ -474,14 +493,13 @@ where
         &mut self,
         mesh: &'b AnimatedMesh,
         material: &'b Material,
-        instances: Range<u32>,
         camera_bind_group: &'b wgpu::BindGroup,
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.set_bind_group(0, camera_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, instances);
+        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
     }
     
     fn draw_mesh_instanced(
@@ -509,7 +527,6 @@ pub trait DrawTransparentModel<'a> {
     fn tdraw_animated_model_instanced(
         &mut self,
         model: &'a AnimatedModel,
-        instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
     fn tdraw_mesh(
@@ -522,7 +539,6 @@ pub trait DrawTransparentModel<'a> {
         &mut self,
         mesh: &'a AnimatedMesh,
         material: &'a Material,
-        instances: Range<u32>,
         camera_bind_group: &'a wgpu::BindGroup,
     );
     fn tdraw_mesh_instanced(
@@ -553,13 +569,12 @@ where
     fn tdraw_animated_model_instanced(
         &mut self,
         model: &'b AnimatedModel,
-        instances: Range<u32>,
         camera_bind_group: &'b wgpu::BindGroup,
     ) {
         for mesh in &model.transparent_meshes {
             let material = mesh.materials[mesh.selected_material];
             let material = &model.materials[material];
-            self.tdraw_animated_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+            self.tdraw_animated_mesh_instanced(mesh, material, camera_bind_group);
         }
     }
 
@@ -576,14 +591,13 @@ where
         &mut self,
         mesh: &'b AnimatedMesh,
         material: &'b Material,
-        instances: Range<u32>,
         camera_bind_group: &'b wgpu::BindGroup,
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.set_bind_group(0, camera_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, instances);
+        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
     }
 
     fn tdraw_mesh_instanced(

@@ -5,7 +5,7 @@ use winit::{
     window::Window,
 };
 
-use crate::model::Vertex;
+use crate::{model::Vertex, camera::Frustum};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -220,6 +220,7 @@ impl State {
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
+        //instances.place_custom_model("Frustum", gpu, (0.0, 0.0, 0.0), Some(camera.get_frustum_model(gpu, &instances.layout)));
         State {
             camera,
             size,
@@ -352,7 +353,7 @@ impl State {
         if self.render_3d {
             self.camera.update(dt, &gpu.queue);
             self.cull_all();
-            //self.instances.update_rendered(&self.camera.frustum, &gpu.queue);
+            self.instances.update_rendered(&self.camera.frustum, &gpu.queue);
         }
     }
 
@@ -485,7 +486,6 @@ impl State {
                 crate::instances::DrawModel::A(a) => {
                     render_pass.draw_animated_model_instanced(
                         &a,
-                        0..1,
                         &self.camera.camera_bind_group,
                     );
                 },
@@ -524,7 +524,6 @@ impl State {
                 crate::instances::DrawModel::A(a) => {
                     render_pass.tdraw_animated_model_instanced(
                         &a,
-                        0..1,
                         &self.camera.camera_bind_group,
                     );
                 },

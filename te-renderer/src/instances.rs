@@ -24,7 +24,6 @@ struct RenderMatrix {
     cells: Vec<Vec<Vec<InstanceReference>>>,
     cols: usize,
     chunk_size: (f32, f32, f32),
-    viewed_chunks_cache: Option<HashSet<(usize, usize)>>
 }
 
 impl RenderMatrix {
@@ -33,7 +32,6 @@ impl RenderMatrix {
             cells: Vec::new(),
             cols: 0,
             chunk_size,
-            viewed_chunks_cache: Some(HashSet::new())
         }
     }
 
@@ -55,28 +53,17 @@ impl RenderMatrix {
             (row, col)
         }).collect::<HashSet<(usize, usize)>>();
         chunks.into_iter().for_each(|(row, col)| {
-            let mut viewed_chunks_cache = self.viewed_chunks_cache.take().unwrap();
             while self.cells.len() <= row {
                 self.cells.push(Vec::new());
-                for col in 0..self.cols {
-                    viewed_chunks_cache.insert((self.cells.len()-1, col));
-                }
             };
-            let rows = self.cells.len();
             let row_vec = self.cells.get_mut(row).unwrap();
-            let mut cur_col = 0;
             while row_vec.len() <= col {
                 row_vec.push(Vec::new());
-                for row in 0..rows {
-                    viewed_chunks_cache.insert((row, self.cols+cur_col));
-                }
-                cur_col += 1;
             };
             row_vec.get_mut(col).unwrap().push(reference.clone());
             if col+1 > self.cols {
                 self.cols = col+1;
             }
-            self.viewed_chunks_cache = Some(viewed_chunks_cache);
         });
     }
 
@@ -106,48 +93,20 @@ impl RenderMatrix {
     }
 
     fn update_rendered(&mut self, view_cone: &camera::Frustum) -> Vec<&InstanceReference> {
-        let mut adyacents = HashSet::new();
-        let mut viewed_chunks = self.viewed_chunks_cache.take().unwrap().into_iter().filter(|(row, col)| view_cone.is_inside(*row, *col)).collect::<HashSet<_>>();
-        for chunk in viewed_chunks.iter() {
-            if chunk.0+1 < self.cells.len() {
-                if chunk.1+1 < self.cols {
-                    adyacents.insert((chunk.0+1, chunk.1+1));
-                }
-                if chunk.1 > 0 {
-                    adyacents.insert((chunk.0+1, chunk.1-1));
-                }
-            }
-            if chunk.0 > 0 {
-                if chunk.1+1 < self.cols {
-                    adyacents.insert((chunk.0-1, chunk.1+1));
-                }
-                if chunk.1 > 0 {
-                    adyacents.insert((chunk.0-1, chunk.1-1));
+        let mut viewed_chunks = Vec::new();
+        for (i, cell) in self.cells.iter().enumerate() {
+            for (j, references) in cell.iter().enumerate() {
+                if view_cone.is_inside(i, j) {
+                    viewed_chunks.extend(references.iter());
                 }
             }
         }
-        viewed_chunks.extend(adyacents.iter());
-        let viewed_chunks = viewed_chunks.into_iter().filter(|(row, col)| view_cone.is_inside(*row, *col)).collect::<HashSet<_>>();
-        let mut v = Vec::new();
-        for (row, col) in viewed_chunks.iter() {
-            let cell = self.cells.get(*row).unwrap().get(*col);
-            match cell {
-                Some(references) => {
-                    if view_cone.is_inside(*row, *col) {
-                        v.extend(references.iter());
-                    }
-                },
-                _ => (),
-            }
-        }
-        self.viewed_chunks_cache = Some(viewed_chunks);
-        v
+        viewed_chunks
     }
 
     fn empty(&mut self) {
         self.cells = Vec::new();
         self.cols = 0;
-        self.viewed_chunks_cache = Some(HashSet::new());
     }
 }
 
@@ -484,7 +443,7 @@ impl InstancesState {
                 let instanced_m = self.opaque_instances.get_mut(model_name).unwrap();
                 match instanced_m {
                     DrawModel::M(m) => m.add_instance(x, y, z, &gpu.device),
-                    DrawModel::A(m) => panic!("This is impossible"),
+                    DrawModel::A(_) => panic!("This is impossible"),
                 }
             }
             false => {
@@ -533,7 +492,7 @@ impl InstancesState {
         let x = tile_position.0 * self.tile_size.0;
         let y = tile_position.1 * self.tile_size.1;
         let z = tile_position.2 * self.tile_size.2;
-        model.instance.position = Vector3::new(x, y, z);
+        model.set_instance_position(0, Vector3::new(x, y, z), &gpu.queue);
         self.place_custom_animated_model_absolute(model_name, model)
     }
 
@@ -1074,6 +1033,24 @@ impl InstancesState {
     fn get_anim_sprite(&self, instance: &InstanceReference) -> &Instance2D {
         let sprite = self.animated_sprites.get(&instance.name).unwrap();
         &sprite.instance
+    }
+
+    pub fn animate_model(&mut self, instance: &InstanceReference, mesh_index: usize, material_index: usize) {
+        match instance.dimension {
+            InstanceType::Sprite => (),
+            InstanceType::Anim2D => (),
+            InstanceType::Opaque3D => {
+                let model = self.opaque_instances.get_mut(instance.get_name());
+                match model {
+                    Some(mo) => match mo {
+                        DrawModel::M(_) => (),
+                        DrawModel::A(a) => a.animate(mesh_index, material_index),
+                    },
+                    None => ()
+                }
+
+            },
+        }
     }
 }
 

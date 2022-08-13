@@ -77,11 +77,8 @@ impl InstancedModel {
     }
 
     pub(crate) fn cull_all(&mut self) {
-        self.unculled_instances = self.instances.len();
+        self.unculled_instances = 0;
         self.unculled_indices = Vec::new();
-        for i in 0..self.instances.len() {
-            self.unculled_indices.push(i)
-        }
     }
 }
 

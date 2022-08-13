@@ -4,7 +4,7 @@ use std::time::Duration;
 use wgpu::util::DeviceExt;
 use winit::{dpi, event::*};
 
-use crate::initial_config::InitialConfiguration;
+use crate::{initial_config::InitialConfiguration, model::{ModelVertex, Mesh, Model, Material}, state::GpuState, texture::{self, Texture}};
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -78,8 +78,8 @@ impl Frustum {
             self.bottom_face.is_in_or_forward(corner, self.chunk_size.0) &&
             self.right_face.is_in_or_forward(corner, self.chunk_size.0) &&
             self.left_face.is_in_or_forward(corner, self.chunk_size.0) &&
-            self.near_face.is_in_or_forward(corner, 0.0) &&
-            self.far_face.is_in_or_forward(corner, 0.0)
+            self.near_face.is_in_or_forward(corner, self.chunk_size.0) &&
+            self.far_face.is_in_or_forward(corner, self.chunk_size.0)
         })
     }
 
@@ -99,10 +99,10 @@ impl Frustum {
         let z = camera.yaw.sin() * camera.pitch.cos();
         let front = cgmath::vec3(x, y, z).normalize();
         let up = Vector3::unit_y();
-        let right = front.cross(up);
-        let up = right.cross(front);
+        let right = front.cross(up).normalize();
+        let up = right.cross(front).normalize();
 
-        let half_v_side = projection.zfar * (projection.fovy * 0.5).tan();
+        let half_v_side = projection.zfar * (projection.get_fovy() * 0.5).tan();
         let half_h_side = half_v_side * projection.aspect;
         let front_mult_far = projection.zfar * front;
 
@@ -132,6 +132,79 @@ impl Frustum {
         );
 
         (top_face, bottom_face, right_face, left_face, far_face, near_face)
+    }
+
+    pub(crate) fn get_model(camera: &Camera, projection: &Projection, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
+        let fovy = projection.get_fovy();
+        let x = camera.yaw.cos() * camera.pitch.cos();
+        let y = camera.pitch.sin();
+        let z = camera.yaw.sin() * camera.pitch.cos();
+        let front = cgmath::vec3(x, y, z).normalize();
+        let up = Vector3::unit_y();
+        let right = front.cross(up).normalize();
+        let up = right.cross(front).normalize();
+
+        let half_v_side = projection.zfar * (fovy*0.5).tan();
+        let v1 = up * half_v_side;
+        let v2 = up * -half_v_side;
+        let half_h_side = half_v_side * projection.aspect;
+        let h1 = right * half_h_side;
+        let h2 = right * -half_h_side;
+        let front_mult_far = projection.zfar * front;
+        let camx = camera.position.x;
+        let camy = camera.position.y;
+        let camz = camera.position.z;
+        let x = front_mult_far.x+camx;
+        let y = front_mult_far.y+camy;
+        let z = front_mult_far.z+camz;
+        let front_mult_far = Point3::new(x,y,z);
+        let p1 = (front_mult_far + h2 + v2).into();
+        let p2 = (front_mult_far + h1 + v2).into();
+        let p3 = (front_mult_far + h2 + v1).into();
+        let p4 = (front_mult_far + h1 + v1).into();
+        let p5 = camera.position.into();
+
+        let vertices = vec![
+            ModelVertex { position: p1, tex_coords: [0.0, 0.0] }, // A
+            ModelVertex { position: p2, tex_coords: [0.0, 0.0] }, // B
+            ModelVertex { position: p3, tex_coords: [0.0, 0.0] }, // C
+            ModelVertex { position: p4, tex_coords: [0.0, 0.0] }, // D
+            ModelVertex { position: p5, tex_coords: [0.0, 0.0] },
+        ];
+        // A B
+        // C D
+        let indices = vec![
+            1,0,4,
+            0,2,4,
+            3,1,4,
+            2,3,4,
+            0,2,1,
+            1,2,3
+        ];
+        let mesh = Mesh::new(
+            "frustum".to_string(),
+            "frustum",
+            vertices,
+            indices,
+            0,
+            &gpu.device
+        );
+        let mut img = image::ImageBuffer::new(1,1);
+        img.put_pixel(0, 0, image::Rgba::from([128,0,128,255]));
+        let diffuse_texture = Texture::from_dyn_image(
+            &gpu.device,
+            &gpu.queue,
+            &img,
+            None
+        ).unwrap();
+        let material = Material::new(
+            &gpu.device,
+            "frustum",
+            diffuse_texture,
+            layout
+        );
+
+        Model { meshes: vec![mesh], transparent_meshes: vec![], materials: vec![material] }
     }
 }
 
@@ -257,6 +330,10 @@ impl CameraState {
             camera_controller,
             frustum
         }
+    }
+
+    pub(crate) fn get_frustum_model(&self, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
+        Frustum::get_model(&self.camera, &self.projection, gpu, layout)
     }
 
     pub fn update(&mut self, dt: std::time::Duration, queue: &wgpu::Queue) {
@@ -408,7 +485,7 @@ impl Projection {
             width,
             height,
             aspect: width as f32 / height as f32,
-            fovy: fovy,
+            fovy,
             znear,
             zfar,
         }
@@ -431,6 +508,12 @@ impl Projection {
     pub fn calc_2d_matrix(&self) -> Matrix4<f32> {
         OPENGL_TO_WGPU_MATRIX * ortho(0.0, self.width as f32, self.height as f32, 0.0, -1.0, 1.0)
     }
+
+    pub fn get_fovy(&self) -> f32 {
+        let a: cgmath::Rad<f32> = cgmath::Deg(self.fovy).into();
+        a.0
+    }
+
 }
 
 #[derive(Debug)]
