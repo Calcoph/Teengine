@@ -2,6 +2,7 @@ pub mod event_loop;
 
 use std::{io::Error, cell::RefCell, rc::Rc};
 use te_renderer::{initial_config::InitialConfiguration, state::{State, GpuState}};
+pub use winit as te_winit;
 use winit::{window::{WindowBuilder, Icon, Window}, dpi, event_loop::EventLoop};
 use image::io::Reader as ImageReader;
 
@@ -15,7 +16,7 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLo
 
     let img = match ImageReader::open(&config.icon_path)?.decode() {
         Ok(img) => img.to_rgba8(),
-        Err(_) => panic!("Couldn't find icon"),
+        Err(_) => panic!("Icon has wrong format"),
     };
     let event_loop = EventLoop::with_user_event();
     gamepad::listen(event_loop.create_proxy());
@@ -25,7 +26,7 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLo
         .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
         .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => icon,
-            Err(_) => panic!("Couldn't get raw data")
+            Err(_) => panic!("Couldn't get icon raw data")
         }));
 
     let window = wb.build(&event_loop)

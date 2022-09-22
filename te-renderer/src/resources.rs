@@ -2,8 +2,6 @@ use gltf;
 use gltf::buffer;
 use gltf::{Accessor, Semantic, Texture};
 
-use wgpu::util::DeviceExt;
-
 use crate::{model, texture};
 
 pub fn load_texture(

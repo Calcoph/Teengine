@@ -5,7 +5,7 @@ use winit::{
     window::Window,
 };
 
-use crate::{model::Vertex, camera::Frustum};
+use crate::model::Vertex;
 use crate::{
     camera,
     initial_config::InitialConfiguration,

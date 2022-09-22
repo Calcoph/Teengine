@@ -4,7 +4,7 @@ use std::time::Duration;
 use wgpu::util::DeviceExt;
 use winit::{dpi, event::*};
 
-use crate::{initial_config::InitialConfiguration, model::{ModelVertex, Mesh, Model, Material}, state::GpuState, texture::{self, Texture}};
+use crate::{initial_config::InitialConfiguration, model::{ModelVertex, Mesh, Model, Material}, state::GpuState, texture::Texture};
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
