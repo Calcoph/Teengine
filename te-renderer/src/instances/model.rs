@@ -1,7 +1,6 @@
 use wgpu::util::DeviceExt;
 
 use crate::model;
-
 use super::{InstancedDraw, InstanceRaw, Instance3D, Instance};
 
 
