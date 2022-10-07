@@ -1,7 +1,9 @@
+use std::ops::Range;
+
 use wgpu::util::DeviceExt;
 
 use crate::model;
-use super::{InstancedDraw, InstanceRaw, Instance3D, Instance};
+use super::{InstancedDraw, InstanceRaw, Instance3D, Instance, rangetree::RangeTree};
 
 
 #[derive(Debug)]
@@ -10,7 +12,7 @@ pub struct InstancedModel {
     pub instances: Vec<Instance3D>,
     pub instance_buffer: wgpu::Buffer,
     pub unculled_instances: usize,
-    unculled_indices: Vec<usize>
+    unculled_indices: RangeTree
 }
 
 impl InstancedModel {
@@ -36,7 +38,7 @@ impl InstancedModel {
             instances,
             instance_buffer,
             unculled_instances: 0,
-            unculled_indices: Vec::new()
+            unculled_indices: RangeTree::new()
         }
     }
 
@@ -62,22 +64,19 @@ impl InstancedModel {
     }
 
     pub(crate) fn uncull_instance(&mut self, queue: &wgpu::Queue, index: usize) {
-        if !self.unculled_indices.contains(&index) {
-            queue.write_buffer(
-                &self.instance_buffer,
-                (self.unculled_instances * std::mem::size_of::<InstanceRaw>())
-                    .try_into()
-                    .unwrap(),
-                bytemuck::cast_slice(&[self.instances.get_mut(index).unwrap().to_raw()]),
-            );
+        if !self.unculled_indices.contains(&(index as u32)) {
             self.unculled_instances += 1;
-            self.unculled_indices.push(index);
+            self.unculled_indices.add_num(index as u32);
         }
     }
 
     pub(crate) fn cull_all(&mut self) {
         self.unculled_instances = 0;
-        self.unculled_indices = Vec::new();
+        self.unculled_indices.clean();
+    }
+
+    pub(crate) fn get_instances_vec(&self) -> Vec<Range<u32>> {
+        self.unculled_indices.get_vec()
     }
 }
 

@@ -1,34 +1,50 @@
 use std::ops::Range;
 
-struct RangeTree { // TODO: Make this more efficient
+#[derive(Debug)]
+pub(crate) struct RangeTree { // TODO: Make this more efficient
     first_node: Option<RangeNode>
 }
 
 impl RangeTree {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { first_node: None }
     }
 
-    fn add_num(&mut self, num: usize) {
+    pub(crate) fn add_num(&mut self, num: u32) {
         match &mut self.first_node {
             Some(node) => node.add_num(num),
             None => self.first_node = Some(RangeNode::new(num)),
         }
     }
 
-    fn clean(&mut self) {
+    pub(crate) fn clean(&mut self) {
         self.first_node = None
+    }
+
+    pub(crate) fn contains(&self, num: &u32) -> bool {
+        match &self.first_node {
+            Some(node) => node.contains(num),
+            None => false,
+        }
+    }
+
+    pub(crate) fn get_vec(&self) -> Vec<Range<u32>> {
+        match &self.first_node {
+            Some(node) => node.get_vec(),
+            None => Vec::new(),
+        }
     }
 }
 
+#[derive(Debug)]
 struct RangeNode {
-    contents: Range<usize>,
+    contents: Range<u32>,
     left: Option<Box<RangeNode>>,
     right: Option<Box<RangeNode>>
 }
 
 impl RangeNode {
-    fn new(num: usize) -> Self {
+    fn new(num: u32) -> Self {
         RangeNode {
             contents: num..num+1,
             left: None,
@@ -36,7 +52,7 @@ impl RangeNode {
         }
     }
 
-    fn add_num(&mut self, num: usize) {
+    fn add_num(&mut self, num: u32) {
         if self.contents.end == num {
             match &self.right {
                 Some(node) => {
@@ -76,5 +92,46 @@ impl RangeNode {
                 None => self.left = Some(Box::new(RangeNode::new(num))),
             }
         }
+    }
+
+    fn contains(&self, num: &u32) -> bool {
+        self.contents.contains(num)
+        || match &self.left {
+            Some(node) => node.contains(num),
+            None => false,
+        }
+        || match &self.right {
+            Some(node) => node.contains(num),
+            None => false,
+        }
+    }
+
+    fn get_vec(&self) -> Vec<Range<u32>> {
+        let mut v = match &self.left {
+            Some(node) => {
+                let mut v = node.get_vec();
+                v.push(self.contents.clone()); // TODO: Probably don't need to preserve self.contents, as it will be overwritten next frame. Possible optimization here
+                v
+            },
+            None => vec![self.contents.clone()], // TODO: Probably don't need to preserve self.contents, as it will be overwritten next frame. Possible optimization here
+        };
+
+        if let Some(node) = &self.right {
+            node.expand_vec(&mut v)
+        };
+
+        v
+    }
+
+    fn expand_vec(&self, v: &mut Vec<Range<u32>>) {
+        if let Some(node) = &self.left {
+            node.expand_vec(v)
+        };
+
+        v.push(self.contents.clone());// TODO: Probably don't need to preserve self.contents, as it will be overwritten next frame. Possible optimization here
+
+        if let Some(node) = &self.right {
+            node.expand_vec(v)
+        };
     }
 }

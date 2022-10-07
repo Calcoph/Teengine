@@ -480,7 +480,7 @@ impl State {
                 crate::instances::DrawModel::M(m) => {
                     render_pass.draw_model_instanced(
                         &m.model,
-                        0..m.unculled_instances as u32,
+                        m.get_instances_vec(),
                         &self.camera.camera_bind_group,
                     );
                 },
