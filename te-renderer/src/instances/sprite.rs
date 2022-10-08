@@ -55,6 +55,13 @@ impl InstancedSprite {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
 
+        let mut shown_instances = RangeTree::new();
+        if let Some(last) = instances.first() {
+            if last.in_viewport {
+                shown_instances.add_num(0)
+            }
+        }
+
         InstancedSprite {
             sprite,
             width: w,
@@ -62,7 +69,7 @@ impl InstancedSprite {
             instances,
             instance_buffer,
             depth,
-            shown_instances: RangeTree::new()
+            shown_instances
         }
     }
 
@@ -88,6 +95,9 @@ impl InstancedSprite {
         );
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
+        if self.instances.last().unwrap().in_viewport {
+            self.shown_instances.add_num(self.instances.len() as u32-1)
+        }
         self.instance_buffer.destroy();
         let instance_data = self
             .instances

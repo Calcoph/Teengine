@@ -82,7 +82,7 @@ impl RangeNode {
         if self.contents.end == num {
             match &self.right {
                 Some(node) => {
-                    if node.contents.start == num-1 {
+                    if num > 0 && node.contents.start == num-1 {
                         let mut right = self.right.take().unwrap();
                         let new_right = right.right.take();
                         self.right = new_right;
@@ -93,7 +93,7 @@ impl RangeNode {
                 },
                 None => self.contents.end = num+1,
             }
-        } else if self.contents.start-1 == num {
+        } else if self.contents.start > 0 && self.contents.start-1 == num {
             match &self.left {
                 Some(node) => {
                     if node.contents.end == num {
