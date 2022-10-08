@@ -4,7 +4,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use te_renderer::{state::{State, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources};
+use te_renderer::{state::{TeState, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources};
 
 use crate::modifiying_instance::{self, InstancesState, ModifyingInstance};
 
@@ -13,7 +13,7 @@ pub struct ImguiState {
     pub context: Context,
     pub platform: WinitPlatform,
     renderer: Renderer,
-    pub state: State,
+    pub state: TeState,
     resources: Directory,
     maps: Directory,
     camera_controls_win: CameraControlsWin,
@@ -45,7 +45,7 @@ impl ImguiState {
     ) -> Self {
         let size = window.inner_size();
         let gpu = GpuState::new(size, window).await;
-        let state = State::new(window, &gpu, config.clone()).await;
+        let state = TeState::new(window, &gpu, config.clone()).await;
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
         platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
@@ -290,7 +290,7 @@ impl ImguiState {
 
 }
 
-fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &State, mod_instance: &mut InstancesState, renderer_s: &mut RendererState) {
+fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &TeState, mod_instance: &mut InstancesState, renderer_s: &mut RendererState) {
     ui.text(&dir.directory_name);
     ui.separator();
 
@@ -315,7 +315,7 @@ fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: 
     }
 }
 
-fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, state: &mut State, gpu: &GpuState) {
+fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, state: &mut TeState, gpu: &GpuState) {
     ui.text(&dir.directory_name);
     ui.separator();
 
@@ -345,7 +345,7 @@ struct RendererState {
 }
 
 impl RendererState {
-    fn render_state(&mut self, view: &wgpu::TextureView, tile_size: (f32, f32, f32), state: &mut State, gpu: &GpuState, modifying_instance: &mut ModifyingInstance) {
+    fn render_state(&mut self, view: &wgpu::TextureView, tile_size: (f32, f32, f32), state: &mut TeState, gpu: &GpuState, modifying_instance: &mut ModifyingInstance) {
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
@@ -417,7 +417,7 @@ impl RendererState {
         gpu.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState, state: &State, mod_instance: &mut InstancesState) {
+    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState, state: &TeState, mod_instance: &mut InstancesState) {
         match resources::load_glb_model(
             file_name, 
             &gpu.device, 

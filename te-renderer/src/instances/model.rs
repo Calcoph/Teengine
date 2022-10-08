@@ -20,6 +20,7 @@ impl InstancedModel {
         let instances = vec![Instance3D {
             position: cgmath::Vector3 { x, y, z },
             animation: None,
+            hidden: false
         }];
 
         InstancedModel::new_premade(model, device, instances)
@@ -46,6 +47,7 @@ impl InstancedModel {
         let new_instance = Instance3D {
             position: cgmath::Vector3 { x, y, z },
             animation: None,
+            hidden: false
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
@@ -63,10 +65,12 @@ impl InstancedModel {
         self.instance_buffer = instance_buffer;
     }
 
-    pub(crate) fn uncull_instance(&mut self, queue: &wgpu::Queue, index: usize) {
+    pub(crate) fn uncull_instance(&mut self, index: usize) {
         if !self.unculled_indices.contains(&(index as u32)) {
-            self.unculled_instances += 1;
-            self.unculled_indices.add_num(index as u32);
+            if !self.instances.get(index).unwrap().hidden {
+                self.unculled_instances += 1;
+                self.unculled_indices.add_num(index as u32);
+            }
         }
     }
 
@@ -77,6 +81,21 @@ impl InstancedModel {
 
     pub(crate) fn get_instances_vec(&self) -> Vec<Range<u32>> {
         self.unculled_indices.get_vec()
+    }
+
+    pub(crate) fn hide(&mut self, index: usize) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.hide()
+    }
+
+    pub(crate) fn show(&mut self, index: usize) {
+        let instance = self.instances.get_mut(index).unwrap();
+        instance.show()
+    }
+
+    pub(crate) fn is_hidden(&self, index: usize) -> bool {
+        let instance = self.instances.get(index).unwrap();
+        instance.is_hidden()
     }
 }
 

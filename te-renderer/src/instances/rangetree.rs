@@ -1,7 +1,9 @@
 use std::ops::Range;
 
 #[derive(Debug)]
-pub(crate) struct RangeTree { // TODO: Make this more efficient
+pub(crate) struct RangeTree {
+    // TODO: Make this more efficient
+    // TODO: Make it self-balanced
     first_node: Option<RangeNode>
 }
 
@@ -34,13 +36,36 @@ impl RangeTree {
             None => Vec::new(),
         }
     }
+
+    pub(crate) fn remove_num(&mut self, num: u32) {
+        match &mut self.first_node {
+            Some(node) => {
+                let (is_removed, new_node) = node.remove_num(num);
+                if is_removed {
+                    self.first_node = match new_node {
+                        Some(node) => Some(*node),
+                        None => None,
+                    }
+                }
+            },
+            None => (),
+        }
+    }
 }
+
+/* #[derive(Debug)] // TODO: Use this
+enum AVLValue {
+    Left,
+    Right,
+    Balanced
+} */
 
 #[derive(Debug)]
 struct RangeNode {
     contents: Range<u32>,
     left: Option<Box<RangeNode>>,
-    right: Option<Box<RangeNode>>
+    right: Option<Box<RangeNode>>,
+    //avl_value: AVLValue
 }
 
 impl RangeNode {
@@ -48,7 +73,8 @@ impl RangeNode {
         RangeNode {
             contents: num..num+1,
             left: None,
-            right: None
+            right: None,
+            //avl_value: AVLValue::Balanced
         }
     }
 
@@ -110,10 +136,10 @@ impl RangeNode {
         let mut v = match &self.left {
             Some(node) => {
                 let mut v = node.get_vec();
-                v.push(self.contents.clone()); // TODO: Probably don't need to preserve self.contents, as it will be overwritten next frame. Possible optimization here
+                v.push(self.contents.clone());
                 v
             },
-            None => vec![self.contents.clone()], // TODO: Probably don't need to preserve self.contents, as it will be overwritten next frame. Possible optimization here
+            None => vec![self.contents.clone()],
         };
 
         if let Some(node) = &self.right {
@@ -128,10 +154,61 @@ impl RangeNode {
             node.expand_vec(v)
         };
 
-        v.push(self.contents.clone());// TODO: Probably don't need to preserve self.contents, as it will be overwritten next frame. Possible optimization here
+        v.push(self.contents.clone());
 
         if let Some(node) = &self.right {
             node.expand_vec(v)
         };
+    }
+
+    /// true if this node should be deleted. In that case replace it with Option<Self>
+    fn remove_num(&mut self, num: u32) -> (bool, Option<Box<Self>>) {
+        if self.contents.start == num {
+            if self.contents.end == num {
+                let left = self.left.take();
+                match self.right.take() {
+                    Some(mut right) => {
+                        right.place_left(left);
+                        (true, Some(right))
+                    },
+                    None => (true, left),
+                }
+            } else {
+                self.contents.start = num+1;
+                (false, None)
+            }
+        } else if self.contents.end == num+1 {
+            self.contents.end = num;
+            (false, None)
+        } else if self.contents.start > num {
+            match &mut self.left {
+                Some(node) => {
+                    let (is_removed, new_node) = node.remove_num(num);
+                    if is_removed {
+                        self.left = new_node
+                    }
+                },
+                None => (),
+            };
+            (false, None)
+        } else { // self.contents.end-1 < num
+            match &mut self.right {
+                Some(node) => {
+                    let (is_removed, new_node) = node.remove_num(num);
+                    if is_removed {
+                        self.right = new_node
+                    }
+                },
+                None => (),
+            };
+            (false, None)
+        }
+    }
+
+    fn place_left(&mut self, left: Option<Box<RangeNode>>) {
+        match &mut self.left {
+            Some(node) => node.place_left(left),
+            None => self.left = left,
+        }
     }
 }

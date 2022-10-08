@@ -11,7 +11,7 @@ mod rangetree;
 use crate::{
     resources::{load_glb_model, load_sprite},
     state::GpuState,
-    temap, camera, model::{Model, AnimatedModel}
+    temap, camera, model::{Model, AnimatedModel}, text::Font
 };
 
 use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, TextReference}};
@@ -167,10 +167,23 @@ pub trait Instance {
 pub struct Instance2D {
     pub position: cgmath::Vector2<f32>,
     pub size: cgmath::Vector2<f32>,
-    animation: Option<Animation>
+    animation: Option<Animation>,
+    hidden: bool,
+    in_viewport: bool
 }
 
 impl Instance2D {
+    fn new(position: cgmath::Vector2<f32>, size: cgmath::Vector2<f32>, animation: Option<Animation>, screen_w: u32, screen_h: u32) -> Self {
+        let in_viewport = inside_viewport(position.into(), size.into(), (screen_w, screen_h));
+        Instance2D {
+            position,
+            size,
+            animation,
+            hidden: false,
+            in_viewport
+        }
+    }
+
     fn resize<V: Into<cgmath::Vector2<f32>>>(&mut self, new_size: V) {
         let size = new_size.into();
         self.size = size;
@@ -189,12 +202,24 @@ impl Instance2D {
         Instance2D {
             position,
             size,
-            animation: None
+            animation: None,
+            hidden: self.hidden,
+            in_viewport: self.in_viewport
         }
     }
-}
 
-impl Instance for Instance2D {
+    fn show(&mut self) {
+        self.hidden = false
+    }
+
+    fn hide(&mut self) {
+        self.hidden = true
+    }
+
+    fn is_hidden(&self) -> bool {
+        self.hidden
+    }
+
     fn to_raw(&mut self) -> InstanceRaw {
         let animation;
         let instance = if self.animation.is_some() {
@@ -214,21 +239,150 @@ impl Instance for Instance2D {
         }
     }
 
-    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V) {
+    #[must_use]
+    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V, screen_w: u32, screen_h: u32) -> Option<bool> {
         let direction = direction.into();
         self.position = self.position + cgmath::Vector2::new(direction.x, direction.y);
+        let was_viewport = self.in_viewport;
+        self.in_viewport = inside_viewport(self.position.into(), self.size.into(), (screen_w, screen_h));
+        if was_viewport && !self.in_viewport && !self.hidden {
+            Some(false)
+        } else if !was_viewport && self.in_viewport && !self.hidden {
+            Some(true)
+        } else {
+            None
+        }
     }
 
-    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P) {
+    #[must_use]
+    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P, screen_w: u32, screen_h: u32) -> Option<bool> {
         let position = position.into();
-        self.position = cgmath::Vector2::new(position.x, position.y)
+        self.position = cgmath::Vector2::new(position.x, position.y);
+        let was_viewport = self.in_viewport;
+        self.in_viewport = inside_viewport(self.position.into(), self.size.into(), (screen_w, screen_h));
+        if was_viewport && !self.in_viewport && !self.hidden {
+            Some(false)
+        } else if !was_viewport && self.in_viewport && !self.hidden {
+            Some(true)
+        } else {
+            None
+        }
     }
+}
+
+fn inside_viewport(
+    (pos_x, pos_y): (f32, f32),
+    (width, height): (f32, f32),
+    (screen_w, screen_h): (u32, u32)
+) -> bool {
+    let pos_x = pos_x as i32;
+    let pos_y = pos_y as i32;
+    let width = width as i32;
+    let height = height as i32;
+    let screen_w = screen_w as i32;
+    let screen_h = screen_h as i32;
+    (
+        // returns true if top-left is inside
+        // +---------------+
+        // |               |
+        // |   .-.         |
+        // |   | |      .----.
+        // |   .-.      |  | |
+        // +------------|--+ |
+        //              .----.
+        pos_x >= 0 && pos_x < screen_w
+        && pos_y >= 0 && pos_y < screen_h
+    ) || (
+        // returns true if top-right is inside
+        //   +---------------+
+        //   |               |
+        //   |               |
+        //   |               |
+        //.----.             |
+        //|  +-|-------------+
+        //.----.
+        pos_x+width >= 0 && pos_x+width < screen_w
+        && pos_y >= 0 && pos_y < screen_h
+    ) || (
+        // returns true if bot-left is inside
+        //                .---.
+        // +--------------|+  |
+        // |              ||  |
+        // |              .|--.
+        // |               |
+        // |               |
+        // +---------------+
+        pos_x >= 0 && pos_x < screen_w
+        && pos_y+height >= 0 && pos_y+height < screen_h
+    ) || (
+        // returns true if bot-right is inside
+        // .--------.
+        // |  +-----|---------+
+        // |  |     |         |
+        // .------- .         |
+        //    |               |
+        //    |               |
+        //    +---------------+
+        pos_x+width >= 0 && pos_x+width < screen_w
+        && pos_y+height >= 0 && pos_y+height < screen_h
+    ) || (
+        // returns true if no corner is inside, but region inside (vertical rectangles)
+        // .---------------------.
+        // |  +---------------+  |
+        // |  |               |  |
+        // |  |               |  |
+        // |  |               |  |
+        // |  |               |  |
+        // |  +---------------+  |
+        // |                     |
+        // .---------------------.
+        // .-------------.
+        // |  +----------|----+
+        // |  |          |    |
+        // |  |          |    |
+        // |  |          |    |
+        // |  |          |    |
+        // |  +----------|----+
+        // |             |
+        // .-------------.
+        //           .-----------.
+        //    +------|--------+  |
+        //    |      |        |  |
+        //    |      |        |  |
+        //    |      |        |  |
+        //    |      |        |  |
+        //    +------|--------+  |
+        //           |           |
+        //           .-----------.
+        pos_x < screen_w && pos_y < 0
+        && pos_x+width >= 0 && pos_y+height >= screen_h
+    ) || (
+        // returns true if no corner is inside, but region inside (horizontal rectangles)
+        // .---------------------.
+        // |  +---------------+  |
+        // |  |               |  |
+        // |  |               |  |
+        // .---------------------.
+        //    |               |
+        //    +---------------+
+        //    +---------------+
+        //    |               |
+        // .---------------------.
+        // |  |               |  |
+        // |  |               |  |
+        // |  +---------------+  |
+        // |                     |
+        // .---------------------.
+        pos_x < 0 && pos_y < screen_h
+        && pos_x+width >= screen_w && pos_y+height >= 0
+    )
 }
 
 #[derive(Debug)]
 pub struct Instance3D {
     pub position: cgmath::Vector3<f32>,
     pub animation: Option<Animation>,
+    pub hidden: bool
 }
 
 impl Instance3D {
@@ -242,7 +396,20 @@ impl Instance3D {
         Instance3D {
             position,
             animation: None,
+            hidden: false
         }
+    }
+
+    pub(crate) fn hide(&mut self) {
+        self.hidden = true
+    }
+
+    pub(crate) fn show(&mut self) {
+        self.hidden = false
+    }
+
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.hidden
     }
 }
 
@@ -345,6 +512,27 @@ impl DrawModel {
             DrawModel::A(a) => a,
         }
     }
+
+    fn hide(&mut self, index: usize) {
+        match self {
+            DrawModel::M(dm) => dm.hide(index),
+            DrawModel::A(dm) => dm.hide(),
+        }
+    }
+
+    fn show(&mut self, index: usize) {
+        match self {
+            DrawModel::M(dm) => dm.show(index),
+            DrawModel::A(dm) => dm.show(),
+        }
+    }
+
+    fn is_hidden(&self, index: usize) -> bool {
+        match self {
+            DrawModel::M(dm) => dm.is_hidden(index),
+            DrawModel::A(dm) => dm.is_hidden(),
+        }
+    }
 }
 
 /// Manages the window's 3D models, 2D sprites and 2D texts
@@ -361,7 +549,7 @@ pub struct InstancesState {
     chunk_size: (f32, f32, f32),
     pub resources_path: String,
     pub default_texture_path: String,
-    font: crate::model::Font,
+    font: Font,
     render_matrix: RenderMatrix
 }
 
@@ -380,7 +568,7 @@ impl InstancesState {
         let animated_sprites = HashMap::new();
         let texts = Vec::new();
         let deleted_texts = Vec::new();
-        let font = crate::model::Font::new(font_dir_path);
+        let font = Font::new(font_dir_path);
         let render_matrix = RenderMatrix::new(chunk_size);
 
         InstancesState {
@@ -588,17 +776,26 @@ impl InstancesState {
     /// All 2D sprites created from the same file will have the same "z" position. And cannot be changed once set.
     /// ### PANICS
     /// Will panic if the sprite's file is not found
-    pub fn place_sprite(
+    fn place_sprite(
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
+        screen_w: u32,
+        screen_h: u32
     ) -> InstanceReference {
         match self.sprite_instances.contains_key(sprite_name) {
             true => {
                 let instanced_s = self.sprite_instances.get_mut(sprite_name).unwrap();
-                instanced_s.add_instance(position.0, position.1, size, &gpu.device);
+                instanced_s.add_instance(
+                    position.0,
+                    position.1,
+                    size,
+                    &gpu.device,
+                    screen_w,
+                    screen_h
+                );
             }
             false => {
                 let (sprite, width, height) = load_sprite(
@@ -621,6 +818,8 @@ impl InstancesState {
                     position.2,
                     width,
                     height,
+                    screen_w,
+                    screen_h
                 );
                 self.sprite_instances
                     .insert(sprite_name.to_string(), instanced_s);
@@ -640,14 +839,16 @@ impl InstancesState {
         }
     }
 
-    pub fn place_animated_sprite(
+    fn place_animated_sprite(
         &mut self,
         sprite_names: Vec<&str>,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
         frame_delay: std::time::Duration,
-        looping: bool
+        looping: bool,
+        screen_w: u32,
+        screen_h: u32
     ) -> InstanceReference {
         let mut name = sprite_names.get(0).unwrap().to_string();
         while self.animated_sprites.contains_key(&name) {
@@ -679,7 +880,9 @@ impl InstancesState {
             width,
             height,
             frame_delay,
-            looping
+            looping,
+            screen_w,
+            screen_h
         );
         self.animated_sprites
             .insert(name.clone(), instanced_s);
@@ -695,19 +898,21 @@ impl InstancesState {
     /// ### PANICS
     /// will panic if the characters' files are not found
     /// see: model::Font
-    pub fn place_text(
+    fn place_text(
         &mut self,
         text: Vec<String>,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
+        screen_w: u32,
+        screen_h: u32
     ) -> TextReference {
         let (text, w, h) = self.font.write_to_material(text, gpu, &self.layout);
         let instanced_t = match size {
             Some((w, h)) => {
-                InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h)
+                InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h, screen_w, screen_h)
             }
-            None => InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h),
+            None => InstancedText::new(text, &gpu.device, position.0, position.1, position.2, w, h, screen_w, screen_h),
         };
 
         let index = match self.deleted_texts.pop() {
@@ -786,11 +991,13 @@ impl InstancesState {
         instance: &InstanceReference,
         direction: V,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
         match instance.dimension {
             InstanceType::Sprite => {
                 let model = self.sprite_instances.get_mut(&instance.name).unwrap();
-                model.move_instance(instance.index, direction, queue);
+                model.move_instance(instance.index, direction, queue, screen_w, screen_h);
             }
             InstanceType::Opaque3D => {
                 let model = self.opaque_instances.get_mut(&instance.name).unwrap();
@@ -809,7 +1016,7 @@ impl InstancesState {
             }
             InstanceType::Anim2D => {
                 let model = self.animated_sprites.get_mut(&instance.name).unwrap();
-                model.move_instance(instance.index, direction, queue);
+                model.move_instance(instance.index, direction, queue, screen_w, screen_h);
             },
         };
     }
@@ -821,11 +1028,13 @@ impl InstancesState {
         instance: &InstanceReference,
         position: P,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
         match instance.dimension {
             InstanceType::Sprite => {
                 let model = self.sprite_instances.get_mut(&instance.name).unwrap();
-                model.set_instance_position(instance.index, position, queue);
+                model.set_instance_position(instance.index, position, queue, screen_w, screen_h);
             }
             InstanceType::Opaque3D => {
                 let model = self.opaque_instances.get_mut(&instance.name).unwrap();
@@ -844,7 +1053,7 @@ impl InstancesState {
             }
             InstanceType::Anim2D => {
                 let model = self.animated_sprites.get_mut(&instance.name).unwrap();
-                model.set_instance_position(instance.index, position, queue)
+                model.set_instance_position(instance.index, position, queue, screen_w, screen_h)
             },
         };
     }
@@ -918,6 +1127,8 @@ impl InstancesState {
         instance: &TextReference,
         direction: V,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
         let text = self
             .texts
@@ -925,7 +1136,7 @@ impl InstancesState {
             .unwrap()
             .as_mut()
             .unwrap();
-        text.move_instance(0, direction, queue);
+        text.move_instance(0, direction, queue, screen_w, screen_h);
     }
 
     /// Move a 2D text to an absolute position.
@@ -935,6 +1146,8 @@ impl InstancesState {
         instance: &TextReference,
         position: P,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
         let text = self
             .texts
@@ -942,7 +1155,7 @@ impl InstancesState {
             .unwrap()
             .as_mut()
             .unwrap();
-        text.set_instance_position(0, position, queue);
+        text.set_instance_position(0, position, queue, screen_w, screen_h);
     }
 
     /// Gets a 2D text's position
@@ -1021,12 +1234,12 @@ impl InstancesState {
         &mut text.instance
     }
 
-    pub(crate) fn update_rendered(&mut self, frustum: &crate::camera::Frustum, queue: &wgpu::Queue) {
+    pub(crate) fn update_rendered3d(&mut self, frustum: &crate::camera::Frustum) {
         for instance in self.render_matrix.update_rendered(frustum) {
             let model = self.opaque_instances.get_mut(&instance.name).unwrap();
             match model {
-                DrawModel::M(m) => m.uncull_instance(queue, instance.index),
-                DrawModel::A(a) => a.uncull_instance(queue),
+                DrawModel::M(m) => m.uncull_instance(instance.index),
+                DrawModel::A(a) => a.uncull_instance(),
             }
         }
     }
@@ -1053,58 +1266,55 @@ impl InstancesState {
             },
         }
     }
-}
 
-pub(crate) trait Draw2D {
-    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer);
-    fn get_depth(&self) -> f32;
-}
-
-impl Draw2D for InstancedText {
-    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer) {
-        use crate::model::DrawText;
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        render_pass.draw_text(
-            &self.image,
-            projection_bind_group,
-            buffer,
-        );
+    pub fn hide_instance(&mut self, instance: &InstanceReference) {
+        match instance.dimension {
+            InstanceType::Sprite => {
+                let sprite = self.sprite_instances.get_mut(instance.get_name());
+                sprite.unwrap().hide(instance.get_id());
+            },
+            InstanceType::Anim2D => {
+                let anim = self.animated_sprites.get_mut(instance.get_name());
+                anim.unwrap().hide();
+            },
+            InstanceType::Opaque3D => {
+                let model = self.opaque_instances.get_mut(instance.get_name());
+                model.unwrap().hide(instance.get_id());
+            },
+        }
     }
 
-    fn get_depth(&self) -> f32 {
-        self.depth
-    }
-}
-
-impl Draw2D for InstancedSprite {
-    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer) {
-        use crate::model::DrawSprite;
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        render_pass.draw_sprite_instanced(
-            &self.sprite,
-            0..self.instances.len() as u32,
-            projection_bind_group,
-            buffer,
-        );
-    }
-
-    fn get_depth(&self) -> f32 {
-        self.depth
-    }
-}
-
-impl Draw2D for AnimatedSprite {
-    fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, projection_bind_group: &'a wgpu::BindGroup, buffer: &'a wgpu::Buffer) {
-        use crate::model::DrawText;
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        render_pass.draw_text(
-            &self.get_sprite(),
-            projection_bind_group,
-            buffer,
-        );
+    pub fn show_instance(&mut self, instance: &InstanceReference) {
+        match instance.dimension {
+            InstanceType::Sprite => {
+                let sprite = self.sprite_instances.get_mut(instance.get_name());
+                sprite.unwrap().show(instance.get_id());
+            },
+            InstanceType::Anim2D => {
+                let anim = self.animated_sprites.get_mut(instance.get_name());
+                anim.unwrap().show();
+            },
+            InstanceType::Opaque3D => {
+                let model = self.opaque_instances.get_mut(instance.get_name());
+                model.unwrap().show(instance.get_id());
+            },
+        }
     }
 
-    fn get_depth(&self) -> f32 {
-        self.depth
+    pub fn is_hidden(&self, instance: &InstanceReference) -> bool {
+        match instance.dimension {
+            InstanceType::Sprite => {
+                let sprite = self.sprite_instances.get(instance.get_name());
+                sprite.unwrap().is_hidden(instance.get_id())
+            },
+            InstanceType::Anim2D => {
+                let anim = self.animated_sprites.get(instance.get_name());
+                anim.unwrap().is_hidden()
+            },
+            InstanceType::Opaque3D => {
+                let model = self.opaque_instances.get(instance.get_name());
+                model.unwrap().is_hidden(instance.get_id())
+            },
+        }
     }
 }

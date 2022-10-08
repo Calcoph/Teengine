@@ -1,8 +1,4 @@
-use std::{collections::HashMap, ops::Range};
-
-use image::{ImageBuffer, Rgba};
-
-use crate::{state::GpuState, texture, instances};
+use crate::{texture, instances};
 
 pub trait Vertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
@@ -100,34 +96,6 @@ impl Material {
             diffuse_texture,
             bind_group,
         }
-    }
-}
-
-pub trait DrawSprite<'a> {
-    fn draw_sprite_instanced(
-        &mut self,
-        material: &'a Material,
-        instances: Range<u32>,
-        projection_bind_group: &'a wgpu::BindGroup,
-        vertex_buffer: &'a wgpu::Buffer,
-    );
-}
-
-impl<'a, 'b> DrawSprite<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn draw_sprite_instanced(
-        &mut self,
-        material: &'a Material,
-        instances: Range<u32>,
-        projection_bind_group: &'a wgpu::BindGroup,
-        vertex_buffer: &'a wgpu::Buffer,
-    ) {
-        self.set_vertex_buffer(0, vertex_buffer.slice(..));
-        self.set_bind_group(0, projection_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw(0..6, instances);
     }
 }
 
@@ -309,6 +277,7 @@ impl AnimatedModel {
         let mut instance = instances::Instance3D {
             position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
             animation: None,
+            hidden: false
         };
         use wgpu::util::DeviceExt;
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -357,26 +326,24 @@ impl AnimatedModel {
         self.meshes.get_mut(mesh_index).unwrap().animate(material_index);
     }
 
-    pub(crate) fn uncull_instance(&mut self, queue: &wgpu::Queue) {
-        if !self.unculled_instance {
-            let unculled_instances = if self.unculled_instance {
-                1
-            } else {
-                0
-            };
-            queue.write_buffer(
-                &self.instance_buffer,
-                (unculled_instances * std::mem::size_of::<InstanceRaw>())
-                    .try_into()
-                    .unwrap(),
-                bytemuck::cast_slice(&[self.instance.to_raw()]),
-            );
-            self.unculled_instance = true;
-        }
+    pub(crate) fn uncull_instance(&mut self) {
+        self.unculled_instance = true;
     }
 
     pub(crate) fn cull_all(&mut self) {
         self.unculled_instance = false;
+    }
+
+    pub(crate) fn hide(&mut self) {
+        self.instance.hide()
+    }
+
+    pub(crate) fn show(&mut self) {
+        self.instance.show()
+    }
+
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.instance.is_hidden()
     }
 }
 
@@ -418,205 +385,6 @@ impl InstancedDraw for AnimatedModel {
     }
 }
 
-
-pub trait DrawModel<'a> {
-    fn draw_model_instanced(
-        &mut self,
-        model: &'a Model,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_animated_model_instanced(
-        &mut self,
-        model: &'a AnimatedModel,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_mesh(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_animated_mesh_instanced(
-        &mut self,
-        mesh: &'a AnimatedMesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_mesh_instanced(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-}
-
-impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn draw_model_instanced(
-        &mut self,
-        model: &'b Model,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.meshes {
-            let material = &model.materials[mesh.material];
-            self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
-        }
-    }
-
-    fn draw_animated_model_instanced(
-        &mut self,
-        model: &'b AnimatedModel,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.meshes {
-            let material = mesh.materials[mesh.selected_material];
-            let material = &model.materials[material];
-            self.draw_animated_mesh_instanced(mesh, material, camera_bind_group);
-        }
-    }
-
-    fn draw_mesh(
-        &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.draw_mesh_instanced(mesh, material, vec![0..1], camera_bind_group);
-    }
-
-    fn draw_animated_mesh_instanced(
-        &mut self,
-        mesh: &'b AnimatedMesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
-    }
-    
-    fn draw_mesh_instanced(
-        &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        for inst_range in instances {
-            self.draw_indexed(0..mesh.num_elements, 0, inst_range);
-        }
-    }
-}
-
-pub trait DrawTransparentModel<'a> {
-    fn tdraw_model_instanced(
-        &mut self,
-        model: &'a Model,
-        instances: Range<u32>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_animated_model_instanced(
-        &mut self,
-        model: &'a AnimatedModel,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_mesh(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_animated_mesh_instanced(
-        &mut self,
-        mesh: &'a AnimatedMesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_mesh_instanced(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        instances: Range<u32>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-}
-
-impl<'a, 'b> DrawTransparentModel<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn tdraw_model_instanced(
-        &mut self,
-        model: &'b Model,
-        instances: Range<u32>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.transparent_meshes {
-            let material = &model.materials[mesh.material];
-            self.tdraw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
-        }
-    }
-
-    fn tdraw_animated_model_instanced(
-        &mut self,
-        model: &'b AnimatedModel,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.transparent_meshes {
-            let material = mesh.materials[mesh.selected_material];
-            let material = &model.materials[material];
-            self.tdraw_animated_mesh_instanced(mesh, material, camera_bind_group);
-        }
-    }
-
-    fn tdraw_mesh(
-        &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.tdraw_mesh_instanced(mesh, material, 0..1, camera_bind_group);
-    }
-
-    fn tdraw_animated_mesh_instanced(
-        &mut self,
-        mesh: &'b AnimatedMesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
-    }
-
-    fn tdraw_mesh_instanced(
-        &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
-        instances: Range<u32>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, instances);
-    }
-}
-
 pub trait DrawText<'a> {
     fn draw_text(
         &mut self,
@@ -640,92 +408,5 @@ where
         self.set_bind_group(0, projection_bind_group, &[]);
         self.set_bind_group(1, &material.bind_group, &[]);
         self.draw(0..6, 0..1);
-    }
-}
-
-#[derive(Debug)]
-pub struct Font {
-    characters: HashMap<String, image::ImageBuffer<Rgba<u8>, Vec<u8>>>,
-}
-
-impl Font {
-    pub fn write_to_material(
-        &self,
-        characters: Vec<String>,
-        gpu: &GpuState,
-        layout: &wgpu::BindGroupLayout,
-    ) -> (Material, f32, f32) {
-        let mut width = 0;
-        let mut height = 0;
-        let mut container = Vec::new();
-        for charac in characters.iter() {
-            let bitmap = self.characters.get(charac).unwrap().clone();
-            width += bitmap.width();
-            if bitmap.height() > height {
-                height = bitmap.height();
-            };
-        }
-
-        let mut v = Vec::new();
-        for _ in 0..height {
-            v.push(Vec::new())
-        }
-
-        for charac in characters.iter() {
-            let bitmap = self.characters.get(charac).unwrap().clone();
-            let height_diff = height - bitmap.height();
-            for i in 0..height_diff {
-                for _ in 0..bitmap.width() {
-                    v.get_mut(i as usize).unwrap().push(Rgba([0, 0, 0, 0]));
-                }
-            }
-            for (i, row) in bitmap.enumerate_rows() {
-                for (_i, _j, pixel) in row {
-                    v.get_mut((i + height_diff) as usize)
-                        .unwrap()
-                        .push(pixel.clone())
-                }
-            }
-        }
-
-        for row in v {
-            for pixel in row {
-                container.push(pixel.0[0]);
-                container.push(pixel.0[1]);
-                container.push(pixel.0[2]);
-                container.push(pixel.0[3]);
-            }
-        }
-
-        let new_image =
-            ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(width, height, container).unwrap();
-
-        let tex =
-            texture::Texture::from_dyn_image(&gpu.device, &gpu.queue, &new_image, None).unwrap();
-        (
-            Material::new(&gpu.device, "text", tex, layout),
-            width as f32,
-            height as f32,
-        )
-    }
-
-    pub fn new(font_dir_path: String) -> Font {
-        let mut characters = HashMap::new();
-        for file in std::fs::read_dir(font_dir_path.clone()).unwrap() {
-            let file_name = file.unwrap().file_name();
-            let file_name = file_name.to_str().unwrap();
-            if std::path::Path::new(&(font_dir_path.clone() + "/" + file_name)).is_file()
-                && file_name.ends_with(".png")
-            {
-                let img = image::io::Reader::open(font_dir_path.clone() + "/" + file_name)
-                    .unwrap()
-                    .decode()
-                    .unwrap()
-                    .into_rgba8();
-                characters.insert(String::from(file_name.trim_end_matches(".png")), img);
-            }
-        }
-
-        Font { characters }
     }
 }

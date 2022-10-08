@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 
 use crate::model;
 
-use super::{Instance2D, InstanceRaw, InstancedDraw, Instance};
+use super::{Instance2D, InstanceRaw, rangetree::RangeTree};
 
 #[derive(Debug)]
 pub struct InstancedSprite {
@@ -14,6 +14,7 @@ pub struct InstancedSprite {
     pub instances: Vec<Instance2D>,
     pub instance_buffer: wgpu::Buffer,
     pub depth: f32,
+    shown_instances: RangeTree
 }
 
 impl InstancedSprite {
@@ -25,12 +26,16 @@ impl InstancedSprite {
         depth: f32,
         w: f32,
         h: f32,
+        screen_w: u32,
+        screen_h: u32
     ) -> Self {
-        let instances = vec![Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        }];
+        let instances = vec![Instance2D::new(
+            cgmath::Vector2 { x, y },
+            cgmath::Vector2 { x: w, y: h },
+            None,
+            screen_w,
+            screen_h
+        )];
 
         InstancedSprite::new_premade(sprite, device, instances, depth, w, h)
     }
@@ -57,19 +62,30 @@ impl InstancedSprite {
             instances,
             instance_buffer,
             depth,
+            shown_instances: RangeTree::new()
         }
     }
 
-    pub fn add_instance(&mut self, x: f32, y: f32, size: Option<(f32, f32)>, device: &wgpu::Device) {
+    pub(crate) fn add_instance(
+        &mut self,
+        x: f32,
+        y: f32,
+        size: Option<(f32, f32)>,
+        device: &wgpu::Device,
+        screen_w: u32,
+        screen_h: u32
+    ) {
         let (w, h) = match size {
             Some((width, height)) => (width, height),
             None => (self.width, self.height),
         };
-        let new_instance = Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        };
+        let new_instance = Instance2D::new(
+            cgmath::Vector2 { x, y },
+            cgmath::Vector2 { x: w, y: h },
+            None,
+            screen_w,
+            screen_h
+        );
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
         self.instance_buffer.destroy();
@@ -117,17 +133,52 @@ impl InstancedSprite {
             }
         }
     }
-}
 
-impl InstancedDraw for InstancedSprite {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn show(&mut self, index: usize) {
+        let instance = self.instances.get_mut(index).unwrap();
+        if instance.is_hidden() {
+            instance.show();
+            if instance.in_viewport {
+                self.shown_instances.add_num(index as u32)
+            }
+        }
+    }
+
+    pub(crate) fn hide(&mut self, index: usize) {
+        let instance = self.instances.get_mut(index).unwrap();
+        if !instance.is_hidden() {
+            instance.hide();
+            if instance.in_viewport {
+                self.shown_instances.remove_num(index as u32)
+            }
+        }
+    }
+
+    pub(crate) fn is_hidden(&self, index: usize) -> bool {
+        let instance = self.instances.get(index).unwrap();
+        instance.is_hidden()
+    }
+
+    pub(crate) fn get_instances_vec(&self) -> Vec<std::ops::Range<u32>> {
+        self.shown_instances.get_vec()
+    }
+
+    pub(crate) fn move_instance<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
         index: usize,
         direction: V,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
         let instance = self.instances.get_mut(index).unwrap();
-        instance.move_direction(direction);
+        if let Some(show) = instance.move_direction(direction, screen_w, screen_h) {
+            if show {
+                self.shown_instances.add_num(index as u32)
+            } else {
+                self.shown_instances.remove_num(index as u32)
+            }
+        };
         let raw = instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -138,14 +189,22 @@ impl InstancedDraw for InstancedSprite {
         );
     }
 
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
         &mut self,
         index: usize,
         position: P,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
         let instance = self.instances.get_mut(index).unwrap();
-        instance.move_to(position);
+        if let Some(show) = instance.move_to(position, screen_w, screen_h) {
+            if show {
+                self.shown_instances.add_num(index as u32)
+            } else {
+                self.shown_instances.remove_num(index as u32)
+            }
+        };
         let raw = instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -178,13 +237,11 @@ impl AnimatedSprite {
         w: f32,
         h: f32,
         frame_delay: std::time::Duration,
-        looping: bool
+        looping: bool,
+        screen_w: u32,
+        screen_h: u32
     ) -> Self {
-        let mut instance = Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        };
+        let mut instance = Instance2D::new(cgmath::Vector2 { x, y }, cgmath::Vector2 { x: w, y: h }, None, screen_w, screen_h);
 
         let instance_data = instance.to_raw();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -255,16 +312,28 @@ impl AnimatedSprite {
             );
         }
     }
-}
 
-impl InstancedDraw for AnimatedSprite {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn hide(&mut self) {
+        self.instance.hide();
+    }
+
+    pub(crate) fn show(&mut self) {
+        self.instance.show();
+    }
+
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.instance.is_hidden()
+    }
+
+    pub(crate) fn move_instance<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
         index: usize,
         direction: V,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
-        self.instance.move_direction(direction);
+        let _ = self.instance.move_direction(direction, screen_w, screen_h);
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -275,13 +344,15 @@ impl InstancedDraw for AnimatedSprite {
         );
     }
 
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
         &mut self,
         index: usize,
         position: P,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
-        self.instance.move_to(position);
+        let _ = self.instance.move_to(position, screen_w, screen_h);
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -290,5 +361,9 @@ impl InstancedDraw for AnimatedSprite {
                 .unwrap(),
             bytemuck::cast_slice(&[raw]),
         );
+    }
+
+    pub(crate) fn is_drawable(&self) -> bool {
+        self.instance.in_viewport && !self.instance.hidden
     }
 }

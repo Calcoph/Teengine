@@ -48,6 +48,7 @@ impl ModifyingInstance {
         let mut instances = vec![Instance3D {
             position: cgmath::Vector3 { x: self.x*tile_size.0, y: self.y*tile_size.1, z: self.z*tile_size.2 },
             animation: None,
+            hidden: false
         }];
 
         use te_renderer::instances::Instance;

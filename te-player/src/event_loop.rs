@@ -1,11 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use te_gamepad::gamepad::ControllerEvent;
-use te_renderer::state::{State, GpuState};
+use te_renderer::state::{TeState, GpuState};
 use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
 pub use winit::event::Event as Event;
 
-pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, gpu: Rc<RefCell<GpuState>>, state: Rc<RefCell<State>>, mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>) {
+pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, gpu: Rc<RefCell<GpuState>>, state: Rc<RefCell<TeState>>, mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -34,9 +34,9 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, 
                 state.borrow_mut().update(dt, &gpu.borrow());
                 let output = gpu.borrow().surface.get_current_texture().unwrap();
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let mut encoder = te_renderer::state::State::prepare_render(&gpu.borrow());
+                let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
                 state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder);
-                te_renderer::state::State::end_render(&gpu.borrow(), encoder);
+                te_renderer::state::TeState::end_render(&gpu.borrow(), encoder);
                 output.present();
             },
             _ => ()

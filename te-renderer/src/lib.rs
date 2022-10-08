@@ -6,3 +6,5 @@ pub mod resources;
 pub mod state;
 pub mod temap;
 pub mod texture;
+pub mod text;
+pub mod render;

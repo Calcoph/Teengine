@@ -2,7 +2,7 @@ use wgpu::util::DeviceExt;
 
 use crate::model;
 
-use super::{InstanceRaw, InstancedDraw, Instance2D, Instance};
+use super::{InstanceRaw, Instance2D};
 
 #[derive(Debug)]
 pub struct InstancedText {
@@ -21,12 +21,10 @@ impl InstancedText {
         depth: f32,
         w: f32,
         h: f32,
+        screen_w: u32,
+        screen_h: u32
     ) -> Self {
-        let mut instance = Instance2D {
-            position: cgmath::Vector2 { x, y },
-            size: cgmath::Vector2 { x: w, y: h },
-            animation: None
-        };
+        let mut instance = Instance2D::new(cgmath::Vector2 { x, y }, cgmath::Vector2 { x: w, y: h }, None, screen_w, screen_h);
 
         let instance_data = [instance.to_raw()];
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -69,16 +67,16 @@ impl InstancedText {
             bytemuck::cast_slice(&[self.instance.to_raw()]),
         );
     }
-}
 
-impl InstancedDraw for InstancedText {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn move_instance<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
         index: usize,
         direction: V,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
-        self.instance.move_direction(direction);
+        let _ = self.instance.move_direction(direction, screen_w, screen_h);
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -89,13 +87,15 @@ impl InstancedDraw for InstancedText {
         );
     }
 
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
         &mut self,
         index: usize,
         position: P,
         queue: &wgpu::Queue,
+        screen_w: u32,
+        screen_h: u32
     ) {
-        self.instance.move_to(position);
+        let _ = self.instance.move_to(position, screen_w, screen_h);
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -104,6 +104,10 @@ impl InstancedDraw for InstancedText {
                 .unwrap(),
             bytemuck::cast_slice(&[raw]),
         );
+    }
+
+    pub(crate) fn is_drawable(&self) -> bool {
+        self.instance.in_viewport && !self.instance.in_viewport
     }
 }
 

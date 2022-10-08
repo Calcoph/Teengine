@@ -4,8 +4,8 @@ use winit::{
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
-
-use crate::model::Vertex;
+// TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
+use crate::{model::Vertex, render::{DrawModel, Draw2D, DrawTransparentModel}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -89,7 +89,7 @@ impl GpuState {
 }
 
 #[derive(Debug)]
-pub struct State {
+pub struct TeState {
     /// Manages the camera
     pub camera: camera::CameraState,
     /// The window's size
@@ -107,7 +107,7 @@ pub struct State {
     pub render_2d: bool,
 }
 
-impl State {
+impl TeState {
     pub async fn new(window: &Window, gpu: &GpuState, init_config: InitialConfiguration) -> Self {
         let size = window.inner_size();
         let maps_path = init_config.map_files_directory.clone();
@@ -120,7 +120,7 @@ impl State {
             render_pipeline_layout,
             projection_bind_group_layout,
             sprite_render_pipeline_layout,
-        ) = State::get_layouts(&gpu.device);
+        ) = TeState::get_layouts(&gpu.device);
 
         let camera = camera::CameraState::new(
             &gpu.config,
@@ -222,7 +222,7 @@ impl State {
                 });
 
         //instances.place_custom_model("Frustum", gpu, (0.0, 0.0, 0.0), Some(camera.get_frustum_model(gpu, &instances.layout)));
-        State {
+        TeState {
             camera,
             size,
             render_pipeline,
@@ -353,8 +353,8 @@ impl State {
         self.animate(&gpu.queue);
         if self.render_3d {
             self.camera.update(dt, &gpu.queue);
-            self.cull_all();
-            self.instances.update_rendered(&self.camera.frustum, &gpu.queue);
+            self.cull_all3d();
+            self.instances.update_rendered3d(&self.camera.frustum);
         }
     }
 
@@ -460,7 +460,6 @@ impl State {
     }
 
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        use model::DrawModel;
         render_pass.set_pipeline(&self.render_pipeline);
         let iter = self.instances.opaque_instances
             .iter()
@@ -495,7 +494,6 @@ impl State {
     }
 
     pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        use model::DrawTransparentModel;
         render_pass.set_pipeline(&self.transparent_render_pipeline);
         let iter = self
             .instances
@@ -518,7 +516,7 @@ impl State {
                 crate::instances::DrawModel::M(m) => {
                     render_pass.tdraw_model_instanced(
                         &m.model,
-                        0..m.unculled_instances as u32,
+                        m.get_instances_vec(),
                         &self.camera.camera_bind_group,
                     );
                 },
@@ -533,18 +531,17 @@ impl State {
     }
 
     pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        use crate::instances::Draw2D;
         render_pass.set_pipeline(&self.sprite_render_pipeline);
         let mut sorted_2d: Vec<&dyn Draw2D> = self
             .instances
             .texts
             .iter()
-            .filter(|text| text.is_some())
+            .filter(|text| if let Some(t) = text {t.is_drawable()} else {false})
             .map(|text| text.as_ref().unwrap() as &dyn Draw2D)
             .collect();
         let sprites: Vec<&dyn Draw2D> = self.instances.sprite_instances.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
         sorted_2d.extend(sprites.into_iter());
-        let anim_sprites: Vec<&dyn Draw2D> = self.instances.animated_sprites.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
+        let anim_sprites: Vec<&dyn Draw2D> = self.instances.animated_sprites.iter().filter(|(_name, inst)| inst.is_drawable()).map(|(_name, inst)| inst as &dyn Draw2D).collect();
         sorted_2d.extend(anim_sprites.into_iter());
         sorted_2d.sort_by(|inst1, inst2| inst1.get_depth().partial_cmp(&inst2.get_depth()).unwrap());
         for draw in sorted_2d {
@@ -552,7 +549,7 @@ impl State {
         }
     }
 
-    fn cull_all(&mut self) {
+    fn cull_all3d(&mut self) {
         for (_name, model) in self.instances.opaque_instances.iter_mut() {
             match model {
                 crate::instances::DrawModel::M(m) => m.cull_all(),
