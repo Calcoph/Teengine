@@ -676,13 +676,13 @@ impl TeState {
 
     /// Move a 3D model or a 2D sprite relative to its current position.
     /// Ignores z value on 2D sprites.
-    pub fn move_instance(
+    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
         instance: &InstanceReference,
-        direction: cgmath::Vector3<f32>,
+        direction: V,
         queue: &wgpu::Queue
     ) {
-        self.instances.move_instance(instance, direction, queue, self.size.width, self.size.height)
+        self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
     }
 
     /// Move a 3D model or a 2D sprite to an absolute position.
