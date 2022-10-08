@@ -776,7 +776,7 @@ impl InstancesState {
     /// All 2D sprites created from the same file will have the same "z" position. And cannot be changed once set.
     /// ### PANICS
     /// Will panic if the sprite's file is not found
-    fn place_sprite(
+    pub(crate) fn place_sprite(
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
@@ -986,10 +986,10 @@ impl InstancesState {
 
     /// Move a 3D model or a 2D sprite relative to its current position.
     /// Ignores z value on 2D sprites.
-    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn move_instance(
         &mut self,
         instance: &InstanceReference,
-        direction: V,
+        direction: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
         screen_h: u32

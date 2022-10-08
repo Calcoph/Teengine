@@ -5,7 +5,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::Vertex, render::{DrawModel, Draw2D, DrawTransparentModel}};
+use crate::{model::Vertex, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::InstanceReference};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -556,6 +556,25 @@ impl TeState {
                 crate::instances::DrawModel::A(a) => a.cull_all(),
             }
         }
+    }
+
+    pub fn place_sprite(
+        &mut self,
+        sprite_name: &str,
+        gpu: &GpuState,
+        size: Option<(f32, f32)>,
+        position: (f32, f32, f32)
+    ) -> InstanceReference {
+        self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height)
+    }
+
+    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        instance: &InstanceReference,
+        direction: V,
+        queue: &wgpu::Queue,
+    ) {
+        self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
     }
 }
 
