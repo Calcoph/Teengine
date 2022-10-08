@@ -5,7 +5,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::Vertex, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::InstanceReference};
+use crate::{model::Vertex, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::TextReference, animation::Animation}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -98,7 +98,7 @@ pub struct TeState {
     transparent_render_pipeline: wgpu::RenderPipeline,
     sprite_render_pipeline: wgpu::RenderPipeline,
     /// Manages 3D models, 2D sprites and 2D texts
-    pub instances: InstancesState,
+    instances: InstancesState,
     maps_path: String,
     sprite_vertices_buffer: wgpu::Buffer,
     /// Whether to render 3d models
@@ -557,7 +557,60 @@ impl TeState {
             }
         }
     }
+/* 
+    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        instance: &InstanceReference,
+        direction: V,
+        queue: &wgpu::Queue,
+    ) {
+        self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
+    } */
+}
 
+// Calls to self.instances' methods
+impl TeState {
+    /// Creates a new 3D model at the specific position.
+    /// ### PANICS
+    /// Will panic if the model's file is not found
+    pub fn place_model(
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        tile_position: (f32, f32, f32),
+    ) -> InstanceReference {
+        self.instances.place_model(model_name, gpu, tile_position)
+    }
+
+    /// Places an already created model at the specific position.
+    /// If that model has not been forgotten, you can place another with just its name, so model can be None
+    /// ### PANICS
+    /// Will panic if model is None and the model has been forgotten (or was never created)
+    pub fn place_custom_model (
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        tile_position: (f32, f32, f32),
+        model: Option<model::Model>
+    ) -> InstanceReference {
+        self.instances.place_custom_model(model_name, gpu, tile_position, model)
+    }
+
+    /// Places an already created animated model at the specific position.
+    pub fn place_custom_animated_model (
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        tile_position: (f32, f32, f32),
+        model: model::AnimatedModel
+    ) -> InstanceReference {
+        self.instances.place_custom_animated_model(model_name, gpu, tile_position, model)
+    }
+
+    /// Creates a new 2D sprite at the specified position.
+    /// All 2D sprites created from the same file will have the same "z" position. And cannot be changed once set.
+    /// ### PANICS
+    /// Will panic if the sprite's file is not found
     pub fn place_sprite(
         &mut self,
         sprite_name: &str,
@@ -568,13 +621,169 @@ impl TeState {
         self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height)
     }
 
-    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    pub fn place_animated_sprite(
+        &mut self,
+        sprite_names: Vec<&str>,
+        gpu: &GpuState,
+        size: Option<(f32, f32)>,
+        position: (f32, f32, f32),
+        frame_delay: std::time::Duration,
+        looping: bool
+    ) -> InstanceReference {
+        self.instances.place_animated_sprite(sprite_names, gpu, size, position, frame_delay, looping, self.size.width, self.size.height)
+    }
+
+    /// Creates a new text at the specified position
+    /// ### PANICS
+    /// will panic if the characters' files are not found
+    /// see: model::Font
+    pub fn place_text(
+        &mut self,
+        text: Vec<String>,
+        gpu: &GpuState,
+        size: Option<(f32, f32)>,
+        position: (f32, f32, f32)
+    ) -> TextReference {
+        self.instances.place_text(text, gpu, size, position, self.size.width, self.size.height)
+    }
+
+    /// Eliminates the text from screen and memory.
+    pub fn forget_text(&mut self, text: TextReference) {
+        self.instances.forget_text(text)
+    }
+
+    pub fn forget_all_2d_instances(&mut self) {
+        self.instances.forget_all_2d_instances()
+    }
+
+    pub fn forget_all_3d_instances(&mut self) {
+        self.instances.forget_all_3d_instances()
+    }
+
+    pub fn forget_all_instances(&mut self) {
+        self.instances.forget_all_instances()
+    }
+
+    /// Saves all the 3D models' positions in a .temap file.
+    pub fn save_temap(&self, file_name: &str, maps_path: String) {
+        self.instances.save_temap(file_name, maps_path)
+    }
+
+    /// Load all 3D models from a .temap file.
+    pub fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
+        self.instances.fill_from_temap(map, gpu)
+    }
+
+    /// Move a 3D model or a 2D sprite relative to its current position.
+    /// Ignores z value on 2D sprites.
+    pub fn move_instance(
         &mut self,
         instance: &InstanceReference,
-        direction: V,
+        direction: cgmath::Vector3<f32>,
+        queue: &wgpu::Queue
+    ) {
+        self.instances.move_instance(instance, direction, queue, self.size.width, self.size.height)
+    }
+
+    /// Move a 3D model or a 2D sprite to an absolute position.
+    /// Ignores z value on 2D sprites.
+    pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        instance: &InstanceReference,
+        position: P,
+        queue: &wgpu::Queue
+    ) {
+        self.instances.set_instance_position(instance, position.into(), queue, self.size.width, self.size.height)
+    }
+
+    /// Get a 3D model's or 2D sprite's position.
+    pub fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
+        self.instances.get_instance_position(instance)
+    }
+
+    /// Changes the sprite's size. Using TODO algorithm
+    /// ### PANICS
+    /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
+    pub fn resize_sprite<V: Into<cgmath::Vector2<f32>>>(
+        &mut self,
+        instance: &InstanceReference,
+        new_size: V,
         queue: &wgpu::Queue,
     ) {
-        self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
+        self.instances.resize_sprite(instance, new_size.into(), queue)
+    }
+
+    /// Get the sprite's size
+    /// ### PANICS
+    /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
+    pub fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
+        self.instances.get_sprite_size(instance)
+    }
+
+    /// Move a 2D text relative to it's current position.
+    /// Ignores the z value.
+    pub fn move_text<V: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        instance: &TextReference,
+        direction: V,
+        queue: &wgpu::Queue
+    ) {
+        self.instances.move_text(instance, direction.into(), queue, self.size.width, self.size.height)
+    }
+
+    /// Move a 2D text to an absolute position.
+    /// Ignores the z value.
+    pub fn set_text_position<P: Into<cgmath::Vector3<f32>>>(
+        &mut self,
+        instance: &TextReference,
+        position: P,
+        queue: &wgpu::Queue,
+    ) {
+        self.instances.set_text_position(instance, position.into(), queue, self.size.width, self.size.height)
+    }
+
+    /// Gets a 2D text's position
+    pub fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
+        self.instances.get_text_position(instance)
+    }
+
+    /// Resizes a 2D text
+    pub fn resize_text<V: Into<cgmath::Vector2<f32>>>(
+        &mut self,
+        instance: &TextReference,
+        new_size: V,
+        queue: &wgpu::Queue,
+    ) {
+        self.instances.resize_text(instance, new_size.into(), queue)
+    }
+
+    /// Gets a 2D text's size
+    pub fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
+        self.instances.get_text_size(instance)
+    }
+
+    pub fn set_instance_animation(&mut self, instance: &InstanceReference, animation: Animation) {
+        self.instances.set_instance_animation(instance, animation)
+    }
+
+    pub fn set_text_animation(&mut self, text: &TextReference, animation: Animation) {
+        self.instances.set_text_animation(text, animation)
+    }
+
+    pub fn animate_model(&mut self, instance: &InstanceReference, mesh_index: usize, material_index: usize) {
+        self.instances.animate_model(instance, mesh_index, material_index)
+    }
+
+    pub fn hide_instance(&mut self, instance: &InstanceReference) {
+        self.instances.hide_instance(instance)
+    }
+
+    pub fn show_instance(&mut self, instance: &InstanceReference) {
+        self.instances.show_instance(instance)
+    }
+
+    pub fn is_hidden(&self, instance: &InstanceReference) -> bool {
+        self.instances.is_hidden(instance)
     }
 }
 

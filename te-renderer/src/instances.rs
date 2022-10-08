@@ -537,24 +537,24 @@ impl DrawModel {
 
 /// Manages the window's 3D models, 2D sprites and 2D texts
 #[derive(Debug)]
-pub struct InstancesState {
-    pub opaque_instances: HashMap<String, DrawModel>,
-    pub transparent_instances: HashSet<String>,
-    pub sprite_instances: HashMap<String, InstancedSprite>,
-    pub animated_sprites: HashMap<String, AnimatedSprite>,
-    pub texts: Vec<Option<InstancedText>>,
+pub(crate) struct InstancesState {
+    pub(crate) opaque_instances: HashMap<String, DrawModel>,
+    pub(crate) transparent_instances: HashSet<String>,
+    pub(crate) sprite_instances: HashMap<String, InstancedSprite>,
+    pub(crate) animated_sprites: HashMap<String, AnimatedSprite>,
+    pub(crate) texts: Vec<Option<InstancedText>>,
     deleted_texts: Vec<usize>,
-    pub layout: wgpu::BindGroupLayout,
+    pub(crate) layout: wgpu::BindGroupLayout,
     tile_size: (f32, f32, f32),
     chunk_size: (f32, f32, f32),
-    pub resources_path: String,
-    pub default_texture_path: String,
+    pub(crate) resources_path: String,
+    pub(crate) default_texture_path: String,
     font: Font,
     render_matrix: RenderMatrix
 }
 
 impl InstancesState {
-    pub fn new(
+    pub(crate) fn new(
         layout: wgpu::BindGroupLayout,
         tile_size: (f32, f32, f32),
         chunk_size: (f32, f32, f32),
@@ -591,7 +591,7 @@ impl InstancesState {
     /// Creates a new 3D model at the specific position.
     /// ### PANICS
     /// Will panic if the model's file is not found
-    pub fn place_model(
+    pub(crate) fn place_model(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
@@ -607,7 +607,7 @@ impl InstancesState {
     /// If that model has not been forgotten, you can place another with just its name, so model can be None
     /// ### PANICS
     /// Will panic if model is None and the model has been forgotten (or was never created)
-    pub fn place_custom_model (
+    pub(crate) fn place_custom_model (
         &mut self,
         model_name: &str,
         gpu: &GpuState,
@@ -671,7 +671,7 @@ impl InstancesState {
     }
 
     /// Places an already created animated model at the specific position.
-    pub fn place_custom_animated_model (
+    pub(crate) fn place_custom_animated_model (
         &mut self,
         model_name: &str,
         gpu: &GpuState,
@@ -839,7 +839,7 @@ impl InstancesState {
         }
     }
 
-    fn place_animated_sprite(
+    pub(crate) fn place_animated_sprite(
         &mut self,
         sprite_names: Vec<&str>,
         gpu: &GpuState,
@@ -898,7 +898,7 @@ impl InstancesState {
     /// ### PANICS
     /// will panic if the characters' files are not found
     /// see: model::Font
-    fn place_text(
+    pub(crate) fn place_text(
         &mut self,
         text: Vec<String>,
         gpu: &GpuState,
@@ -933,23 +933,23 @@ impl InstancesState {
     }
 
     /// Eliminates the text from screen and memory.
-    pub fn forget_text(&mut self, text: TextReference) {
+    pub(crate) fn forget_text(&mut self, text: TextReference) {
         self.texts.get_mut(text.index).unwrap().take();
         self.deleted_texts.push(text.index)
     }
 
-    pub fn forget_all_2d_instances(&mut self) {
+    pub(crate) fn forget_all_2d_instances(&mut self) {
         self.animated_sprites = HashMap::new();
         self.sprite_instances = HashMap::new();
     }
 
-    pub fn forget_all_3d_instances(&mut self) {
+    pub(crate) fn forget_all_3d_instances(&mut self) {
         self.opaque_instances = HashMap::new();
         self.transparent_instances = HashSet::new();
         self.render_matrix.empty();
     }
 
-    pub fn forget_all_instances(&mut self) {
+    pub(crate) fn forget_all_instances(&mut self) {
         self.animated_sprites = HashMap::new();
         self.sprite_instances = HashMap::new();
         self.opaque_instances = HashMap::new();
@@ -958,7 +958,8 @@ impl InstancesState {
     }
 
     /// Saves all the 3D models' positions in a .temap file.
-    pub fn save_temap(&self, file_name: &str, maps_path: String) {
+    pub(crate) fn save_temap(&self, file_name: &str, maps_path: String) {
+        // TODO: Maybe get maps_path from initial_configuration
         let mut map = temap::TeMap::new();
         for (name, instance) in &self.opaque_instances {
             map.add_model(&name);
@@ -976,7 +977,7 @@ impl InstancesState {
     }
 
     /// Load all 3D models from a .temap file.
-    pub fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
+    pub(crate) fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
         for (name, te_model) in map.models {
             for offset in te_model.offsets {
                 self.place_model_absolute(&name, gpu, (offset.x, offset.y, offset.z));
@@ -1023,10 +1024,10 @@ impl InstancesState {
 
     /// Move a 3D model or a 2D sprite to an absolute position.
     /// Ignores z value on 2D sprites.
-    pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn set_instance_position(
         &mut self,
         instance: &InstanceReference,
-        position: P,
+        position: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
         screen_h: u32
@@ -1059,7 +1060,7 @@ impl InstancesState {
     }
 
     /// Get a 3D model's or 2D sprite's position.
-    pub fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
+    pub(crate) fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.sprite_instances.get(&instance.name).unwrap();
@@ -1084,10 +1085,10 @@ impl InstancesState {
     /// Changes the sprite's size. Using TODO algorithm
     /// ### PANICS
     /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
-    pub fn resize_sprite<V: Into<cgmath::Vector2<f32>>>(
+    pub(crate) fn resize_sprite(
         &mut self,
         instance: &InstanceReference,
-        new_size: V,
+        new_size: cgmath::Vector2<f32>,
         queue: &wgpu::Queue,
     ) {
         match instance.dimension {
@@ -1106,7 +1107,7 @@ impl InstancesState {
     /// Get the sprite's size
     /// ### PANICS
     /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
-    pub fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
+    pub(crate) fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.get_sprite(instance);
@@ -1122,10 +1123,10 @@ impl InstancesState {
 
     /// Move a 2D text relative to it's current position.
     /// Ignores the z value.
-    pub fn move_text<V: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn move_text(
         &mut self,
         instance: &TextReference,
-        direction: V,
+        direction: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
         screen_h: u32
@@ -1141,10 +1142,10 @@ impl InstancesState {
 
     /// Move a 2D text to an absolute position.
     /// Ignores the z value.
-    pub fn set_text_position<P: Into<cgmath::Vector3<f32>>>(
+    pub(crate) fn set_text_position(
         &mut self,
         instance: &TextReference,
-        position: P,
+        position: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
         screen_h: u32
@@ -1159,16 +1160,16 @@ impl InstancesState {
     }
 
     /// Gets a 2D text's position
-    pub fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
+    pub(crate) fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
         let text = self.get_text(instance);
         text.position.into()
     }
 
     /// Resizes a 2D text
-    pub fn resize_text<V: Into<cgmath::Vector2<f32>>>(
+    pub(crate) fn resize_text(
         &mut self,
         instance: &TextReference,
-        new_size: V,
+        new_size: cgmath::Vector2<f32>,
         queue: &wgpu::Queue,
     ) {
         let text = self
@@ -1181,12 +1182,12 @@ impl InstancesState {
     }
 
     /// Gets a 2D text's size
-    pub fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
+    pub(crate) fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
         let text = self.get_text(instance);
         text.size.into()
     }
 
-    pub fn set_instance_animation(&mut self, instance: &InstanceReference, animation: Animation) {
+    pub(crate) fn set_instance_animation(&mut self, instance: &InstanceReference, animation: Animation) {
         match instance.dimension {
             InstanceType::Sprite => self.get_mut_sprite(instance).animation = Some(animation),
             InstanceType::Opaque3D => self.get_mut_model(instance).animation = Some(animation),
@@ -1194,7 +1195,7 @@ impl InstancesState {
         }
     }
 
-    pub fn set_text_animation(&mut self, text: &TextReference, animation: Animation) {
+    pub(crate) fn set_text_animation(&mut self, text: &TextReference, animation: Animation) {
         self.get_mut_text(text).animation = Some(animation)
     }
 
@@ -1249,7 +1250,7 @@ impl InstancesState {
         &sprite.instance
     }
 
-    pub fn animate_model(&mut self, instance: &InstanceReference, mesh_index: usize, material_index: usize) {
+    pub(crate) fn animate_model(&mut self, instance: &InstanceReference, mesh_index: usize, material_index: usize) {
         match instance.dimension {
             InstanceType::Sprite => (),
             InstanceType::Anim2D => (),
@@ -1267,7 +1268,7 @@ impl InstancesState {
         }
     }
 
-    pub fn hide_instance(&mut self, instance: &InstanceReference) {
+    pub(crate) fn hide_instance(&mut self, instance: &InstanceReference) {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.sprite_instances.get_mut(instance.get_name());
@@ -1284,7 +1285,7 @@ impl InstancesState {
         }
     }
 
-    pub fn show_instance(&mut self, instance: &InstanceReference) {
+    pub(crate) fn show_instance(&mut self, instance: &InstanceReference) {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.sprite_instances.get_mut(instance.get_name());
@@ -1301,7 +1302,7 @@ impl InstancesState {
         }
     }
 
-    pub fn is_hidden(&self, instance: &InstanceReference) -> bool {
+    pub(crate) fn is_hidden(&self, instance: &InstanceReference) -> bool {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.sprite_instances.get(instance.get_name());
