@@ -537,18 +537,17 @@ impl DrawModel {
 
 /// Manages the window's 3D models, 2D sprites and 2D texts
 #[derive(Debug)]
-pub(crate) struct InstancesState {
+pub struct InstancesState {
     pub(crate) opaque_instances: HashMap<String, DrawModel>,
     pub(crate) transparent_instances: HashSet<String>,
     pub(crate) sprite_instances: HashMap<String, InstancedSprite>,
     pub(crate) animated_sprites: HashMap<String, AnimatedSprite>,
     pub(crate) texts: Vec<Option<InstancedText>>,
     deleted_texts: Vec<usize>,
-    pub(crate) layout: wgpu::BindGroupLayout,
+    pub layout: wgpu::BindGroupLayout,
     tile_size: (f32, f32, f32),
-    chunk_size: (f32, f32, f32),
-    pub(crate) resources_path: String,
-    pub(crate) default_texture_path: String,
+    pub resources_path: String,
+    pub default_texture_path: String,
     font: Font,
     render_matrix: RenderMatrix
 }
@@ -580,7 +579,6 @@ impl InstancesState {
             deleted_texts,
             layout,
             tile_size,
-            chunk_size,
             resources_path,
             default_texture_path,
             font,

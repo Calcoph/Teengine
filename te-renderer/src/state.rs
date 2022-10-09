@@ -63,7 +63,7 @@ impl GpuState {
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto
+            //alpha_mode: wgpu::CompositeAlphaMode::Auto
         };
         surface.configure(&device, &config);
 
@@ -98,7 +98,7 @@ pub struct TeState {
     transparent_render_pipeline: wgpu::RenderPipeline,
     sprite_render_pipeline: wgpu::RenderPipeline,
     /// Manages 3D models, 2D sprites and 2D texts
-    instances: InstancesState,
+    pub instances: InstancesState,
     maps_path: String,
     sprite_vertices_buffer: wgpu::Buffer,
     /// Whether to render 3d models
@@ -171,7 +171,6 @@ impl TeState {
                 &gpu.device,
                 &sprite_render_pipeline_layout,
                 gpu.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
                 &[model::SpriteVertex::desc(), InstanceRaw::desc()],
                 shader,
                 true,
@@ -851,7 +850,6 @@ fn create_2d_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     color_format: wgpu::TextureFormat,
-    depth_format: Option<wgpu::TextureFormat>,
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
     transparent: bool,

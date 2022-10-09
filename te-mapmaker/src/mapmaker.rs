@@ -4,7 +4,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use te_renderer::{state::{TeState, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources};
+use te_renderer::{state::{TeState, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources, render::{DrawModel, DrawTransparentModel}};
 
 use crate::modifiying_instance::{self, InstancesState, ModifyingInstance};
 
@@ -54,7 +54,7 @@ impl ImguiState {
             texture_format: gpu.config.format,
             ..Default::default()
         };
-        
+
         let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
 
         let resources = get_resource_names(&config.resource_files_directory, "");
@@ -193,7 +193,7 @@ impl ImguiState {
                         //ui.modal
                         if ui.button("Save map") {
                             if state.save_map_name != "" {
-                                self.state.instances.save_temap(&state.save_map_name, map_files_directory.to_string())
+                                self.state.save_temap(&state.save_map_name, map_files_directory.to_string())
                             } else {
                                 ui.open_popup("SAVE FAILED");
                             }
@@ -226,7 +226,7 @@ impl ImguiState {
                         let x = self.mod_instance.modifying_instance.x;
                         let y = self.mod_instance.modifying_instance.y;
                         let z = self.mod_instance.modifying_instance.z;
-                        self.state.instances.place_model(
+                        self.state.place_model(
                             &self.mod_instance.modifying_name,
                             &self.gpu,
                             (x, y, z)
@@ -328,7 +328,7 @@ fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &Mode
                 };
                 if name.contains(&window_state.search_str_temap) && name != "" {
                     if ui.button(name) {
-                        state.instances.forget_all_instances();
+                        state.forget_all_instances();
                         state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu); // TODO: don't hardcode "/"
                     };
                 }
@@ -349,8 +349,7 @@ impl RendererState {
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder")
         });
-        {    
-            use te_renderer::model::DrawModel;
+        {
             let time_elapsed = std::time::Instant::now() - self.blink_time;
             let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
             let mut instances = 0;
@@ -391,7 +390,7 @@ impl RendererState {
                     render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
                     render_pass.draw_model_instanced(
                         &model.unwrap(),
-                        0..instances as u32,
+                        vec![0..instances as u32],
                         &state.camera.camera_bind_group,
                     );
                 // 1 second = 1_000_000_000 nanoseconds
@@ -400,13 +399,12 @@ impl RendererState {
                     self.blink_time = std::time::Instant::now();
                 }
                 state.draw_transparent(&mut render_pass);
-                use te_renderer::model::DrawTransparentModel;
                 if model_visible {
                     if model.unwrap().transparent_meshes.len() > 0 {
                         render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
                         render_pass.tdraw_model_instanced(
                             &model.unwrap(),
-                            0..instances as u32,
+                            vec![0..instances as u32],
                             &state.camera.camera_bind_group,
                         );
                     }
