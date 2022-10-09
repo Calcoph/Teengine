@@ -1,0 +1,135 @@
+pub mod event_loop;
+
+use std::{io::Error, cell::RefCell, rc::Rc};
+use imgui::{Context, Ui};
+use imgui_wgpu::{Renderer, RendererConfig};
+use te_renderer::{initial_config::InitialConfiguration, state::{TeState, GpuState}};
+use wgpu::CommandEncoder;
+pub use winit as te_winit;
+use winit::{window::{WindowBuilder, Icon, Window}, dpi, event_loop::EventLoop};
+use imgui_winit_support::WinitPlatform;
+use image::io::Reader as ImageReader;
+
+use te_gamepad::gamepad::{self, ControllerEvent};
+
+pub struct PrepareResult {
+    pub event_loop: EventLoop<ControllerEvent>,
+    pub gpu: Rc<RefCell<GpuState>>,
+    pub window: Rc<RefCell<Window>>,
+    pub te_state: Rc<RefCell<TeState>>,
+    pub context: Context,
+    pub platform: WinitPlatform,
+    pub renderer: Renderer
+}
+
+/// Get all the structs needed to start the engine, skipping the boilerplate.
+pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareResult, Error> {
+    if log {
+        env_logger::init();
+    }
+
+    let img = match ImageReader::open(&config.icon_path)?.decode() {
+        Ok(img) => img.to_rgba8(),
+        Err(_) => panic!("Icon has wrong format"),
+    };
+    let event_loop = EventLoop::with_user_event();
+    gamepad::listen(event_loop.create_proxy());
+
+    let wb = WindowBuilder::new()
+        .with_title(&config.window_name)
+        .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
+        .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
+            Ok(icon) => icon,
+            Err(_) => panic!("Couldn't get icon raw data")
+        }));
+
+    let window = wb.build(&event_loop)
+        .unwrap();
+
+    let gpu = GpuState::new(window.inner_size(), &window).await;
+    let state = TeState::new(&window, &gpu, config).await;
+
+    let mut context = Context::create();
+    let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
+    platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
+    
+    let renderer_config = RendererConfig {
+        texture_format: gpu.config.format,
+        ..Default::default()
+    };
+
+    let renderer = Renderer::new(&mut context, &gpu.device, &gpu.queue, renderer_config);
+
+    Ok(PrepareResult {
+        event_loop,
+        gpu: Rc::new(RefCell::new(gpu)),
+        window: Rc::new(RefCell::new(window)),
+        te_state: Rc::new(RefCell::new(state)),
+        context,
+        platform,
+        renderer
+    })
+}
+
+/// After calling prepare() call new_window() for each extra window.
+pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<TeState>>), Error> {
+    let img = match ImageReader::open(&config.icon_path)?.decode() {
+        Ok(img) => img.to_rgba8(),
+        Err(_) => panic!("Couldn't find icon"),
+    };
+
+    let wb = WindowBuilder::new()
+        .with_title(&config.window_name)
+        .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
+        .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
+            Ok(icon) => icon,
+            Err(_) => panic!("Couldn't get raw data")
+        }));
+
+    let window = wb.build(event_loop)
+        .unwrap();
+
+    let gpu = GpuState::new(window.inner_size(), &window).await;
+    let state = TeState::new(&window, &gpu, config).await;
+
+    Ok((Rc::new(RefCell::new(gpu)), Rc::new(RefCell::new(window)), Rc::new(RefCell::new(state))))
+}
+
+pub trait ImguiState {
+    fn render(
+        &mut self,
+        view: &wgpu::TextureView,
+        window: &Window,
+        platform: &WinitPlatform,
+        context: &mut Context,
+        gpu: &GpuState,
+        renderer: &mut Renderer
+    ) -> CommandEncoder {
+        platform.prepare_frame(context.io_mut(), window).expect("Failed to prepare frame");
+        let ui = context.frame();
+
+        self.create_ui(&ui);
+
+        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("ImGui Render Encoder")
+        });
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+            renderer.render(ui.render(), &gpu.queue, &gpu.device, &mut render_pass).expect("Rendering failed");
+        }
+        encoder
+    }
+
+    fn create_ui(&mut self, ui: &Ui);
+}
