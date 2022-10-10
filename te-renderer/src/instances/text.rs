@@ -107,7 +107,7 @@ impl InstancedText {
     }
 
     pub(crate) fn is_drawable(&self) -> bool {
-        self.instance.in_viewport && !self.instance.in_viewport
+        self.instance.in_viewport && !self.instance.hidden
     }
 }
 
