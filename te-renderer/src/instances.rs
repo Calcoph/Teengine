@@ -1283,6 +1283,13 @@ impl InstancesState {
         }
     }
 
+    pub(crate) fn hide_text(&mut self, instance: &TextReference) {
+        let text = self.texts.get_mut(instance.index);
+        if let Some(text) = text.unwrap() {
+            text.hide();
+        };
+    }
+
     pub(crate) fn show_instance(&mut self, instance: &InstanceReference) {
         match instance.dimension {
             InstanceType::Sprite => {
@@ -1300,7 +1307,14 @@ impl InstancesState {
         }
     }
 
-    pub(crate) fn is_hidden(&self, instance: &InstanceReference) -> bool {
+    pub(crate) fn show_text(&mut self, instance: &TextReference) {
+        let text = self.texts.get_mut(instance.index);
+        if let Some(text) = text.unwrap() {
+            text.show();
+        };
+    }
+
+    pub(crate) fn is_instance_hidden(&self, instance: &InstanceReference) -> bool {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.sprite_instances.get(instance.get_name());
@@ -1314,6 +1328,15 @@ impl InstancesState {
                 let model = self.opaque_instances.get(instance.get_name());
                 model.unwrap().is_hidden(instance.get_id())
             },
+        }
+    }
+
+    pub(crate) fn is_text_hidden(&self, instance: &TextReference) -> bool {
+        let text = self.texts.get(instance.index);
+        if let Some(text) = text.unwrap() {
+            text.is_hidden()
+        } else {
+            true
         }
     }
 }

@@ -109,6 +109,18 @@ impl InstancedText {
     pub(crate) fn is_drawable(&self) -> bool {
         self.instance.in_viewport && !self.instance.hidden
     }
+
+    pub(crate) fn show(&mut self) {
+        self.instance.show()
+    }
+
+    pub(crate) fn hide(&mut self) {
+        self.instance.hide()
+    }
+
+    pub(crate) fn is_hidden(&self) -> bool {
+        self.instance.is_hidden()
+    }
 }
 
 /// Handle of a 2D text. You will need it when changing its properties.

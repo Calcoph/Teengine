@@ -777,12 +777,24 @@ impl TeState {
         self.instances.hide_instance(instance)
     }
 
+    pub fn hide_text(&mut self, instance: &TextReference) {
+        self.instances.hide_text(instance)
+    }
+
     pub fn show_instance(&mut self, instance: &InstanceReference) {
         self.instances.show_instance(instance)
     }
 
+    pub fn show_text(&mut self, instance: &TextReference) {
+        self.instances.show_text(instance)
+    }
+
     pub fn is_hidden(&self, instance: &InstanceReference) -> bool {
-        self.instances.is_hidden(instance)
+        self.instances.is_instance_hidden(instance)
+    }
+    
+    pub fn is_text_hidden(&self, instance: &TextReference) -> bool {
+        self.instances.is_text_hidden(instance)
     }
 }
 

@@ -208,7 +208,7 @@ impl RangeNode {
             let left = self.contents.start..num;
             let right = num+1..self.contents.end;
             match &self.left {
-                Some(node) => match &mut self.right {
+                Some(_) => match &mut self.right {
                     Some(node) => {
                         self.contents = left;
                         for i in right {
