@@ -112,11 +112,13 @@ impl RangeNode {
                 Some(node) => node.add_num(num),
                 None => self.right = Some(Box::new(RangeNode::new(num))),
             }
-        } else { // num < self.contents.start-1
+        } else if num < self.contents.start-1 {
             match &mut self.left {
                 Some(node) => node.add_num(num),
                 None => self.left = Some(Box::new(RangeNode::new(num))),
             }
+        } else {
+            unreachable!()
         }
     }
 
@@ -164,7 +166,7 @@ impl RangeNode {
     /// true if this node should be deleted. In that case replace it with Option<Self>
     fn remove_num(&mut self, num: u32) -> (bool, Option<Box<Self>>) {
         if self.contents.start == num {
-            if self.contents.end == num {
+            if self.contents.end == num+1 {
                 let left = self.left.take();
                 match self.right.take() {
                     Some(mut right) => {
@@ -191,7 +193,7 @@ impl RangeNode {
                 None => (),
             };
             (false, None)
-        } else { // self.contents.end-1 < num
+        } else if self.contents.end-1 < num {
             match &mut self.right {
                 Some(node) => {
                     let (is_removed, new_node) = node.remove_num(num);
@@ -200,6 +202,36 @@ impl RangeNode {
                     }
                 },
                 None => (),
+            };
+            (false, None)
+        } else { // num is in the middle of the range
+            let left = self.contents.start..num;
+            let right = num+1..self.contents.end;
+            match &self.left {
+                Some(node) => match &mut self.right {
+                    Some(node) => {
+                        self.contents = left;
+                        for i in right {
+                            node.add_num(i) // TODO: Optimize this, so the range isn't converted to int to be converted to range again
+                        }
+                    },
+                    None => {
+                        self.right = Some(Box::new(RangeNode {
+                            contents: right,
+                            left: None,
+                            right: None,
+                        }));
+                        self.contents = left;
+                    },
+                },
+                None => {
+                    self.left = Some(Box::new(RangeNode {
+                        contents: left,
+                        left: None,
+                        right: None,
+                    }));
+                    self.contents = right;
+                },
             };
             (false, None)
         }
