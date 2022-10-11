@@ -6,7 +6,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use te_renderer::{initial_config::InitialConfiguration, state::{TeState, GpuState}};
 use wgpu::CommandEncoder;
 pub use winit as te_winit;
-use winit::{window::{WindowBuilder, Icon, Window}, dpi, event_loop::EventLoop};
+use winit::{window, dpi, event_loop::EventLoop};
 use imgui_winit_support::WinitPlatform;
 use image::io::Reader as ImageReader;
 
@@ -15,7 +15,7 @@ use te_gamepad::gamepad::{self, ControllerEvent};
 pub struct PrepareResult {
     pub event_loop: EventLoop<ControllerEvent>,
     pub gpu: Rc<RefCell<GpuState>>,
-    pub window: Rc<RefCell<Window>>,
+    pub window: Rc<RefCell<window::Window>>,
     pub te_state: Rc<RefCell<TeState>>,
     pub context: Context,
     pub platform: WinitPlatform,
@@ -35,10 +35,10 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareR
     let event_loop = EventLoop::with_user_event();
     gamepad::listen(event_loop.create_proxy());
 
-    let wb = WindowBuilder::new()
+    let wb = window::WindowBuilder::new()
         .with_title(&config.window_name)
         .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
-        .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
+        .with_window_icon(Some(match window::Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => icon,
             Err(_) => panic!("Couldn't get icon raw data")
         }));
@@ -72,16 +72,16 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareR
 }
 
 /// After calling prepare() call new_window() for each extra window.
-pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<TeState>>), Error> {
+pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<window::Window>>, Rc<RefCell<TeState>>), Error> {
     let img = match ImageReader::open(&config.icon_path)?.decode() {
         Ok(img) => img.to_rgba8(),
         Err(_) => panic!("Couldn't find icon"),
     };
 
-    let wb = WindowBuilder::new()
+    let wb = window::WindowBuilder::new()
         .with_title(&config.window_name)
         .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
-        .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
+        .with_window_icon(Some(match window::Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => icon,
             Err(_) => panic!("Couldn't get raw data")
         }));
@@ -99,7 +99,7 @@ pub trait ImguiState {
     fn render(
         &mut self,
         view: &wgpu::TextureView,
-        window: &Window,
+        window: &window::Window,
         platform: &WinitPlatform,
         context: &mut Context,
         gpu: &GpuState,
