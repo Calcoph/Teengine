@@ -1,7 +1,7 @@
 pub mod event_loop;
 
 use std::{io::Error, cell::RefCell, rc::Rc};
-use imgui::{Context, Ui};
+pub use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use te_renderer::{initial_config::InitialConfiguration, state::{TeState, GpuState}};
 use wgpu::CommandEncoder;

@@ -58,7 +58,7 @@ pub fn run<I: ImguiState + 'static>(
                 te_renderer::state::TeState::end_render(&gpu.borrow(), encoders);
                 output.present();
             },
-            _ => () // ignore windowevents that aren't for current window
+            _ => ()
         }
 
         platform.handle_event(context.io_mut(), &window.borrow(), &event);
