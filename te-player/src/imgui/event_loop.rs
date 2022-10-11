@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use imgui::Context;
+use imgui::{Context, Io};
 use imgui_wgpu::Renderer;
 use imgui_winit_support::WinitPlatform;
 use te_gamepad::gamepad::ControllerEvent;
@@ -19,7 +19,7 @@ pub fn run<I: ImguiState + 'static>(
     mut platform: WinitPlatform,
     mut context: Context,
     mut renderer: Renderer,
-    mut event_handler: Box<dyn FnMut(Event<ControllerEvent>, &mut I)>
+    mut event_handler: Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io)>
 ) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
@@ -62,6 +62,6 @@ pub fn run<I: ImguiState + 'static>(
         }
 
         platform.handle_event(context.io_mut(), &window.borrow(), &event);
-        event_handler(event, &mut imgui_state);
+        event_handler(event, &mut imgui_state, context.io_mut());
     })
 }
