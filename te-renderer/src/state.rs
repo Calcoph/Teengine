@@ -89,6 +89,60 @@ impl GpuState {
 }
 
 #[derive(Debug)]
+pub struct TeColor {
+    red: f64,
+    green: f64,
+    blue: f64
+}
+
+impl TeColor {
+    pub fn get_red(&self) -> f64 {
+        self.red
+    }
+
+    pub fn set_red(&mut self, mut red: f64) {
+        if red < 0.0 {
+            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            red = 0.0;
+        } else if red > 1.0 {
+            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            red = 1.0;
+        }
+        self.red = red
+    }
+
+    pub fn get_green(&self) -> f64 {
+        self.green
+    }
+
+    pub fn set_green(&mut self, mut green: f64) {
+        if green < 0.0 {
+            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            green = 0.0;
+        } else if green > 1.0 {
+            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            green = 1.0;
+        }
+        self.green = green
+    }
+
+    pub fn get_blue(&self) -> f64 {
+        self.blue
+    }
+
+    pub fn set_blue(&mut self, mut blue: f64) {
+        if blue < 0.0 {
+            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            blue = 0.0;
+        } else if blue > 1.0 {
+            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            blue = 1.0;
+        }
+        self.blue = blue
+    }
+}
+
+#[derive(Debug)]
 pub struct TeState {
     /// Manages the camera
     pub camera: camera::CameraState,
@@ -105,6 +159,7 @@ pub struct TeState {
     pub render_3d: bool,
     /// Whether to render 2D sprites and texts.
     pub render_2d: bool,
+    pub bgcolor: TeColor
 }
 
 impl TeState {
@@ -232,6 +287,7 @@ impl TeState {
             sprite_vertices_buffer,
             render_2d: true,
             render_3d: true,
+            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 }
         }
     }
 
@@ -404,9 +460,9 @@ impl TeState {
                                 resolve_target: None,
                                 ops: wgpu::Operations {
                                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                                        r: 0.0,
-                                        g: 0.0,
-                                        b: 0.0,
+                                        r: self.bgcolor.red,
+                                        g: self.bgcolor.green,
+                                        b: self.bgcolor.blue,
                                         a: 1.0,
                                     }),
                                     store: true,
