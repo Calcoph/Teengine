@@ -11,7 +11,7 @@ pub(crate) mod rangetree;
 use crate::{
     resources::{load_glb_model, load_sprite},
     state::GpuState,
-    temap, camera, model::{Model, AnimatedModel}, text::Font
+    temap, camera, model::{Model, AnimatedModel, Material}, text::Font
 };
 
 use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, TextReference}};
@@ -618,7 +618,7 @@ impl InstancesState {
         self.place_custom_model_absolute(model_name, gpu, (x, y, z), model)
     }
 
-    fn place_custom_model_absolute (
+    pub(crate) fn place_custom_model_absolute (
         &mut self,
         model_name: &str,
         gpu: &GpuState,
@@ -630,7 +630,7 @@ impl InstancesState {
                 let instanced_m = self.opaque_instances.get_mut(model_name).unwrap();
                 match instanced_m {
                     DrawModel::M(m) => m.add_instance(x, y, z, &gpu.device),
-                    DrawModel::A(_) => panic!("This is impossible"),
+                    DrawModel::A(_) => unreachable!(),
                 }
             }
             false => {
@@ -683,7 +683,7 @@ impl InstancesState {
         self.place_custom_animated_model_absolute(model_name, model)
     }
 
-    fn place_custom_animated_model_absolute (
+    fn place_custom_animated_model_absolute ( // TODO: make this pub(crate)
         &mut self,
         model_name: &str,
         model: AnimatedModel
@@ -804,6 +804,63 @@ impl InstancesState {
                     self.resources_path.clone(),
                 )
                 .unwrap();
+                let (width, height) = match size {
+                    Some((w, h)) => (w, h),
+                    None => (width, height),
+                };
+                let instanced_s = InstancedSprite::new(
+                    sprite,
+                    &gpu.device,
+                    position.0,
+                    position.1,
+                    position.2,
+                    width,
+                    height,
+                    screen_w,
+                    screen_h
+                );
+                self.sprite_instances
+                    .insert(sprite_name.to_string(), instanced_s);
+            }
+        }
+
+        InstanceReference {
+            name: sprite_name.to_string(),
+            index: self
+                .sprite_instances
+                .get(&sprite_name.to_string())
+                .unwrap()
+                .instances
+                .len()
+                - 1,
+            dimension: InstanceType::Sprite,
+        }
+    }
+
+    pub(crate) fn place_custom_sprite(
+        &mut self,
+        sprite_name: &str,
+        gpu: &GpuState,
+        size: Option<(f32, f32)>,
+        position: (f32, f32, f32),
+        screen_w: u32,
+        screen_h: u32,
+        sprite: Option<(Material, f32, f32)>
+    ) -> InstanceReference {
+        match self.sprite_instances.contains_key(sprite_name) {
+            true => {
+                let instanced_s = self.sprite_instances.get_mut(sprite_name).unwrap();
+                instanced_s.add_instance(
+                    position.0,
+                    position.1,
+                    size,
+                    &gpu.device,
+                    screen_w,
+                    screen_h
+                );
+            }
+            false => {
+                let (sprite, width, height) = sprite.unwrap();
                 let (width, height) = match size {
                     Some((w, h)) => (w, h),
                     None => (width, height),

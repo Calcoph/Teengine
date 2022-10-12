@@ -1,11 +1,11 @@
-use wgpu::{util::DeviceExt, CommandBuffer};
+use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout};
 use winit::{
     dpi,
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::Vertex, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::TextReference, animation::Animation}};
+use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::TextReference, animation::Animation}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -569,6 +569,10 @@ impl TeState {
 
 // Calls to self.instances' methods
 impl TeState {
+    pub fn get_layout(&self) -> &BindGroupLayout {
+        &self.instances.layout
+    }
+
     /// Creates a new 3D model at the specific position.
     /// ### PANICS
     /// Will panic if the model's file is not found
@@ -585,7 +589,7 @@ impl TeState {
     /// If that model has not been forgotten, you can place another with just its name, so model can be None
     /// ### PANICS
     /// Will panic if model is None and the model has been forgotten (or was never created)
-    pub fn place_custom_model (
+    pub fn place_custom_model(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
@@ -593,6 +597,16 @@ impl TeState {
         model: Option<model::Model>
     ) -> InstanceReference {
         self.instances.place_custom_model(model_name, gpu, tile_position, model)
+    }
+
+    pub fn place_custom_model_absolute(
+        &mut self,
+        model_name: &str,
+        gpu: &GpuState,
+        tile_position: (f32, f32, f32),
+        model: Option<model::Model>
+    ) -> InstanceReference {
+        self.instances.place_custom_model_absolute(model_name, gpu, tile_position, model)
     }
 
     /// Places an already created animated model at the specific position.
@@ -618,6 +632,17 @@ impl TeState {
         position: (f32, f32, f32)
     ) -> InstanceReference {
         self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height)
+    }
+
+    pub fn place_custom_sprite(
+        &mut self,
+        sprite_name: &str,
+        gpu: &GpuState,
+        size: Option<(f32, f32)>,
+        position: (f32, f32, f32),
+        sprite: Option<(Material, f32, f32)>
+    ) -> InstanceReference {
+        self.instances.place_custom_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height, sprite)
     }
 
     pub fn place_animated_sprite(
