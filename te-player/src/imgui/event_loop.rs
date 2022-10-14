@@ -51,8 +51,8 @@ pub fn run<I: ImguiState + 'static>(
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoders = te_renderer::state::TeState::prepare_render(&gpu.borrow());
 
-                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders);
                 let imgui_encoder = imgui_state.render(&view, &window.borrow(), &platform, &mut context, &gpu.borrow(), &mut renderer);
+                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders);
 
                 encoders.push(imgui_encoder);
                 te_renderer::state::TeState::end_render(&gpu.borrow(), encoders);
