@@ -307,7 +307,7 @@ impl TeState {
             render_2d: true,
             render_3d: true,
             render_text: true,
-            bgcolor: TeColor { red: 1.0, green: 1.0, blue: 1.0 }
+            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 }
         }
     }
 
