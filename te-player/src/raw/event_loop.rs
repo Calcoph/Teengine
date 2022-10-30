@@ -36,8 +36,9 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, 
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
                 state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder);
-                te_renderer::state::TeState::end_render(&gpu.borrow(), encoder);
+                state.borrow_mut().end_render(&gpu.borrow(), encoder);
                 output.present();
+                state.borrow_mut().text.after_present()
             },
             _ => ()
         }

@@ -14,7 +14,7 @@ use crate::{
     temap, camera, model::{Model, AnimatedModel, Material}, text::Font
 };
 
-use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, TextReference}};
+use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, OldTextReference}};
 
 struct QuadTree {
     
@@ -961,7 +961,7 @@ impl InstancesState {
         position: (f32, f32, f32),
         screen_w: u32,
         screen_h: u32
-    ) -> TextReference {
+    ) -> OldTextReference {
         let (text, w, h) = self.font.write_to_material(text, gpu, &self.layout);
         let instanced_t = match size {
             Some((w, h)) => {
@@ -984,11 +984,11 @@ impl InstancesState {
             }
         };
 
-        TextReference { index }
+        OldTextReference { index }
     }
 
     /// Eliminates the text from screen and memory.
-    pub(crate) fn forget_text(&mut self, text: TextReference) {
+    pub(crate) fn forget_text(&mut self, text: OldTextReference) {
         self.texts.get_mut(text.index).unwrap().take();
         self.deleted_texts.push(text.index)
     }
@@ -1180,7 +1180,7 @@ impl InstancesState {
     /// Ignores the z value.
     pub(crate) fn move_text(
         &mut self,
-        instance: &TextReference,
+        instance: &OldTextReference,
         direction: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
@@ -1199,7 +1199,7 @@ impl InstancesState {
     /// Ignores the z value.
     pub(crate) fn set_text_position(
         &mut self,
-        instance: &TextReference,
+        instance: &OldTextReference,
         position: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
@@ -1215,7 +1215,7 @@ impl InstancesState {
     }
 
     /// Gets a 2D text's position
-    pub(crate) fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
+    pub(crate) fn get_text_position(&self, instance: &OldTextReference) -> (f32, f32) {
         let text = self.get_text(instance);
         text.position.into()
     }
@@ -1223,7 +1223,7 @@ impl InstancesState {
     /// Resizes a 2D text
     pub(crate) fn resize_text(
         &mut self,
-        instance: &TextReference,
+        instance: &OldTextReference,
         new_size: cgmath::Vector2<f32>,
         queue: &wgpu::Queue,
     ) {
@@ -1237,7 +1237,7 @@ impl InstancesState {
     }
 
     /// Gets a 2D text's size
-    pub(crate) fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
+    pub(crate) fn get_text_size(&self, instance: &OldTextReference) -> (f32, f32) {
         let text = self.get_text(instance);
         text.size.into()
     }
@@ -1250,7 +1250,7 @@ impl InstancesState {
         }
     }
 
-    pub(crate) fn set_text_animation(&mut self, text: &TextReference, animation: Animation) {
+    pub(crate) fn set_text_animation(&mut self, text: &OldTextReference, animation: Animation) {
         self.get_mut_text(text).animation = Some(animation)
     }
 
@@ -1267,7 +1267,7 @@ impl InstancesState {
         }
     }
 
-    fn get_text(&self, text: &TextReference) -> &Instance2D {
+    fn get_text(&self, text: &OldTextReference) -> &Instance2D {
         let text = self.texts.get(text.index).unwrap().as_ref().unwrap();
         &text.instance
     }
@@ -1285,7 +1285,7 @@ impl InstancesState {
         }
     }
 
-    fn get_mut_text(&mut self, text: &TextReference) -> &mut Instance2D {
+    fn get_mut_text(&mut self, text: &OldTextReference) -> &mut Instance2D {
         let text = self.texts.get_mut(text.index).unwrap().as_mut().unwrap();
         &mut text.instance
     }
@@ -1340,7 +1340,7 @@ impl InstancesState {
         }
     }
 
-    pub(crate) fn hide_text(&mut self, instance: &TextReference) {
+    pub(crate) fn hide_text(&mut self, instance: &OldTextReference) {
         let text = self.texts.get_mut(instance.index);
         if let Some(text) = text.unwrap() {
             text.hide();
@@ -1364,7 +1364,7 @@ impl InstancesState {
         }
     }
 
-    pub(crate) fn show_text(&mut self, instance: &TextReference) {
+    pub(crate) fn show_text(&mut self, instance: &OldTextReference) {
         let text = self.texts.get_mut(instance.index);
         if let Some(text) = text.unwrap() {
             text.show();
@@ -1388,7 +1388,7 @@ impl InstancesState {
         }
     }
 
-    pub(crate) fn is_text_hidden(&self, instance: &TextReference) -> bool {
+    pub(crate) fn is_text_hidden(&self, instance: &OldTextReference) -> bool {
         let text = self.texts.get(instance.index);
         if let Some(text) = text.unwrap() {
             text.is_hidden()

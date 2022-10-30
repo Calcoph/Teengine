@@ -1,11 +1,11 @@
-use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout};
+use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder};
 use winit::{
     dpi,
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::TextReference, animation::Animation}};
+use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError, TextReference}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -96,16 +96,30 @@ pub struct TeColor {
 }
 
 impl TeColor {
+    pub fn new(red: f64, green: f64, blue: f64) -> TeColor {
+        let mut color = TeColor {
+            red: 0.0,
+            green: 0.0,
+            blue: 0.0,
+        };
+
+        color.set_red(red);
+        color.set_green(green);
+        color.set_blue(blue);
+
+        color
+    }
+
     pub fn get_red(&self) -> f64 {
         self.red
     }
 
     pub fn set_red(&mut self, mut red: f64) {
         if red < 0.0 {
-            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0");
             red = 0.0;
         } else if red > 1.0 {
-            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0");
             red = 1.0;
         }
         self.red = red
@@ -117,10 +131,10 @@ impl TeColor {
 
     pub fn set_green(&mut self, mut green: f64) {
         if green < 0.0 {
-            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0");
             green = 0.0;
         } else if green > 1.0 {
-            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0");
             green = 1.0;
         }
         self.green = green
@@ -132,10 +146,10 @@ impl TeColor {
 
     pub fn set_blue(&mut self, mut blue: f64) {
         if blue < 0.0 {
-            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0");
             blue = 0.0;
         } else if blue > 1.0 {
-            eprintln!("TeClor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0");
             blue = 1.0;
         }
         self.blue = blue
@@ -153,12 +167,15 @@ pub struct TeState {
     sprite_render_pipeline: wgpu::RenderPipeline,
     /// Manages 3D models, 2D sprites and 2D texts
     pub instances: InstancesState,
+    pub text: TextState,
     maps_path: String,
     sprite_vertices_buffer: wgpu::Buffer,
     /// Whether to render 3d models
     pub render_3d: bool,
-    /// Whether to render 2D sprites and texts.
+    /// Whether to render 2D sprites and instanced texts.
     pub render_2d: bool,
+    /// Whether to render texts.
+    pub render_text: bool,
     pub bgcolor: TeColor
 }
 
@@ -276,6 +293,7 @@ impl TeState {
                 });
 
         //instances.place_custom_model("Frustum", gpu, (0.0, 0.0, 0.0), Some(camera.get_frustum_model(gpu, &instances.layout)));
+        let text = TextState::new();
         TeState {
             camera,
             size,
@@ -283,12 +301,62 @@ impl TeState {
             transparent_render_pipeline,
             sprite_render_pipeline,
             instances,
+            text,
             maps_path,
             sprite_vertices_buffer,
             render_2d: true,
             render_3d: true,
-            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 }
+            render_text: true,
+            bgcolor: TeColor { red: 1.0, green: 1.0, blue: 1.0 }
         }
+    }
+
+    pub fn load_font(&mut self, font_path: String, gpu: &GpuState) -> Result<FontReference, FontError> {
+        self.text.load_font(font_path, &gpu.device, gpu.config.format)
+    }
+
+    pub fn place_text<P: Into<cgmath::Vector2<f32>>>(&mut self, font: &FontReference, message: String, position: P, color: TeColor, size: f32) -> TextReference {
+        self.text.place_text(font, message, position, color, size)
+    }
+
+    pub fn forget_text(&mut self, text: TextReference) {
+        self.text.forget_text(text)
+    }
+
+    pub fn move_text<V: Into<cgmath::Vector2<f32>>>(&mut self, text: &TextReference, direction: V) {
+        self.text.move_text(text, direction.into())
+    }
+
+    pub fn set_text_position<V: Into<cgmath::Vector2<f32>>>(&mut self, text: &TextReference, position: V) {
+        self.text.set_text_position(text, position.into())
+    }
+
+    pub fn get_text_position(&self, text: &TextReference) -> cgmath::Vector2<f32> {
+        self.text.get_text_position(text)
+    }
+
+    pub fn resize_text(&mut self, text: &TextReference, size: f32) {
+        self.text.resize_text(text, size)
+    }
+
+    pub fn get_text_size(&self, text: &TextReference) -> f32 {
+        self.text.get_text_size(text)
+    }
+
+    pub fn set_text_animation(&mut self, text: &TextReference) {
+        todo!()
+    }
+
+    pub fn hide_text(&mut self, text: &TextReference) {
+        self.text.hide_text(text)
+    }
+
+    pub fn show_text(&mut self, text: &TextReference) {
+        self.text.show_text(text)
+    }
+
+    pub fn is_text_hidden(&self, text: &TextReference) -> bool{
+        self.text.is_text_hidden(text)
     }
 
     pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
@@ -423,6 +491,10 @@ impl TeState {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("2D Render Encoder"),
                 }),
+            gpu.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Text encoder"),
+                }),
         ]
     }
 
@@ -504,13 +576,19 @@ impl TeState {
                     });
             self.draw_sprites(&mut render_pass);
         }
+
+        if self.render_text {
+            self.draw_text(&gpu.device, encoders.get_mut(2).unwrap(), view);
+        }
     }
 
-    pub fn end_render(gpu: &GpuState, encoders: Vec<wgpu::CommandEncoder>) {
+    pub fn end_render(&mut self, gpu: &GpuState, encoders: Vec<wgpu::CommandEncoder>) {
+        self.text.end_render();
         let encoders: Vec<CommandBuffer> = encoders
             .into_iter()
             .map(|encoder| encoder.finish())
             .collect();
+
         gpu.queue.submit(encoders);
     }
 
@@ -602,6 +680,10 @@ impl TeState {
         for draw in sorted_2d {
             draw.draw(render_pass, &self.camera.projection_bind_group, &self.sprite_vertices_buffer)
         }
+    }
+
+    pub fn draw_text(&mut self, device: &wgpu::Device, encoder: &mut CommandEncoder, view: &wgpu::TextureView) {
+        self.text.draw(device, encoder, view, self.size.into())
     }
 
     fn cull_all3d(&mut self) {
@@ -717,18 +799,18 @@ impl TeState {
     /// ### PANICS
     /// will panic if the characters' files are not found
     /// see: model::Font
-    pub fn place_text(
+    pub fn place_old_text(
         &mut self,
         text: Vec<String>,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32)
-    ) -> TextReference {
+    ) -> OldTextReference {
         self.instances.place_text(text, gpu, size, position, self.size.width, self.size.height)
     }
 
     /// Eliminates the text from screen and memory.
-    pub fn forget_text(&mut self, text: TextReference) {
+    pub fn forget_old_text(&mut self, text: OldTextReference) {
         self.instances.forget_text(text)
     }
 
@@ -802,9 +884,9 @@ impl TeState {
 
     /// Move a 2D text relative to it's current position.
     /// Ignores the z value.
-    pub fn move_text<V: Into<cgmath::Vector3<f32>>>(
+    pub fn move_old_text<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
-        instance: &TextReference,
+        instance: &OldTextReference,
         direction: V,
         queue: &wgpu::Queue
     ) {
@@ -813,9 +895,9 @@ impl TeState {
 
     /// Move a 2D text to an absolute position.
     /// Ignores the z value.
-    pub fn set_text_position<P: Into<cgmath::Vector3<f32>>>(
+    pub fn set_old_text_position<P: Into<cgmath::Vector3<f32>>>(
         &mut self,
-        instance: &TextReference,
+        instance: &OldTextReference,
         position: P,
         queue: &wgpu::Queue,
     ) {
@@ -823,14 +905,14 @@ impl TeState {
     }
 
     /// Gets a 2D text's position
-    pub fn get_text_position(&self, instance: &TextReference) -> (f32, f32) {
+    pub fn get_old_text_position(&self, instance: &OldTextReference) -> (f32, f32) {
         self.instances.get_text_position(instance)
     }
 
     /// Resizes a 2D text
-    pub fn resize_text<V: Into<cgmath::Vector2<f32>>>(
+    pub fn resize_old_text<V: Into<cgmath::Vector2<f32>>>(
         &mut self,
-        instance: &TextReference,
+        instance: &OldTextReference,
         new_size: V,
         queue: &wgpu::Queue,
     ) {
@@ -838,7 +920,7 @@ impl TeState {
     }
 
     /// Gets a 2D text's size
-    pub fn get_text_size(&self, instance: &TextReference) -> (f32, f32) {
+    pub fn get_old_text_size(&self, instance: &OldTextReference) -> (f32, f32) {
         self.instances.get_text_size(instance)
     }
 
@@ -846,7 +928,7 @@ impl TeState {
         self.instances.set_instance_animation(instance, animation)
     }
 
-    pub fn set_text_animation(&mut self, text: &TextReference, animation: Animation) {
+    pub fn set_old_text_animation(&mut self, text: &OldTextReference, animation: Animation) {
         self.instances.set_text_animation(text, animation)
     }
 
@@ -860,7 +942,7 @@ impl TeState {
         }
     }
 
-    pub fn hide_text(&mut self, instance: &TextReference) {
+    pub fn hide_old_text(&mut self, instance: &OldTextReference) {
         if !self.instances.is_text_hidden(instance) {
             self.instances.hide_text(instance)
         }
@@ -872,7 +954,7 @@ impl TeState {
         }
     }
 
-    pub fn show_text(&mut self, instance: &TextReference) {
+    pub fn show_old_text(&mut self, instance: &OldTextReference) {
         if self.instances.is_text_hidden(instance) {
             self.instances.show_text(instance)
         }
@@ -882,7 +964,7 @@ impl TeState {
         self.instances.is_instance_hidden(instance)
     }
     
-    pub fn is_text_hidden(&self, instance: &TextReference) -> bool {
+    pub fn is_old_text_hidden(&self, instance: &OldTextReference) -> bool {
         self.instances.is_text_hidden(instance)
     }
 }

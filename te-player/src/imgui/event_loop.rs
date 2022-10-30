@@ -55,8 +55,9 @@ pub fn run<I: ImguiState + 'static>(
                 state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders);
 
                 encoders.push(imgui_encoder);
-                te_renderer::state::TeState::end_render(&gpu.borrow(), encoders);
+                state.borrow_mut().end_render(&gpu.borrow(), encoders);
                 output.present();
+                state.borrow_mut().text.after_present();
             },
             _ => ()
         }

@@ -124,6 +124,6 @@ impl InstancedText {
 }
 
 /// Handle of a 2D text. You will need it when changing its properties.
-pub struct TextReference {
+pub struct OldTextReference {
     pub index: usize,
 }
