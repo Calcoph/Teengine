@@ -4,5 +4,6 @@ members = [
     "te-player",
     "te-gamepad",
     "te-mapmaker",
-    "te-renderer"
+    "te-renderer",
+    "te-examples"
 ]
