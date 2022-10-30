@@ -1,3 +1,4 @@
+pub use glyph_brush::{Section, Text};
 use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder};
 use winit::{
     dpi,
@@ -5,7 +6,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError, TextReference}};
+use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -315,50 +316,6 @@ impl TeState {
         self.text.load_font(font_path, &gpu.device, gpu.config.format)
     }
 
-    pub fn place_text<P: Into<cgmath::Vector2<f32>>>(&mut self, font: &FontReference, message: String, position: P, color: TeColor, size: f32) -> TextReference {
-        self.text.place_text(font, message, position, color, size)
-    }
-
-    pub fn forget_text(&mut self, text: TextReference) {
-        self.text.forget_text(text)
-    }
-
-    pub fn move_text<V: Into<cgmath::Vector2<f32>>>(&mut self, text: &TextReference, direction: V) {
-        self.text.move_text(text, direction.into())
-    }
-
-    pub fn set_text_position<V: Into<cgmath::Vector2<f32>>>(&mut self, text: &TextReference, position: V) {
-        self.text.set_text_position(text, position.into())
-    }
-
-    pub fn get_text_position(&self, text: &TextReference) -> cgmath::Vector2<f32> {
-        self.text.get_text_position(text)
-    }
-
-    pub fn resize_text(&mut self, text: &TextReference, size: f32) {
-        self.text.resize_text(text, size)
-    }
-
-    pub fn get_text_size(&self, text: &TextReference) -> f32 {
-        self.text.get_text_size(text)
-    }
-
-    pub fn set_text_animation(&mut self, text: &TextReference) {
-        todo!()
-    }
-
-    pub fn hide_text(&mut self, text: &TextReference) {
-        self.text.hide_text(text)
-    }
-
-    pub fn show_text(&mut self, text: &TextReference) {
-        self.text.show_text(text)
-    }
-
-    pub fn is_text_hidden(&self, text: &TextReference) -> bool{
-        self.text.is_text_hidden(text)
-    }
-
     pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
         let map = temap::TeMap::from_file(file_name, self.maps_path.clone());
         self.instances.fill_from_temap(map, gpu);
@@ -517,6 +474,7 @@ impl TeState {
         view: &wgpu::TextureView,
         gpu: &GpuState,
         encoders: &mut Vec<wgpu::CommandEncoder>,
+        texts: &[(FontReference, Vec<Section>)]
     ) {
         if self.render_3d {
             let mut render_pass =
@@ -578,7 +536,7 @@ impl TeState {
         }
 
         if self.render_text {
-            self.draw_text(&gpu.device, encoders.get_mut(2).unwrap(), view);
+            self.draw_text(&gpu.device, encoders.get_mut(2).unwrap(), view, texts);
         }
     }
 
@@ -682,8 +640,8 @@ impl TeState {
         }
     }
 
-    pub fn draw_text(&mut self, device: &wgpu::Device, encoder: &mut CommandEncoder, view: &wgpu::TextureView) {
-        self.text.draw(device, encoder, view, self.size.into())
+    pub fn draw_text(&mut self, device: &wgpu::Device, encoder: &mut CommandEncoder, view: &wgpu::TextureView, sections: &[(FontReference, Vec<Section>)]) {
+        self.text.draw(device, encoder, view, self.size.into(), sections)
     }
 
     fn cull_all3d(&mut self) {

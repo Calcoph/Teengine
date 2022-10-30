@@ -97,11 +97,6 @@ impl Font {
 
 #[derive(Clone)]
 pub struct FontReference {
-    path: String
-}
-
-pub struct TextReference {
-    font: FontReference,
     index: usize
 }
 
@@ -111,18 +106,14 @@ pub struct FontError;
 #[derive(Debug)]
 pub struct TextState {
     buffer: StagingBelt,
-    brushes: HashMap<String, GlyphBrush<()>>,
-    texts: HashMap<String, Vec<Option<TeText>>>,
-    deleted_texts: HashMap<String, ReverseSortedVec<usize>>
+    brushes: Vec<GlyphBrush<()>>,
 }
 
 impl TextState {
     pub fn new() -> TextState {
         TextState {
             buffer: StagingBelt::new(1024),
-            brushes: HashMap::new(),
-            texts: HashMap::new(),
-            deleted_texts: HashMap::new()
+            brushes: Vec::new(),
         }
     }
 
@@ -137,10 +128,8 @@ impl TextState {
         }?;
         let brush = GlyphBrushBuilder::using_font(font)
             .build(&device, render_format);
-        let reference = FontReference { path: font_path.clone() };
-        self.brushes.insert(font_path.clone(), brush);
-        self.texts.insert(font_path.clone(), Vec::new());
-        self.deleted_texts.insert(font_path, ReverseSortedVec::new());
+        let reference = FontReference { index: self.brushes.len() };
+        self.brushes.push(brush);
         Ok(reference)
     }
 
@@ -152,114 +141,20 @@ impl TextState {
         self.buffer.recall()
     }
 
-    pub(crate) fn draw(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, window_size: (u32, u32)) {
-        for (font_path, brush) in self.brushes.iter_mut() {
-            if let Some(texts) = self.texts.get(font_path) {
-                for text in texts {
-                    if let Some(text) = text {
-                        if !text.hidden {
-                            brush.queue(Section {
-                                screen_position: text.position.into(),
-                                bounds: (window_size.0 as f32, window_size.1 as f32),
-                                text: vec![glyph_brush::Text::new(&text.string)
-                                    .with_color([text.color.get_red() as f32, text.color.get_green() as f32, text.color.get_blue() as f32, 1.0])
-                                    .with_scale(text.size)
-                                ],
-                                ..Section::default()
-                            })
-                        }
-                    }
-                }
-
-                brush.draw_queued(
-                    device,
-                    &mut self.buffer,
-                    encoder,
-                    view,
-                    window_size.0,
-                    window_size.1
-                ).unwrap();
+    pub(crate) fn draw(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, window_size: (u32, u32), sections: &[(FontReference, Vec<Section>)]) {
+        for (font, texts) in sections {
+            let brush = self.brushes.get_mut(font.index).unwrap();
+            for text in texts {
+                brush.queue(text)
             }
+            brush.draw_queued(
+                device,
+                &mut self.buffer,
+                encoder,
+                view,
+                window_size.0,
+                window_size.1
+            ).unwrap();
         }
     }
-
-    pub(crate) fn place_text<P: Into<cgmath::Vector2<f32>>>(&mut self, font: &FontReference, message: String, position: P, color: TeColor, size: f32) -> TextReference {
-        let new_text = TeText {
-            position: position.into(),
-            string: message,
-            color,
-            size,
-            hidden: false,
-        };
-        let texts = self.texts.get_mut(&font.path).unwrap();
-        let deleted = self.deleted_texts.get_mut(&font.path).unwrap();
-        match deleted.pop() {
-            Some(index) => {
-                texts[index.0] = Some(new_text);
-                TextReference { font: font.to_owned(), index: index.0 }
-            },
-            None => {
-                texts.push(Some(new_text));
-                TextReference { font: font.to_owned(), index: texts.len()-1 }
-            },
-        }
-    }
-
-    pub(crate) fn forget_text(&mut self, text: TextReference) {
-        self.deleted_texts.get_mut(&text.font.path).unwrap().insert(Reverse(text.index));
-        self.texts.get_mut(&text.font.path).unwrap()[text.index] = None;
-    }
-
-    pub(crate) fn move_text(&mut self, text: &TextReference, direction: cgmath::Vector2<f32>) {
-        let text = self.texts.get_mut(&text.font.path).unwrap().get_mut(text.index).unwrap().as_mut().unwrap();
-        text.position += direction;
-    }
-
-    pub(crate) fn set_text_position(&mut self, text: &TextReference, position: cgmath::Vector2<f32>) {
-        let text = self.texts.get_mut(&text.font.path).unwrap().get_mut(text.index).unwrap().as_mut().unwrap();
-        text.position = position;
-    }
-
-    pub(crate) fn get_text_position(&self, text: &TextReference) -> cgmath::Vector2<f32> {
-        let text = self.texts.get(&text.font.path).unwrap().get(text.index).unwrap().as_ref().unwrap();
-        text.position
-    }
-
-    pub(crate) fn resize_text(&mut self, text: &TextReference, size: f32) {
-        let text = self.texts.get_mut(&text.font.path).unwrap().get_mut(text.index).unwrap().as_mut().unwrap();
-        text.size = size;
-    }
-
-    pub(crate) fn get_text_size(&self, text: &TextReference) -> f32 {
-        let text = self.texts.get(&text.font.path).unwrap().get(text.index).unwrap().as_ref().unwrap();
-        text.size
-    }
-
-    pub(crate) fn set_text_animation() {
-        todo!()
-    }
-
-    pub(crate) fn hide_text(&mut self, text: &TextReference) {
-        let text = self.texts.get_mut(&text.font.path).unwrap().get_mut(text.index).unwrap().as_mut().unwrap();
-        text.hidden = true;
-    }
-
-    pub(crate) fn show_text(&mut self, text: &TextReference) {
-        let text = self.texts.get_mut(&text.font.path).unwrap().get_mut(text.index).unwrap().as_mut().unwrap();
-        text.hidden = false;
-    }
-
-    pub(crate) fn is_text_hidden(&self, text: &TextReference) -> bool{
-        let text = self.texts.get(&text.font.path).unwrap().get(text.index).unwrap().as_ref().unwrap();
-        text.hidden
-    }
-}
-
-#[derive(Debug)]
-struct TeText {
-    position: cgmath::Vector2<f32>,
-    string: String,
-    color: TeColor,
-    size: f32,
-    hidden: bool
 }

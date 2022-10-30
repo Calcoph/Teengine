@@ -1,6 +1,6 @@
 use std::{rc::Rc, cell::RefCell};
 
-use te_player::imgui::{self, PrepareResult, ImguiState};
+use te_player::{imgui::{self, PrepareResult, ImguiState}, event_loop::{PlaceholderTextSender}};
 use te_renderer::{initial_config::InitialConfiguration, state::TeState};
 
 fn main() {
@@ -23,7 +23,7 @@ async fn as_main() {
     }, true).await.expect("Failed init");
 
     let my_imgui = MyImgui { te_state: te_state.clone() };
-    te_player::imgui::event_loop::run(event_loop, window, gpu, te_state, my_imgui, platform, context, renderer, Box::new(|_, _, _| {}));
+    te_player::imgui::event_loop::run(event_loop, window, gpu, te_state, my_imgui, platform, context, renderer, PlaceholderTextSender::new(), Box::new(|_, _, _| {}));
 }
 
 struct MyImgui {

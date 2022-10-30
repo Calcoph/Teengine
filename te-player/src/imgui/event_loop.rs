@@ -4,13 +4,15 @@ use imgui::{Context, Io};
 use imgui_wgpu::Renderer;
 use imgui_winit_support::WinitPlatform;
 use te_gamepad::gamepad::ControllerEvent;
-use te_renderer::state::{TeState, GpuState};
+use te_renderer::{state::{TeState, GpuState, Section}, text::FontReference};
 use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
 pub use winit::event::Event as Event;
 
+use crate::event_loop::TextSender;
+
 use super::ImguiState;
 
-pub fn run<I: ImguiState + 'static>(
+pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
     event_loop: EventLoop<ControllerEvent>,
     window: Rc<RefCell<Window>>,
     gpu: Rc<RefCell<GpuState>>,
@@ -19,6 +21,7 @@ pub fn run<I: ImguiState + 'static>(
     mut platform: WinitPlatform,
     mut context: Context,
     mut renderer: Renderer,
+    text: Rc<RefCell<T>>,
     mut event_handler: Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io)>
 ) {
     let mut last_render_time = std::time::Instant::now();
@@ -52,7 +55,7 @@ pub fn run<I: ImguiState + 'static>(
                 let mut encoders = te_renderer::state::TeState::prepare_render(&gpu.borrow());
 
                 let imgui_encoder = imgui_state.render(&view, &window.borrow(), &platform, &mut context, &gpu.borrow(), &mut renderer);
-                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders);
+                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders, text.borrow_mut().get_text());
 
                 encoders.push(imgui_encoder);
                 state.borrow_mut().end_render(&gpu.borrow(), encoders);

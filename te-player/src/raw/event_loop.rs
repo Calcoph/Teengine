@@ -1,11 +1,18 @@
 use std::{cell::RefCell, rc::Rc};
 
 use te_gamepad::gamepad::ControllerEvent;
-use te_renderer::state::{TeState, GpuState};
+use te_renderer::{state::{TeState, GpuState, Section}, text::FontReference};
 use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
 pub use winit::event::Event as Event;
 
-pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, gpu: Rc<RefCell<GpuState>>, state: Rc<RefCell<TeState>>, mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>) {
+pub fn run<T: TextSender + 'static>(
+    event_loop: EventLoop<ControllerEvent>,
+    window: Rc<RefCell<Window>>,
+    gpu: Rc<RefCell<GpuState>>,
+    state: Rc<RefCell<TeState>>,
+    text: Rc<RefCell<T>>,
+    mut event_handler: Box<dyn FnMut(Event<ControllerEvent>)>,
+) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -35,7 +42,7 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, 
                 let output = gpu.borrow().surface.get_current_texture().unwrap();
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
-                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder);
+                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder, text.borrow_mut().get_text());
                 state.borrow_mut().end_render(&gpu.borrow(), encoder);
                 output.present();
                 state.borrow_mut().text.after_present()
@@ -46,3 +53,24 @@ pub fn run(event_loop: EventLoop<ControllerEvent>, window: Rc<RefCell<Window>>, 
         event_handler(event);
     })
 }
+
+pub trait TextSender {
+    fn get_text<'a>(&'a mut self) -> &'a [(FontReference, Vec<Section<'a>>)];
+}
+
+pub struct PlaceholderTextSender {
+    v: Vec<(te_renderer::text::FontReference, Vec<te_renderer::state::Section<'static>>)>
+}
+
+impl PlaceholderTextSender {
+    pub fn new() -> Rc<RefCell<PlaceholderTextSender>> {
+        Rc::new(RefCell::new(PlaceholderTextSender { v: vec![] }))
+    }
+}
+
+impl TextSender for PlaceholderTextSender {
+    fn get_text<'a>(&'a mut self) -> &'a [(te_renderer::text::FontReference, Vec<te_renderer::state::Section<'a>>)] {
+        &self.v
+    }
+}
+

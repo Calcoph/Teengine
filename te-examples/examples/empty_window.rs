@@ -1,3 +1,4 @@
+use te_player::event_loop::{PlaceholderTextSender};
 use te_renderer::initial_config::InitialConfiguration;
 
 fn main() {
@@ -16,5 +17,5 @@ async fn as_main() {
         ..InitialConfiguration::default()
     }, true).await.expect("Failed init");
 
-    te_player::event_loop::run(event_loop, window, gpu, te_state, Box::new(|_| {}));
+    te_player::event_loop::run(event_loop, window, gpu, te_state, PlaceholderTextSender::new(), Box::new(|_| {}));
 }
