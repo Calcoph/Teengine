@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 pollster = "0.2.5"
-te-player = { path = "../te-player" }
+te-player = { path = "../te-player", features = ["imgui-0-8"] }
 te-renderer = { path = "../te-renderer" }
 wgpu = "0.13.1"
