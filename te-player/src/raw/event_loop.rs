@@ -42,7 +42,9 @@ pub fn run<T: TextSender + 'static>(
                 let output = gpu.borrow().surface.get_current_texture().unwrap();
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
-                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder, text.borrow_mut().get_text());
+                text.borrow_mut().draw_text(|text| {
+                    state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder, text);
+                });
                 state.borrow_mut().end_render(&gpu.borrow(), encoder);
                 output.present();
                 state.borrow_mut().text.after_present()
@@ -55,22 +57,19 @@ pub fn run<T: TextSender + 'static>(
 }
 
 pub trait TextSender {
-    fn get_text<'a>(&'a mut self) -> &'a [(FontReference, Vec<Section<'a>>)];
+    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, drawer: T );
 }
 
-pub struct PlaceholderTextSender {
-    v: Vec<(te_renderer::text::FontReference, Vec<te_renderer::state::Section<'static>>)>
-}
+pub struct PlaceholderTextSender;
 
 impl PlaceholderTextSender {
     pub fn new() -> Rc<RefCell<PlaceholderTextSender>> {
-        Rc::new(RefCell::new(PlaceholderTextSender { v: vec![] }))
+        Rc::new(RefCell::new(PlaceholderTextSender))
     }
 }
 
 impl TextSender for PlaceholderTextSender {
-    fn get_text<'a>(&'a mut self) -> &'a [(te_renderer::text::FontReference, Vec<te_renderer::state::Section<'a>>)] {
-        &self.v
-    }
+    #[allow(unused)]
+    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, drawer: T) {}
 }
 

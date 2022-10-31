@@ -55,7 +55,9 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
                 let mut encoders = te_renderer::state::TeState::prepare_render(&gpu.borrow());
 
                 let imgui_encoder = imgui_state.render(&view, &window.borrow(), &platform, &mut context, &gpu.borrow(), &mut renderer);
-                state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders, text.borrow_mut().get_text());
+                text.borrow_mut().draw_text(|text| {
+                    state.borrow_mut().render(&view, &gpu.borrow(), &mut encoders, text);
+                });
 
                 encoders.push(imgui_encoder);
                 state.borrow_mut().end_render(&gpu.borrow(), encoders);

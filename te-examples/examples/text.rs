@@ -104,7 +104,7 @@ impl MyText {
 }
 
 impl TextSender for MyText {
-    fn get_text<'a>(&'a mut self) -> &'a [(FontReference, Vec<Section<'a>>)] {
-        &self.sections
+    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, mut drawer: T ) {
+        drawer(&self.sections)
     }
 }
