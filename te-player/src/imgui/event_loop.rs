@@ -12,6 +12,11 @@ use crate::event_loop::TextSender;
 
 use super::ImguiState;
 
+#[cfg(feature = "draw_when_told")]
+type EventHandler<I> = Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io) -> bool>;
+#[cfg(not(feature = "draw_when_told"))]
+type EventHandler<I> = Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io)>;
+
 pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
     event_loop: EventLoop<ControllerEvent>,
     window: Rc<RefCell<Window>>,
@@ -22,7 +27,7 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
     mut context: Context,
     mut renderer: Renderer,
     text: Rc<RefCell<T>>,
-    mut event_handler: Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io)>
+    mut event_handler: EventHandler<I>
 ) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
@@ -43,7 +48,10 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
                 }
             },
             Event::Suspended => *control_flow = ControlFlow::Wait,
-            Event::MainEventsCleared => window.borrow().request_redraw(),
+            Event::MainEventsCleared => {
+                #[cfg(not(feature = "draw_when_told"))]
+                window.borrow().request_redraw()
+            },
             Event::RedrawRequested(window_id) => if *window_id == window.borrow().id() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
@@ -68,6 +76,11 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
         }
 
         platform.handle_event(context.io_mut(), &window.borrow(), &event);
+        #[cfg(feature = "draw_when_told")]
+        if event_handler(event, &mut imgui_state, context.io_mut()) {
+            window.borrow().request_redraw()
+        }
+        #[cfg(not(feature = "draw_when_told"))]
         event_handler(event, &mut imgui_state, context.io_mut());
     })
 }
