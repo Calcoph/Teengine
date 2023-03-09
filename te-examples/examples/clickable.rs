@@ -1,8 +1,8 @@
 use std::{rc::Rc, num::NonZeroU32};
 
-use te_player::{event_loop::{PlaceholderTextSender, Event, TextSender}, te_winit::{event_loop::ControlFlow, event::{WindowEvent, ElementState}}};
+use te_player::{event_loop::{Event, TextSender}, te_winit::{event_loop::ControlFlow, event::{WindowEvent, ElementState}, dpi::{PhysicalSize, LogicalSize}}};
 use te_renderer::{model::{Model, ModelVertex}, state::{TeColor, TeState, GpuState, Section, Text}, text::FontReference};
-use wgpu::{ImageDataLayout, Extent3d};
+use wgpu::{ImageDataLayout, Extent3d, SurfaceConfiguration, TextureUsages, Texture};
 
 pub(crate) const SQUARE_VERT: &[ModelVertex] = &[
     ModelVertex {
@@ -54,17 +54,18 @@ pub(crate) fn main() {
     let img = img.as_rgba8().unwrap();
     let square_model = Model::new_simple(SQUARE_VERT.into(), SQUARE_IND.into(), img, &te_gpu, &te_state.instances.layout);
 
-    dbg!((0..1).len());
     let mut x_pos = 100.0;
     let mut y_pos = 200.0;
     let mut click = None;
     let mut mouse_pos = (0, 0);
-    let square = te_state.place_custom_model("model_name", &te_gpu, ((x_pos/1000.0)-0.5, 0.0, (y_pos/1000.0)-0.5), Some(square_model));
+    te_state.place_custom_model("model_name", &te_gpu, ((x_pos/1000.0)-0.5, 0.0, (y_pos/1000.0)-0.5), Some(square_model));
     for j in 0..5 {
         for i in 0..5 {
             let posx = ((i as f32)/20.0)-0.3;
             let posy = ((j as f32)/20.0)-0.3;
             let square_model = Model::new_simple(SQUARE_VERT.into(), SQUARE_IND.into(), img, &te_gpu, &te_state.instances.layout);
+
+            // This is bad practice. Since model_name{i}_{j} is the same model as model_name, they both should be model_name. and the last argument should be None instead of Some(square_model)
             te_state.place_custom_model(&format!("model_name{i}_{j}"), &te_gpu, (posx, -((i+j) as f32)/100.0, posy), Some(square_model));
         }
     }
@@ -86,6 +87,10 @@ pub(crate) fn main() {
     let font = te_state.load_font(String::from("CascadiaCode.ttf"), &te_gpu).expect("Could not find font");
     let mut my_text = MyText::new(font);
     let mut see_clickable = false;
+    let mut unpadded_width = WIN_WIDTH;
+    let mut padded_width = pad(unpadded_width);
+    te_window.set_inner_size(PhysicalSize{ width: WIN_WIDTH, height: WIN_HEIGHT }); // Because we are dealing always with PhysicalSize but te_player::prepare() uses LogicalSize
+    let mut clickable_depth_texture = te_renderer::texture::Texture::create_depth_texture_surfaceless(&te_gpu.device, WIN_WIDTH, WIN_HEIGHT, "clickable_depth_texture");
 
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
@@ -94,9 +99,23 @@ pub(crate) fn main() {
             Event::WindowEvent { window_id, event } if *window_id == te_window.id() => {
                 match event {
                     WindowEvent::Resized(size) => {
-                        te_gpu.resize(*size);
-                        te_state.resize(*size);
-                        te_state.camera.resize_2d_space(size.width, size.height, &te_gpu.queue)
+                        let size = if see_clickable {
+                            let old_width = padded_width;
+                            unpadded_width = size.width;
+                            padded_width = pad(unpadded_width);
+                            if old_width != padded_width { // adjust the window to the padded size
+                                te_window.set_inner_size(PhysicalSize{ width: padded_width, height: te_state.size.height });
+                            };
+                            PhysicalSize { width: padded_width, height: size.height }
+                        } else {
+                            unpadded_width = size.width;
+                            padded_width = pad(unpadded_width);
+                            *size
+                        };
+                        te_gpu.resize(size);
+                        te_state.resize(size);
+                        te_state.camera.resize_2d_space(size.width, size.height, &te_gpu.queue);
+                        clickable_depth_texture = te_renderer::texture::Texture::create_depth_texture_surfaceless(&te_gpu.device, padded_width, size.height, "clickable_depth_texture");
                     },
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a pointer to the next action we wanna do. In this case, exit the program
                     WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => {
@@ -110,7 +129,15 @@ pub(crate) fn main() {
                         if let ElementState::Pressed = input.state {
                             match input.virtual_keycode {
                                 Some(key) => match key {
-                                    te_player::te_winit::event::VirtualKeyCode::M => see_clickable = !see_clickable,
+                                    te_player::te_winit::event::VirtualKeyCode::M => {
+                                        see_clickable = !see_clickable;
+                                        let size = if see_clickable {
+                                            PhysicalSize{ width: padded_width, height: te_state.size.height }
+                                        } else {
+                                            PhysicalSize{ width: unpadded_width, height: te_state.size.height }
+                                        };
+                                        te_window.set_inner_size(size);
+                                    },
                                     _ => ()
                                 },
                                 None => (),
@@ -142,7 +169,9 @@ pub(crate) fn main() {
                     &te_gpu,
                     click,
                     &mut my_text,
-                    see_clickable
+                    see_clickable,
+                    padded_width,
+                    &clickable_depth_texture
                 ));
                 click = None;
             },
@@ -157,7 +186,9 @@ async fn render(
     te_state: &mut TeState, te_gpu: &GpuState,
     click: Option<(u32, u32)>,
     texts: &mut MyText,
-    see_clickable: bool
+    see_clickable: bool,
+    padded_width: u32,
+    clickable_depth_texture: &te_renderer::texture::Texture
 ) {
     /* let t_diff = SPEED * dt.as_secs_f32();
     
@@ -184,7 +215,7 @@ async fn render(
 
     let click_texture = te_gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: None,
-        size: Extent3d { width: te_state.size.width, height: te_state.size.height, depth_or_array_layers: 1 },
+        size: Extent3d { width: padded_width, height: te_state.size.height, depth_or_array_layers: 1 },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -193,15 +224,21 @@ async fn render(
     });
     if see_clickable {
         let clickable_encoder = encoders.get_mut(0).unwrap();
-        te_state.clicakble_mask(&view, &te_gpu, clickable_encoder, true);
+        te_state.clicakble_mask(&view, &te_gpu, clickable_encoder, true, None);
     } else {
         texts.draw_text(|texts| {
             te_state.render(&view, &te_gpu, &mut encoders, texts)
         });
     }
     let clickable_encoder = encoders.get_mut(0).unwrap();
-    te_state.clicakble_mask(&click_texture.create_view(&wgpu::TextureViewDescriptor::default()), &te_gpu, clickable_encoder, false);
-    let size = te_state.size.width * te_state.size.height * 4;
+    te_state.clicakble_mask(
+        &click_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+        &te_gpu,
+        clickable_encoder,
+        false,
+        Some(&clickable_depth_texture.view)
+    );
+    let size = padded_width * te_state.size.height * 4;
     let destination = te_gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size: size as u64,
@@ -209,12 +246,15 @@ async fn render(
         mapped_at_creation: false,
     });
     let destination_buffer = wgpu::ImageCopyBufferBase { buffer: &destination, layout: ImageDataLayout {
-        offset: 0, bytes_per_row: NonZeroU32::new(te_state.size.width * 4), rows_per_image: None
-    } };
+        offset: 0,
+        //bytes_per_row: NonZeroU32::new(te_state.size.width * 4),
+        bytes_per_row: NonZeroU32::new(padded_width * 4),
+        rows_per_image: None
+    }};
     clickable_encoder.copy_texture_to_buffer(
         click_texture.as_image_copy(),
         destination_buffer,
-        wgpu::Extent3d { width: te_state.size.width, height: te_state.size.height, depth_or_array_layers: 1 },
+        wgpu::Extent3d { width: padded_width, height: te_state.size.height, depth_or_array_layers: 1 },
     );
 
     te_state.end_render(&te_gpu, encoders);
@@ -248,7 +288,14 @@ async fn render(
 
     if let Some((x, y)) = click {
         let num = result[(y*te_state.size.width + x) as usize];
-        println!("Clicked on square {num}!")
+        println!("Clicked on square {num}!");
+        match te_state.find_clicked_instance(num) {
+            Some(instance) => {
+                let name = instance.get_name();
+                println!("That is {name}")
+            },
+            None => println!("You clicked nowhere"),
+        }
     }
 
     output.present();
@@ -268,7 +315,7 @@ impl MyText {
                     screen_position: (30.0, 350.0),
                     bounds: (WIN_WIDTH as f32 - 30.0, WIN_HEIGHT as f32),
                     text: vec![
-                        Text::new("Click on any square and see how it prints a different value for each one. Press M to toggle between this view and clickable view.")
+                        Text::new("Click on any square and see how it prints a different value for each one. Press M to toggle between this view and view showing clickable elements.")
                             .with_color([1.0, 1.0, 1.0, 1.0])
                             .with_scale(30.0)
                     ],
@@ -277,18 +324,21 @@ impl MyText {
             ])]
         }
     }
-
-    fn resize(&mut self, width: f32, height: f32) {
-        for (_, i) in self.sections.iter_mut() {
-            for j in i {
-                j.bounds = (width-30.0, height);
-            }
-        }
-    }
 }
 
 impl TextSender for MyText {
     fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, mut drawer: T ) {
         drawer(&self.sections)
+    }
+}
+
+fn pad(width: u32) -> u32 {
+    // 4 bytes per poxel
+    let dif = (width*4) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+
+    if dif != 0 {
+        width + (wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - dif)/4
+    } else {
+        width
     }
 }

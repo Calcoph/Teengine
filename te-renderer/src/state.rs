@@ -6,7 +6,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel, RendererClickable}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
+use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel, RendererClickable, InstanceFinder}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -190,7 +190,8 @@ pub struct TeState {
     pub render_2d: bool,
     /// Whether to render texts.
     pub render_text: bool,
-    pub bgcolor: TeColor
+    pub bgcolor: TeColor,
+    instance_finder: InstanceFinder
 }
 
 impl TeState {
@@ -361,7 +362,8 @@ impl TeState {
             render_2d: true,
             render_3d: true,
             render_text: true,
-            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 }
+            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 },
+            instance_finder: InstanceFinder::new()
         }
     }
 
@@ -609,7 +611,11 @@ impl TeState {
         gpu.queue.submit(encoders);
     }
 
-    pub fn clicakble_mask(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoder: &mut wgpu::CommandEncoder, drawable: bool) {
+    pub fn clicakble_mask(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoder: &mut wgpu::CommandEncoder, drawable: bool, depth_texture: Option<&wgpu::TextureView>) {
+        let depth_texture = match depth_texture {
+            Some(dt) => dt,
+            None => &gpu.depth_texture.view,
+        };
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[
@@ -629,7 +635,7 @@ impl TeState {
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &gpu.depth_texture.view,
+                view: depth_texture,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
                     store: true,
@@ -637,10 +643,10 @@ impl TeState {
                 stencil_ops: None,
             }),
         });
-        self.draw_clickable(&mut render_pass, drawable, &gpu.queue);
+        self.draw_clickable(&mut render_pass, drawable);
     }
 
-    fn draw_clickable<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, drawable: bool, queue: &wgpu::Queue) {
+    fn draw_clickable<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, drawable: bool) {
         if drawable {
             render_pass.set_pipeline(&self.pipelines.clickable_color);
         } else {
@@ -658,10 +664,9 @@ impl TeState {
         let mut renderer = RendererClickable::new(
             render_pass,
             &self.camera.camera_bind_group,
-            &queue
         );
 
-        for (_name, instanced_model) in iter {
+        for (name, instanced_model) in iter {
             let instance_buffer = match instanced_model {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
@@ -672,9 +677,11 @@ impl TeState {
                     renderer.draw_model_instanced_mask(
                         &m.model,
                         m.get_instances_vec(),
+                        name.to_owned()
                     );
                 },
                 crate::instances::DrawModel::A(a) => {
+                    // TODO: pass name
                     renderer.draw_animated_model_instanced_mask(
                         &a,
                     );
@@ -714,6 +721,8 @@ impl TeState {
                 },
             }
         }
+
+        self.instance_finder = renderer.get_instance_finder();
     }
 
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
@@ -827,6 +836,10 @@ impl TeState {
     ) {
         self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
     } */
+
+    pub fn find_clicked_instance(&mut self, num: u32) -> Option<InstanceReference> {
+        self.instance_finder.find_instance(num)
+    }
 }
 
 // Calls to self.instances' methods
