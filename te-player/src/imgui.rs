@@ -128,7 +128,7 @@ pub trait ImguiState {
                 })],
                 depth_stencil_attachment: None,
             });
-            renderer.render(ui.render(), &gpu.queue, &gpu.device, &mut render_pass).expect("Rendering failed");
+            renderer.render(context.render(), &gpu.queue, &gpu.device, &mut render_pass).expect("Rendering failed");
         }
         encoder
     }

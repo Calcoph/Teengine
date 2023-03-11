@@ -107,35 +107,35 @@ impl ImguiState {
         let ui = self.context.frame();
         {
             let mut opened = false;
-            imgui::Window::new("Camera controls")
+            ui.window("Camera controls")
                 .size([400.0, 200.0], Condition::FirstUseEver)
                 .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(&ui, || {
+                .build(|| {
                     let camera = &mut self.state.camera;
                     let state = &mut self.camera_controls_win;
 
                     let mut speed = camera.get_speed();
-                    Slider::new("speed", 0.0 as f32, 3000.0 as f32).build(&ui, &mut speed);
+                    ui.slider("speed", 0.0 as f32, 3000.0 as f32, &mut speed);
                     camera.set_speed(speed);
 
                     let mut sensitivity = camera.get_sensitivity();
-                    Slider::new("sensitivity", 0.0 as f32, 20.0 as f32).build(&ui, &mut sensitivity);
+                    ui.slider("sensitivity", 0.0 as f32, 20.0 as f32, &mut sensitivity);
                     camera.set_sensitivity(sensitivity);
 
                     let mut fovy = camera.get_fovy();
-                    Slider::new("fovy", 0.1 as f32, 179.9 as f32).build(&ui, &mut fovy);
+                    ui.slider("fovy", 0.1 as f32, 179.9 as f32, &mut fovy);
                     camera.set_fovy(fovy);
 
                     let mut znear = camera.get_znear();
-                    Slider::new("znear", 1.0 as f32, 1000.0 as f32).build(&ui, &mut znear);
+                    ui.slider("znear", 1.0 as f32, 1000.0 as f32, &mut znear);
                     camera.set_znear(znear);
 
                     let mut zfar = camera.get_zfar();
-                    Slider::new("zfar", 100.0 as f32, 100000.0 as f32).build(&ui, &mut zfar);
+                    ui.slider("zfar", 100.0 as f32, 100000.0 as f32, &mut zfar);
                     camera.set_zfar(zfar);
 
                     let mut yaw = camera.get_yaw();
-                    Slider::new("yaw", -2.0*SAFE_CAMERA_ANGLE as f32, 2.0*SAFE_CAMERA_ANGLE as f32).build(&ui, &mut yaw);
+                    ui.slider("yaw", -2.0*SAFE_CAMERA_ANGLE as f32, 2.0*SAFE_CAMERA_ANGLE as f32, &mut yaw);
                     camera.set_yaw(yaw);
 
                     let mut pitch = camera.get_pitch();
@@ -162,33 +162,33 @@ impl ImguiState {
                         ui.text("press RF to zoom in/out");
                     }
                 });
-            imgui::Window::new("Models")
+            ui.window("Models")
                 .size([400.0, 200.0], Condition::FirstUseEver)
                 .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(&ui, || {
+                .build(|| {
                     let state = &mut self.model_selector_win;
                     ui.text("Put your gltf/glb models in\nignore/resources/ so they show up here");
                     ui.separator();
-                    ChildWindow::new("models")
+                    ui.child_window("models")
                         .size([250.0, 0.0])
-                        .build(&ui, || {
-                        if ui.button("Refresh") {
-                            self.resources = get_resource_names(resource_files_directory, "");
-                        };
-                        ui.input_text("search", &mut state.search_str_gltf).build();
-                        show_resources_directory(
-                            resource_files_directory,
-                            &self.resources,
-                            &ui,
-                            state,
-                            &self.gpu,
-                            &self.state,
-                            &mut self.mod_instance,
-                            &mut self.renderer_s
-                        )
-                    });
+                        .build(|| {
+                            if ui.button("Refresh") {
+                                self.resources = get_resource_names(resource_files_directory, "");
+                            };
+                            ui.input_text("search", &mut state.search_str_gltf).build();
+                            show_resources_directory(
+                                resource_files_directory,
+                                &self.resources,
+                                &ui,
+                                state,
+                                &self.gpu,
+                                &self.state,
+                                &mut self.mod_instance,
+                                &mut self.renderer_s
+                            )
+                        });
                     ui.same_line();
-                    ChildWindow::new("maps").build(&ui, || {
+                    ui.child_window("maps").build(|| {
                         ui.input_text("map name", &mut state.save_map_name).build();
                         //ui.modal
                         if ui.button("Save map") {
@@ -198,7 +198,8 @@ impl ImguiState {
                                 ui.open_popup("SAVE FAILED");
                             }
                         };
-                        if let Some(_token) = PopupModal::new("SAVE FAILED").begin_popup(&ui) {
+
+                        if let Some(_token) = ui.modal_popup_config("SAVE FAILED").begin_popup() {
                             ui.text("Please write the file name when saving");
                             if ui.button("OK") {
                                 ui.close_current_popup();
@@ -212,16 +213,16 @@ impl ImguiState {
                         show_maps_directory(map_files_directory, &self.maps, &ui, state, &mut self.state, &self.gpu);
                     })
                 });
-            imgui::Window::new("Object control")
+            ui.window("Object control")
                 .size([400.0, 200.0], Condition::FirstUseEver)
                 .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(&ui, || {
+                .build(|| {
                     let _state = &mut self.object_control_win;
                     let mod_inst = &mut self.mod_instance.modifying_instance;
                     ui.text("position");
-                    InputFloat::new(&ui, "x", &mut mod_inst.x).step(1.0).step_fast(5.0).build();
-                    InputFloat::new(&ui, "y", &mut mod_inst.y).step(1.0).step_fast(5.0).build();
-                    InputFloat::new(&ui, "z", &mut mod_inst.z).step(1.0).step_fast(5.0).build();
+                    ui.input_float("x", &mut mod_inst.x).step(1.0).step_fast(5.0).build();
+                    ui.input_float("y", &mut mod_inst.y).step(1.0).step_fast(5.0).build();
+                    ui.input_float("z", &mut mod_inst.z).step(1.0).step_fast(5.0).build();
                     if ui.button("place") {
                         let x = self.mod_instance.modifying_instance.x;
                         let y = self.mod_instance.modifying_instance.y;
@@ -236,7 +237,7 @@ impl ImguiState {
                     ui.separator();
                     ui.checkbox("Blink selected model", &mut self.renderer_s.blinking);
                     let mut blink_freq = self.renderer_s.blink_freq as i32;
-                    Slider::new("Blinking frequency", 0, 20).build(&ui, &mut blink_freq);
+                    ui.slider("Blinking frequency", 0, 20, &mut blink_freq);
                     self.renderer_s.blink_freq = blink_freq as u64;
                 });
             ui.show_demo_window(&mut opened);
@@ -258,7 +259,7 @@ impl ImguiState {
                 })],
                 depth_stencil_attachment: None,
             });
-            self.renderer.render(ui.render(), &self.gpu.queue, &self.gpu.device, &mut render_pass).expect("Rendering failed");
+            self.renderer.render(self.context.render(), &self.gpu.queue, &self.gpu.device, &mut render_pass).expect("Rendering failed");
         }
         self.gpu.queue.submit(std::iter::once(encoder.finish())); // TODO: call submit only once. right now it is called twice
     }

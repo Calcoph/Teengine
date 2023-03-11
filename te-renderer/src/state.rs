@@ -1,5 +1,5 @@
 pub use glyph_brush::{Section, Text};
-use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder, PushConstantRange, ShaderStages};
+use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder, PushConstantRange, ShaderStages, InstanceDescriptor};
 use winit::{
     dpi,
     event::{KeyboardInput, WindowEvent},
@@ -28,8 +28,11 @@ impl GpuState {
     pub async fn new(size: dpi::PhysicalSize<u32>, window: &Window) -> Self {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
+        let instance = wgpu::Instance::new(InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+        });
+        let surface = unsafe { instance.create_surface(window).unwrap() };
         // TODO: instance.enumerate_adapters to list all GPUs (tutorial 2 beginner)
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -66,11 +69,12 @@ impl GpuState {
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_supported_formats(&adapter)[0],
+            format: surface.get_capabilities(&adapter).formats[0],
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
-            //alpha_mode: wgpu::CompositeAlphaMode::Auto
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![surface.get_capabilities(&adapter).formats[0]],
         };
         surface.configure(&device, &config);
 

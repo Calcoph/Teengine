@@ -127,7 +127,7 @@ impl TextState {
             Err(_) => Err(FontError),
         }?;
         let brush = GlyphBrushBuilder::using_font(font)
-            .build(&device, render_format);
+            .build(device, render_format);
         let reference = FontReference { index: self.brushes.len() };
         self.brushes.push(brush);
         Ok(reference)

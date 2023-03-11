@@ -8,13 +8,13 @@ edition = "2021"
 [dependencies]
 json = "0.12.4"
 cgmath = "0.18"
-wgpu = "0.13.1"
-winit = "0.26.1"
+wgpu = "0.15"
+winit = "0.27.5"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 sorted-vec = "0.8.0"
 
 # Text
-wgpu_glyph = "0.17.0"
+wgpu_glyph = { git = "https://github.com/sconybeare/wgpu_glyph.git", rev="68e0abe" }
 glyph_brush = "0.7"
 
 [dependencies.gltf]

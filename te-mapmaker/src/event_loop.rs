@@ -78,6 +78,8 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     WindowEvent::Touch(_touch) => (),//println!("TODO: Touch ({:?})", touch), // TODO: do the same as mouse click event
                     WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => mapmaker.resize(**new_inner_size),
                     WindowEvent::ThemeChanged(_theme) => (),//println!("TODO: ThemeChanged ({:?})", theme), // TODO
+                    WindowEvent::Ime(_) => (), // TODO
+                    WindowEvent::Occluded(_) => (), // TODO
                 }
             },
             Event::DeviceEvent { device_id: _device_id, event } => {

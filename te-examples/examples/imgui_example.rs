@@ -32,16 +32,16 @@ struct MyImgui {
 
 impl ImguiState for MyImgui {
     fn create_ui(&mut self, ui: &te_player::imgui::Ui) {
-        imgui::Window::new("Imgui example")
-            .build(ui, || {
+        ui.window("Imgui example")
+            .build(|| {
                 let bgcolor = &mut self.te_state.borrow_mut().bgcolor;
                 let mut red = bgcolor.get_red();
                 let mut green = bgcolor.get_green();
                 let mut blue = bgcolor.get_blue();
 
-                imgui::Slider::new("Red", 0.0, 1.0).build(ui, &mut red);
-                imgui::Slider::new("Green", 0.0, 1.0).build(ui, &mut green);
-                imgui::Slider::new("Blue", 0.0, 1.0).build(ui, &mut blue);
+                ui.slider("Red", 0.0, 1.0, &mut red);
+                ui.slider("Green", 0.0, 1.0, &mut green);
+                ui.slider("Blue", 0.0, 1.0, &mut blue);
 
                 bgcolor.set_red(red);
                 bgcolor.set_green(green);
