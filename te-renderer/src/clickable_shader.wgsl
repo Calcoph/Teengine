@@ -12,17 +12,22 @@ struct CameraUniform {
     view_proj: mat4x4<f32>,
 }
 
+struct PushConstants {
+    index: u32
+}
+
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
+var<push_constant> push_constants: PushConstants;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
+    @builtin(instance_index) inst_index: u32
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
+    @location(0) inst_index: u32
 }
 
 @vertex
@@ -40,27 +45,23 @@ fn vs_main(
 
     var out: VertexOutput;
     out.clip_position = camera.view_proj * world_position;
-    out.tex_coords = model.tex_coords;
+    out.inst_index = model.inst_index + push_constants.index;
     return out;
 }
 
 // Fragment shaders
 
-@group(1) @binding(0)
-var t_diffuse: texture_2d<f32>;
-@group(1) @binding(1)
-var s_diffuse: sampler;
-
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.tex_coords);
+fn fs_main(
+    in: VertexOutput,
+) -> @location(0) u32 {
+    return in.inst_index;
 }
 
 @fragment
-fn fs_mask(in: VertexOutput) -> @location(0) vec4<f32> {
-    let tex = textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    if (tex.a < 1.0) {
-        discard;
-    };
-    return tex;
+fn fs_color(
+    in: VertexOutput,
+) -> @location(0) vec4<f32> {
+    return vec4(f32((in.inst_index >> 16u) & 0xFFu)/255.0, f32((in.inst_index >> 8u) & 0xFFu)/255.0, f32(in.inst_index & 0xFFu)/255.0, 1.0);
 }
+

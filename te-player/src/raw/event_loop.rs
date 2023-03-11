@@ -84,6 +84,8 @@ impl PlaceholderTextSender {
 
 impl TextSender for PlaceholderTextSender {
     #[allow(unused)]
-    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, drawer: T) {}
+    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, mut drawer: T) {
+        drawer(&vec![])
+    }
 }
 

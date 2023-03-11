@@ -1,4 +1,4 @@
-use std::io::Error;
+use std::{error::Error, fmt::Display};
 
 use image::io::Reader as ImageReader;
 use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
@@ -8,21 +8,41 @@ use te_gamepad::gamepad;
 
 use crate::mapmaker;
 
-pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<(), Error> {
+#[derive(Debug)]
+enum InitError {
+    Unkown,
+    Opaque
+}
+
+impl Display for InitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            InitError::Opaque => "InitError: icon.png must be a transparent png",
+            InitError::Unkown => "InitError: Unkown error",
+        };
+
+        write!(f, "{}", msg)
+    }
+}
+
+impl Error for InitError {}
+
+pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<(), Box<dyn Error>> {
     env_logger::init();
     let img = match ImageReader::open("icon.png")?.decode() {
-        Ok(img) => img.to_rgba8(),
-        Err(_) => panic!("Couldn't find icon"),
-    };
+        Ok(img) => Ok(img.to_rgba8()),
+        Err(_) => Err(InitError::Unkown),
+    }?;
+
     let event_loop = EventLoop::with_user_event();
     gamepad::listen(event_loop.create_proxy());
     let wb = WindowBuilder::new()
         .with_title("Tilengine")
         .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
         .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
-            Ok(icon) => icon,
-            Err(_) => panic!("Couldn't get raw data")
-        }));
+            Ok(icon) => Ok(icon),
+            Err(_) => Err(InitError::Opaque)
+        }?));
 
     let window = wb.build(&event_loop)
         .unwrap();

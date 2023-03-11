@@ -1,3 +1,7 @@
+use image::{ImageBuffer,Rgba};
+
+use crate::state::GpuState;
+use crate::texture::Texture;
 use crate::{texture, instances};
 
 pub trait Vertex {
@@ -259,6 +263,18 @@ impl Model {
         });
 
         (max_x, min_x, max_z, min_z)
+    }
+
+    pub fn new_simple(vertices: Vec<ModelVertex>, indices: Vec<u32>, img: &ImageBuffer<Rgba<u8>, Vec<u8>>, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
+        let mesh = Mesh::new("mesh1".to_string(), "unnamed", vertices, indices, 0, &gpu.device);
+        let texture = Texture::from_dyn_image(&gpu.device, &gpu.queue, &img, None).unwrap();
+        let material = Material::new(&gpu.device, "mat1", texture, layout);
+
+        Model {
+            meshes: vec![mesh],
+            transparent_meshes: vec![],
+            materials: vec![material],
+        }
     }
 }
 

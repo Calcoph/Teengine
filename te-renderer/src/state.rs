@@ -1,12 +1,12 @@
 pub use glyph_brush::{Section, Text};
-use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder};
+use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder, PushConstantRange, ShaderStages};
 use winit::{
     dpi,
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
+use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel, RendererClickable, InstanceFinder}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -43,13 +43,19 @@ impl GpuState {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    features: wgpu::Features::PUSH_CONSTANTS, // TODO: Make this optional
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
+                        wgpu::Limits {
+                            max_push_constant_size: 4,
+                            ..wgpu::Limits::downlevel_webgl2_defaults()
+                        }
                     } else {
-                        wgpu::Limits::default()
+                        wgpu::Limits {
+                            max_push_constant_size: 4,
+                            ..wgpu::Limits::default()
+                        }
                     },
                     label: None,
                 },
@@ -158,14 +164,21 @@ impl TeColor {
 }
 
 #[derive(Debug)]
+struct PipeLines {
+    render_3d: wgpu::RenderPipeline,
+    transparent: wgpu::RenderPipeline,
+    sprite: wgpu::RenderPipeline,
+    clickable: wgpu::RenderPipeline,
+    clickable_color: wgpu::RenderPipeline,
+}
+
+#[derive(Debug)]
 pub struct TeState {
     /// Manages the camera
     pub camera: camera::CameraState,
     /// The window's size
     pub size: winit::dpi::PhysicalSize<u32>,
-    render_pipeline: wgpu::RenderPipeline,
-    transparent_render_pipeline: wgpu::RenderPipeline,
-    sprite_render_pipeline: wgpu::RenderPipeline,
+    pipelines: PipeLines,
     /// Manages 3D models, 2D sprites and 2D texts
     pub instances: InstancesState,
     pub text: TextState,
@@ -177,7 +190,8 @@ pub struct TeState {
     pub render_2d: bool,
     /// Whether to render texts.
     pub render_text: bool,
-    pub bgcolor: TeColor
+    pub bgcolor: TeColor,
+    instance_finder: InstanceFinder
 }
 
 impl TeState {
@@ -193,6 +207,7 @@ impl TeState {
             render_pipeline_layout,
             projection_bind_group_layout,
             sprite_render_pipeline_layout,
+            clickable_pipeline_layout,
         ) = TeState::get_layouts(&gpu.device);
 
         let camera = camera::CameraState::new(
@@ -205,7 +220,7 @@ impl TeState {
 
         let render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
+                label: Some("Shader_3D"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             };
             create_render_pipeline(
@@ -215,13 +230,14 @@ impl TeState {
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
-                false,
+                EntryPoint::Main,
+                "Render Pipeline"
             )
         };
 
         let transparent_render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
+                label: Some("Shader_3D_transparent"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             };
             create_render_pipeline(
@@ -231,13 +247,47 @@ impl TeState {
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
-                true,
+                EntryPoint::Mask,
+                "Transparent pipeline"
+            )
+        };
+
+        let clickable_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_clickable"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("clickable_shader.wgsl").into()),
+            };
+            create_r32uint_render_pipeline(
+                &gpu.device,
+                &clickable_pipeline_layout,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Main,
+                "Clickable pipeline"
+            )
+        };
+
+        let clickable_color_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_clickable"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("clickable_shader.wgsl").into()),
+            };
+            create_render_pipeline(
+                &gpu.device,
+                &clickable_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Color,
+                "Clickable color pipeline"
             )
         };
 
         let sprite_render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
+                label: Some("Shader_sprites"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("2d_shader.wgsl").into()),
             };
             create_2d_render_pipeline(
@@ -298,9 +348,13 @@ impl TeState {
         TeState {
             camera,
             size,
-            render_pipeline,
-            transparent_render_pipeline,
-            sprite_render_pipeline,
+            pipelines: PipeLines {
+                render_3d: render_pipeline,
+                transparent: transparent_render_pipeline,
+                sprite: sprite_render_pipeline,
+                clickable: clickable_pipeline,
+                clickable_color: clickable_color_pipeline,
+            },
             instances,
             text,
             maps_path,
@@ -308,7 +362,8 @@ impl TeState {
             render_2d: true,
             render_3d: true,
             render_text: true,
-            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 }
+            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 },
+            instance_finder: InstanceFinder::new()
         }
     }
 
@@ -328,6 +383,7 @@ impl TeState {
         wgpu::BindGroupLayout,
         wgpu::PipelineLayout,
         wgpu::BindGroupLayout,
+        wgpu::PipelineLayout,
         wgpu::PipelineLayout,
     ) {
         let texture_bind_group_layout =
@@ -399,12 +455,21 @@ impl TeState {
                 push_constant_ranges: &[],
             });
 
+        let clickable_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Clickable Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout],
+                push_constant_ranges: &[PushConstantRange { stages: ShaderStages::VERTEX, range: 0..4 }],
+            });
+
+
         (
             texture_bind_group_layout,
             camera_bind_group_layout,
             render_pipeline_layout,
             projection_bind_group_layout,
             sprite_render_pipeline_layout,
+            clickable_pipeline_layout,
         )
     }
 
@@ -477,61 +542,57 @@ impl TeState {
         texts: &[(FontReference, Vec<Section>)]
     ) {
         if self.render_3d {
-            let mut render_pass =
-                encoders
-                    .get_mut(0)
-                    .unwrap()
-                    .begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Render Pass"),
-                        color_attachments: &[
-                            // This is what [[location(0)]] in the fragment shader targets
-                            Some(wgpu::RenderPassColorAttachment {
-                                view: &view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                                        r: self.bgcolor.red,
-                                        g: self.bgcolor.green,
-                                        b: self.bgcolor.blue,
-                                        a: 1.0,
-                                    }),
-                                    store: true,
-                                },
-                            }),
-                        ],
-                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &gpu.depth_texture.view,
-                            depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(1.0),
+            let mut render_pass = encoders.get_mut(0)
+                .unwrap()
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        // This is what [[location(0)]] in the fragment shader targets
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: self.bgcolor.red,
+                                    g: self.bgcolor.green,
+                                    b: self.bgcolor.blue,
+                                    a: 1.0,
+                                }),
                                 store: true,
-                            }),
-                            stencil_ops: None,
+                            },
                         }),
-                    });
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &gpu.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),
+                });
             self.draw_opaque(&mut render_pass);
             self.draw_transparent(&mut render_pass);
         }
 
         if self.render_2d {
-            let mut render_pass =
-                encoders
-                    .get_mut(1)
-                    .unwrap()
-                    .begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Render Pass"),
-                        color_attachments: &[
-                            // This is what [[location(0)]] in the fragment shader targets
-                            Some(wgpu::RenderPassColorAttachment {
-                                view: &view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
-                                    store: true,
-                                },
-                            }),
-                        ],
-                        depth_stencil_attachment: None,
-                    });
+            let mut render_pass = encoders.get_mut(1)
+                .unwrap()
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        // This is what [[location(0)]] in the fragment shader targets
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: true,
+                            },
+                        }),
+                    ],
+                    depth_stencil_attachment: None,
+                });
             self.draw_sprites(&mut render_pass);
         }
 
@@ -550,8 +611,122 @@ impl TeState {
         gpu.queue.submit(encoders);
     }
 
+    pub fn clicakble_mask(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoder: &mut wgpu::CommandEncoder, drawable: bool, depth_texture: Option<&wgpu::TextureView>) {
+        let depth_texture = match depth_texture {
+            Some(dt) => dt,
+            None => &gpu.depth_texture.view,
+        };
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[
+                // This is what [[location(0)]] in the fragment shader targets
+                Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 0.0,
+                        }),
+                        store: true,
+                    },
+                }),
+            ],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth_texture,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        });
+        self.draw_clickable(&mut render_pass, drawable);
+    }
+
+    fn draw_clickable<'a>(&'a mut self, render_pass: &mut wgpu::RenderPass<'a>, drawable: bool) {
+        if drawable {
+            render_pass.set_pipeline(&self.pipelines.clickable_color);
+        } else {
+            render_pass.set_pipeline(&self.pipelines.clickable);
+        }
+        let iter = self.instances.opaque_instances
+            .iter()
+            .filter(|(_name, instanced_model)| {
+                match instanced_model {
+                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                    crate::instances::DrawModel::A(a) => a.unculled_instance,
+                }
+            });
+
+        let mut renderer = RendererClickable::new(
+            render_pass,
+            &self.camera.camera_bind_group,
+        );
+
+        for (name, instanced_model) in iter {
+            let instance_buffer = match instanced_model {
+                crate::instances::DrawModel::M(m) => &m.instance_buffer,
+                crate::instances::DrawModel::A(a) => &a.instance_buffer,
+            };
+            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            match instanced_model {
+                crate::instances::DrawModel::M(m) => {
+                    renderer.draw_model_instanced_mask(
+                        &m.model,
+                        m.get_instances_vec(),
+                        name.to_owned()
+                    );
+                },
+                crate::instances::DrawModel::A(a) => {
+                    // TODO: pass name
+                    renderer.draw_animated_model_instanced_mask(
+                        &a,
+                    );
+                },
+            }
+        }
+
+        // transparent
+        let iter = self
+            .instances
+            .transparent_instances
+            .iter()
+            .map(|name| self.instances.opaque_instances.get(name).unwrap())
+            .filter(|instanced_model| {
+                match instanced_model {
+                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                    crate::instances::DrawModel::A(a) => a.unculled_instance,
+                }
+            });
+        for instanced_model in iter {
+            let instance_buffer = match instanced_model {
+                crate::instances::DrawModel::M(m) => &m.instance_buffer,
+                crate::instances::DrawModel::A(a) => &a.instance_buffer,
+            };
+            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            match instanced_model {
+                crate::instances::DrawModel::M(m) => {
+                    renderer.tdraw_model_instanced_mask(
+                        &m.model,
+                        m.get_instances_vec(),
+                    );
+                },
+                crate::instances::DrawModel::A(a) => {
+                    renderer.tdraw_animated_model_instanced_mask(
+                        &a,
+                    );
+                },
+            }
+        }
+
+        self.instance_finder = renderer.get_instance_finder();
+    }
+
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_pipeline(&self.pipelines.render_3d);
         let iter = self.instances.opaque_instances
             .iter()
             .filter(|(_name, instanced_model)| {
@@ -585,7 +760,7 @@ impl TeState {
     }
 
     pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.transparent_render_pipeline);
+        render_pass.set_pipeline(&self.pipelines.transparent);
         let iter = self
             .instances
             .transparent_instances
@@ -622,7 +797,7 @@ impl TeState {
     }
 
     pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.sprite_render_pipeline);
+        render_pass.set_pipeline(&self.pipelines.sprite);
         let mut sorted_2d: Vec<&dyn Draw2D> = self
             .instances
             .texts
@@ -661,6 +836,10 @@ impl TeState {
     ) {
         self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
     } */
+
+    pub fn find_clicked_instance(&mut self, num: u32) -> Option<InstanceReference> {
+        self.instance_finder.find_instance(num)
+    }
 }
 
 // Calls to self.instances' methods
@@ -927,6 +1106,12 @@ impl TeState {
     }
 }
 
+enum EntryPoint {
+    Main,
+    Mask,
+    Color
+}
+
 fn create_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -934,16 +1119,18 @@ fn create_render_pipeline(
     depth_format: Option<wgpu::TextureFormat>,
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
-    transparent: bool,
+    entry_point: EntryPoint,
+    name: &str
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader);
-    let entry_point = match transparent {
-        true => "fs_main",
-        false => "fs_mask",
+    let entry_point = match entry_point {
+        EntryPoint::Main => "fs_main",
+        EntryPoint::Mask => "fs_mask",
+        EntryPoint::Color => "fs_color",
     };
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Render Pipeline"),
+        label: Some(name),
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -1031,6 +1218,67 @@ fn create_2d_render_pipeline(
             conservative: false,
         },
         depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    })
+}
+
+fn create_r32uint_render_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    depth_format: Option<wgpu::TextureFormat>,
+    vertex_layouts: &[wgpu::VertexBufferLayout],
+    shader: wgpu::ShaderModuleDescriptor,
+    entry_point: EntryPoint,
+    name: &str
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(shader);
+    let entry_point = match entry_point {
+        EntryPoint::Main => "fs_main",
+        EntryPoint::Mask => "fs_mask",
+        EntryPoint::Color => "fs_color",
+    };
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(name),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: vertex_layouts,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point,
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::R32Uint,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+            polygon_mode: wgpu::PolygonMode::Fill,
+            // Requires Features::DEPTH_CLIP_CONTROL
+            unclipped_depth: false,
+            // Requires Features::CONSERVATIVE_RASTERIZATION
+            conservative: false,
+        },
+        depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
+            format,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,

@@ -454,7 +454,7 @@ pub trait InstancedDraw {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum InstanceType {
+pub(crate) enum InstanceType {
     Sprite,
     Anim2D,
     Opaque3D,
@@ -463,9 +463,9 @@ enum InstanceType {
 /// Handle of a 3D model or 2D sprite. You will need it when changing their properties.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceReference {
-    name: String,
-    index: usize,
-    dimension: InstanceType,
+    pub(crate) name: String,
+    pub(crate) index: usize,
+    pub(crate) dimension: InstanceType,
 }
 
 impl InstanceReference {

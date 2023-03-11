@@ -12,7 +12,7 @@ struct Projection {
 @group(0) @binding(0)
 var<uniform> projection: Projection;
 
-struct VertexInput { // TODO: possible optimization if we put these 2 vec2 into a single vec4
+struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) tex_coords: vec2<f32>,
 }

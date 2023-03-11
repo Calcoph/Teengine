@@ -1,6 +1,6 @@
 pub mod event_loop;
 
-use std::{io::Error, cell::RefCell, rc::Rc};
+use std::{error::Error, cell::RefCell, rc::Rc};
 pub use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use te_renderer::{initial_config::InitialConfiguration, state::{TeState, GpuState}};
@@ -11,6 +11,8 @@ use imgui_winit_support::WinitPlatform;
 use image::io::Reader as ImageReader;
 
 use te_gamepad::gamepad::{self, ControllerEvent};
+
+use crate::InitError;
 
 pub struct PrepareResult {
     pub event_loop: EventLoop<ControllerEvent>,
@@ -23,15 +25,15 @@ pub struct PrepareResult {
 }
 
 /// Get all the structs needed to start the engine, skipping the boilerplate.
-pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareResult, Error> {
+pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareResult, Box<dyn Error>> {
     if log {
         env_logger::init();
     }
 
     let img = match ImageReader::open(&config.icon_path)?.decode() {
-        Ok(img) => img.to_rgba8(),
-        Err(_) => panic!("Icon has wrong format"),
-    };
+        Ok(img) => Ok(img.to_rgba8()),
+        Err(_) => Err(InitError::Unkown),
+    }?;
     let event_loop = EventLoop::with_user_event();
     gamepad::listen(event_loop.create_proxy());
 
@@ -72,7 +74,7 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareR
 }
 
 /// After calling prepare() call new_window() for each extra window.
-pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<window::Window>>, Rc<RefCell<TeState>>), Error> {
+pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<window::Window>>, Rc<RefCell<TeState>>), Box<dyn Error>> {
     let img = match ImageReader::open(&config.icon_path)?.decode() {
         Ok(img) => img.to_rgba8(),
         Err(_) => panic!("Couldn't find icon"),
