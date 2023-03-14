@@ -19,7 +19,6 @@ impl Draw2D for InstancedText {
             projection_bind_group,
             buffer,
         );
-        todo!()
     }
 
     fn get_depth(&self) -> f32 {
@@ -36,7 +35,6 @@ impl Draw2D for InstancedSprite {
             projection_bind_group,
             buffer,
         );
-        todo!()
     }
 
     fn get_depth(&self) -> f32 {
