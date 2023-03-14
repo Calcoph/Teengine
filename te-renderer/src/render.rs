@@ -19,6 +19,7 @@ impl Draw2D for InstancedText {
             projection_bind_group,
             buffer,
         );
+        todo!()
     }
 
     fn get_depth(&self) -> f32 {
@@ -35,6 +36,7 @@ impl Draw2D for InstancedSprite {
             projection_bind_group,
             buffer,
         );
+        todo!()
     }
 
     fn get_depth(&self) -> f32 {
@@ -59,7 +61,7 @@ impl Draw2D for AnimatedSprite {
 }
 
 #[derive(Debug)]
-pub(crate) struct InstanceFinder {
+pub struct InstanceFinder {
     markers: Vec<InstanceMarker>
 }
 
@@ -70,7 +72,7 @@ impl InstanceFinder {
         }
     }
 
-    pub(crate) fn find_instance(&self, instance_count: u32) -> Option<InstanceReference> {
+    pub fn find_instance(&self, instance_count: u32) -> Option<InstanceReference> {
         if self.markers.len() == 0 || instance_count == 0 {
             return None
         }
@@ -148,21 +150,21 @@ struct InstanceMarker {
     model_name: String
 }
 
-pub(crate) struct RendererClickable<'a, 'b> {
-    pub(crate) render_pass: &'b mut RenderPass<'a>,
+pub struct RendererClickable<'a, 'b> {
+    pub render_pass: &'b mut RenderPass<'a>,
     camera_bind_group: &'a wgpu::BindGroup,
-    pub(crate) instance_count: u32,
+    pub instance_count: u32,
     instance_finder: InstanceFinder
 }
 
 impl<'a, 'b, 'c> RendererClickable<'a, 'b>
     where 'c: 'a
 {
-    pub(crate) fn update_counter_constant(&mut self) {
+    pub fn update_counter_constant(&mut self) {
         self.render_pass.set_push_constants(ShaderStages::VERTEX, 0, bytemuck::cast_slice(&[self.instance_count]));
     }
 
-    pub(crate) fn new(
+    pub fn new(
         render_pass: &'b mut RenderPass<'a>,
         camera_bind_group: &'a wgpu::BindGroup,
     ) -> RendererClickable<'a, 'b> {
@@ -174,11 +176,11 @@ impl<'a, 'b, 'c> RendererClickable<'a, 'b>
         }
     }
 
-    pub(crate) fn get_instance_finder(self) -> InstanceFinder {
+    pub fn get_instance_finder(self) -> InstanceFinder {
         self.instance_finder
     }
 
-    pub(crate) fn draw_model_instanced_mask(
+    pub fn draw_model_instanced_mask(
         &mut self,
         model: &'c Model,
         instances: Vec<Range<u32>>,
@@ -227,7 +229,7 @@ impl<'a, 'b, 'c> RendererClickable<'a, 'b>
             self.render_pass.draw_indexed(0..mesh.num_elements, 0, inst_range);
         }
     }
-    pub(crate) fn draw_animated_model_instanced_mask(
+    pub fn draw_animated_model_instanced_mask(
         &mut self,
         model: &'c AnimatedModel,
     ) {
@@ -237,7 +239,7 @@ impl<'a, 'b, 'c> RendererClickable<'a, 'b>
         }
     }
 
-    pub(crate) fn tdraw_model_instanced_mask(
+    pub fn tdraw_model_instanced_mask(
         &mut self,
         model: &'c Model,
         instances: Vec<Range<u32>>,
@@ -246,7 +248,7 @@ impl<'a, 'b, 'c> RendererClickable<'a, 'b>
             self.tdraw_mesh_instanced_mask(mesh, &instances);
         }
     }
-    pub(crate) fn tdraw_animated_model_instanced_mask(
+    pub fn tdraw_animated_model_instanced_mask(
         &mut self,
         model: &'c AnimatedModel,
     ) {
@@ -286,202 +288,134 @@ impl<'a, 'b, 'c> RendererClickable<'a, 'b>
     }
 }
 
-pub trait DrawModel<'a> {
-    fn draw_model_instanced(
-        &mut self,
-        model: &'a Model,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_animated_model_instanced(
-        &mut self,
-        model: &'a AnimatedModel,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_mesh(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_animated_mesh_instanced(
-        &mut self,
-        mesh: &'a AnimatedMesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn draw_mesh_instanced(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
+
+pub struct Renderer<'a, 'b> {
+    pub render_pass: &'b mut RenderPass<'a>,
+    camera_bind_group: &'a wgpu::BindGroup,
 }
 
-impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn draw_model_instanced(
-        &mut self,
-        model: &'b Model,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        for mesh in &model.meshes {
-            let material = &model.materials[mesh.material];
-            self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
+impl<'a, 'b> Renderer<'a, 'b> {
+    pub fn new(
+        render_pass: &'b mut RenderPass<'a>,
+        camera_bind_group: &'a wgpu::BindGroup,
+    ) -> Renderer<'a, 'b> {
+        Renderer {
+            render_pass,
+            camera_bind_group,
         }
     }
 
-    fn draw_animated_model_instanced(
+    pub fn draw_model_instanced(
         &mut self,
-        model: &'b AnimatedModel,
-        camera_bind_group: &'b wgpu::BindGroup,
+        model: &'a Model,
+        instances: Vec<Range<u32>>,
+    ) {
+        for mesh in &model.meshes {
+            let material = &model.materials[mesh.material];
+            self.draw_mesh_instanced(mesh, material, instances.clone());
+        }
+    }
+
+    pub fn draw_animated_model_instanced(
+        &mut self,
+        model: &'a AnimatedModel,
     ) {
         for mesh in &model.meshes {
             let material = mesh.materials[mesh.selected_material];
             let material = &model.materials[material];
-            self.draw_animated_mesh_instanced(mesh, material, camera_bind_group);
+            self.draw_animated_mesh_instanced(mesh, material);
         }
     }
 
     fn draw_mesh(
         &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
+        mesh: &'a Mesh,
+        material: &'a Material,
     ) {
-        self.draw_mesh_instanced(mesh, material, vec![0..1], camera_bind_group);
+        self.draw_mesh_instanced(mesh, material, vec![0..1]);
     }
 
     fn draw_animated_mesh_instanced(
         &mut self,
-        mesh: &'b AnimatedMesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
+        mesh: &'a AnimatedMesh,
+        material: &'a Material,
     ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
+        self.render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.render_pass.set_bind_group(0, self.camera_bind_group, &[]);
+        self.render_pass.set_bind_group(1, &material.bind_group, &[]);
+        self.render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
     }
-    
+
     fn draw_mesh_instanced(
         &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
+        mesh: &'a Mesh,
+        material: &'a Material,
         instances: Vec<Range<u32>>,
-        camera_bind_group: &'b wgpu::BindGroup,
     ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
+        self.render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.render_pass.set_bind_group(0, self.camera_bind_group, &[]);
+        self.render_pass.set_bind_group(1, &material.bind_group, &[]);
         for inst_range in instances {
-            self.draw_indexed(0..mesh.num_elements, 0, inst_range);
+            self.render_pass.draw_indexed(0..mesh.num_elements, 0, inst_range);
         }
     }
-}
 
-pub trait DrawTransparentModel<'a> {
-    fn tdraw_model_instanced(
+    pub fn tdraw_model_instanced(
         &mut self,
         model: &'a Model,
         instances: Vec<Range<u32>>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_animated_model_instanced(
-        &mut self,
-        model: &'a AnimatedModel,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_mesh(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_animated_mesh_instanced(
-        &mut self,
-        mesh: &'a AnimatedMesh,
-        material: &'a Material,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-    fn tdraw_mesh_instanced(
-        &mut self,
-        mesh: &'a Mesh,
-        material: &'a Material,
-        instances: &Vec<Range<u32>>,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-}
-
-impl<'a, 'b> DrawTransparentModel<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn tdraw_model_instanced(
-        &mut self,
-        model: &'b Model,
-        instances: Vec<Range<u32>>,
-        camera_bind_group: &'b wgpu::BindGroup,
     ) {
         for mesh in &model.transparent_meshes {
             let material = &model.materials[mesh.material];
-            self.tdraw_mesh_instanced(mesh, material, &instances, camera_bind_group);
+            self.tdraw_mesh_instanced(mesh, material, &instances);
         }
     }
 
-    fn tdraw_animated_model_instanced(
+    pub fn tdraw_animated_model_instanced(
         &mut self,
-        model: &'b AnimatedModel,
-        camera_bind_group: &'b wgpu::BindGroup,
+        model: &'a AnimatedModel,
     ) {
         for mesh in &model.transparent_meshes {
             let material = mesh.materials[mesh.selected_material];
             let material = &model.materials[material];
-            self.tdraw_animated_mesh_instanced(mesh, material, camera_bind_group);
+            self.tdraw_animated_mesh_instanced(mesh, material);
         }
     }
 
     fn tdraw_mesh(
         &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
+        mesh: &'a Mesh,
+        material: &'a Material,
     ) {
-        self.tdraw_mesh_instanced(mesh, material, &vec![0..1], camera_bind_group);
+        self.tdraw_mesh_instanced(mesh, material, &vec![0..1]);
     }
 
     fn tdraw_animated_mesh_instanced(
         &mut self,
-        mesh: &'b AnimatedMesh,
-        material: &'b Material,
-        camera_bind_group: &'b wgpu::BindGroup,
+        mesh: &'a AnimatedMesh,
+        material: &'a Material,
     ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
-        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
+        self.render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.render_pass.set_bind_group(0, self.camera_bind_group, &[]);
+        self.render_pass.set_bind_group(1, &material.bind_group, &[]);
+        self.render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
     }
 
     fn tdraw_mesh_instanced(
         &mut self,
-        mesh: &'b Mesh,
-        material: &'b Material,
+        mesh: &'a Mesh,
+        material: &'a Material,
         instances: &Vec<Range<u32>>,
-        camera_bind_group: &'b wgpu::BindGroup,
     ) {
-        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
+        self.render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.render_pass.set_bind_group(0, self.camera_bind_group, &[]);
+        self.render_pass.set_bind_group(1, &material.bind_group, &[]);
         for inst_range in instances {
-            self.draw_indexed(0..mesh.num_elements, 0, inst_range.clone());
+            self.render_pass.draw_indexed(0..mesh.num_elements, 0, inst_range.clone());
         }
     }
 }

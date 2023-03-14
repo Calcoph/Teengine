@@ -4,7 +4,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{window::Window, event::WindowEvent};
 use wgpu;
 
-use te_renderer::{state::{TeState, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources, render::{DrawModel, DrawTransparentModel}};
+use te_renderer::{state::{TeState, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources};
 
 use crate::modifiying_instance::{self, InstancesState, ModifyingInstance};
 
@@ -383,30 +383,29 @@ impl RendererState {
                         stencil_ops: None
                     })
                 });
-                state.draw_opaque(&mut render_pass);
+                let mut renderer = te_renderer::render::Renderer::new(&mut render_pass, &state.camera.camera_bind_group);
+                state.draw_opaque(&mut renderer.render_pass);
                 if model_visible {
                     instances = modifying_instance.into_renderable(&gpu.device, tile_size);
                     buffer = modifying_instance.buffer.as_ref();
                     model = Some(&modifying_instance.model);
-                    render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
-                    render_pass.draw_model_instanced(
+                    renderer.render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                    renderer.draw_model_instanced(
                         &model.unwrap(),
                         vec![0..instances as u32],
-                        &state.camera.camera_bind_group,
                     );
                 // 1 second = 1_000_000_000 nanoseconds
                 // 500_000_000ns = 1/2 seconds
                 } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
                     self.blink_time = std::time::Instant::now();
                 }
-                state.draw_transparent(&mut render_pass);
+                state.draw_transparent(&mut renderer.render_pass);
                 if model_visible {
                     if model.unwrap().transparent_meshes.len() > 0 {
-                        render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
-                        render_pass.tdraw_model_instanced(
+                        renderer.render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                        renderer.tdraw_model_instanced(
                             &model.unwrap(),
                             vec![0..instances as u32],
-                            &state.camera.camera_bind_group,
                         );
                     }
                 }

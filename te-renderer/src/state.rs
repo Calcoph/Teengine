@@ -6,7 +6,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::{Vertex, Material}, render::{DrawModel, Draw2D, DrawTransparentModel, RendererClickable, InstanceFinder}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
+use crate::{model::{Vertex, Material}, render::{Draw2D, RendererClickable, InstanceFinder, Renderer}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -731,6 +731,10 @@ impl TeState {
 
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_pipeline(&self.pipelines.render_3d);
+        let mut renderer = Renderer::new(
+            render_pass,
+            &self.camera.camera_bind_group,
+        );
         let iter = self.instances.opaque_instances
             .iter()
             .filter(|(_name, instanced_model)| {
@@ -744,19 +748,17 @@ impl TeState {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
             };
-            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
             match instanced_model {
                 crate::instances::DrawModel::M(m) => {
-                    render_pass.draw_model_instanced(
+                    renderer.draw_model_instanced(
                         &m.model,
                         m.get_instances_vec(),
-                        &self.camera.camera_bind_group,
                     );
                 },
                 crate::instances::DrawModel::A(a) => {
-                    render_pass.draw_animated_model_instanced(
+                    renderer.draw_animated_model_instanced(
                         &a,
-                        &self.camera.camera_bind_group,
                     );
                 },
             }
@@ -765,6 +767,10 @@ impl TeState {
 
     pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_pipeline(&self.pipelines.transparent);
+        let mut renderer = Renderer::new(
+            render_pass,
+            &self.camera.camera_bind_group,
+        );
         let iter = self
             .instances
             .transparent_instances
@@ -781,19 +787,17 @@ impl TeState {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
             };
-            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
             match instanced_model {
                 crate::instances::DrawModel::M(m) => {
-                    render_pass.tdraw_model_instanced(
+                    renderer.tdraw_model_instanced(
                         &m.model,
                         m.get_instances_vec(),
-                        &self.camera.camera_bind_group,
                     );
                 },
                 crate::instances::DrawModel::A(a) => {
-                    render_pass.tdraw_animated_model_instanced(
+                    renderer.tdraw_animated_model_instanced(
                         &a,
-                        &self.camera.camera_bind_group,
                     );
                 },
             }
