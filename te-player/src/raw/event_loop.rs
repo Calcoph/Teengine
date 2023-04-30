@@ -20,7 +20,11 @@ pub fn run<T: TextSender + 'static>(
 ) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        if cfg!(feature = "draw_when_told") {
+            *control_flow = ControlFlow::Wait;
+        } else {
+            *control_flow = ControlFlow::Poll;
+        }
         match &event {
             Event::WindowEvent { window_id, event } if *window_id == window.borrow().id() => {
                 match event {
