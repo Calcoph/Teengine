@@ -234,7 +234,7 @@ impl TeState {
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
-                EntryPoint::Main,
+                EntryPoint::Mask,
                 "Render Pipeline"
             )
         };
@@ -251,7 +251,7 @@ impl TeState {
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
-                EntryPoint::Mask,
+                EntryPoint::Main,
                 "Transparent pipeline"
             )
         };
