@@ -268,8 +268,9 @@ pub fn load_sprite(
     layout: &wgpu::BindGroupLayout,
     resources_path: String,
 ) -> std::result::Result<(model::Material, f32, f32), Box<dyn std::error::Error>> {
-    let img = image::open(resources_path + "/" + file_name)?;
-    let img = img.as_rgba8().unwrap();
+    let full_path = resources_path + "/" + file_name;
+    let img = image::open(&full_path)?;
+    let img = img.as_rgba8().expect(&format!("The image {full_path} doesn't contain an alpha channel. Only RGBA images are supported"));
     let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name))?;
     Ok((
         model::Material::new(device, file_name, diffuse_texture, layout),
