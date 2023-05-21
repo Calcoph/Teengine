@@ -1,7 +1,9 @@
-use gilrs_core::{Gilrs, Event, EvCode, AxisInfo};
+use gilrs_core::{Gilrs, Event};
+pub use gilrs_core::EvCode as EvCode;
+pub use gilrs_core::AxisInfo as AxisInfo;
 pub use gilrs_core::EventType as EventType;
 use winit::{event_loop::EventLoopProxy};
-use std::{thread, collections::{HashSet, HashMap}};
+use std::{thread, collections::HashMap};
 
 pub fn listen(event_loop: EventLoopProxy<ControllerEvent>) {
     thread::spawn(move || {
