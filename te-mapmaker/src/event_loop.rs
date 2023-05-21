@@ -94,15 +94,19 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     winit::event::DeviceEvent::Text { codepoint: _codepoint } => (),//println!("TODO: Device Text ({:?}, {:?})", device_id, codepoint), // TODO
                 }
             },
-            Event::UserEvent(event) => {
-                match event.event {
+            Event::UserEvent(gamepad::ControllerEvent::Connected { device_id, axes }) => {
+                // save tha axes and device_id somewhere
+            },
+            Event::UserEvent(gamepad::ControllerEvent::Other { device_id, event }) => {
+                match event {
                     gilrs_core::EventType::ButtonPressed(_code) => (),//println!("TODO: ButtonPressed ({:?}, {:?})", event.device_id, code), // TODO
                     gilrs_core::EventType::ButtonReleased(_code) => (),//println!("TODO: ButtonReleased ({:?}, {:?})", event.device_id, code), // TODO
                     gilrs_core::EventType::AxisValueChanged(_value, _code) => (),//println!("TODO: AxisValueChanged ({:?}, {:?}, {:?})", event.device_id, code, value), // TODO
                     gilrs_core::EventType::Connected => (),//println!("TODO: Connected ({:?})", event.device_id), // TODO
                     gilrs_core::EventType::Disconnected => (),//println!("TODO: Disconnected ({:?})", event.device_id), // TODO
                 }
-            },
+
+            }
             Event::Suspended => *control_flow = ControlFlow::Wait,
             Event::MainEventsCleared => window.request_redraw(),
             Event::RedrawRequested(window_id) => if *window_id == window.id() {
