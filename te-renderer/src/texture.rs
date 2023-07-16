@@ -42,8 +42,8 @@ impl Texture {
             &img.pixels,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * img.width),
-                rows_per_image: std::num::NonZeroU32::new(img.height),
+                bytes_per_row: Some(4 * img.width),
+                rows_per_image: Some(img.height),
             },
             size,
         );
@@ -98,8 +98,8 @@ impl Texture {
             img.as_raw(),
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * img.width()),
-                rows_per_image: std::num::NonZeroU32::new(img.height()),
+                bytes_per_row: Some(4 * img.width()),
+                rows_per_image: Some(img.height()),
             },
             size,
         );

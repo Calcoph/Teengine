@@ -6,16 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.27.5"
+winit = "0.27.2"
 gilrs-core = "0.5.2"
-imgui = "0.10.0"
-imgui-winit-support = { version = "0.10.0", default-features = false }
+imgui = "0.11.0"
+imgui-winit-support = { version = "0.11.0", default-features = false }
 env_logger = "0.10.0"
-wgpu = "0.15.1"
+wgpu = "0.16.2"
 cgmath = "0.18"
 pollster = "0.3"
 bytemuck = { version = "1.4", features = [ "derive" ] }
-imgui-wgpu = "0.22.0"
+imgui-wgpu = "0.23.0"
 
 [dependencies.image]
 version = "0.24"

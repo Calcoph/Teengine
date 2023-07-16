@@ -7,21 +7,21 @@ edition = "2021"
 
 [dependencies]
 # window creator
-winit = "0.27.5"
+winit = "0.27.2"
 gilrs-core = "0.5.2"
 
 # renderer
 env_logger = "0.10"
 log = "0.4"
-wgpu = "0.15.1"
+wgpu = "0.16.2"
 pollster = "0.3"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 cgmath = "0.18"
 
 # imgui-0-8
-imgui = { version = "0.10.0", optional = true }
-imgui-wgpu = { version = "0.22.0", optional = true }
-imgui-winit-support = { version = "0.10.0", default-features = false, optional = true}
+imgui = { version = "0.11.0", optional = true }
+imgui-wgpu = { version = "0.23.0", optional = true }
+imgui-winit-support = { version = "0.11.0", default-features = false, optional = true}
 
 json = "0.12.4"
 

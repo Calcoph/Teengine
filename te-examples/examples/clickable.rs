@@ -249,7 +249,7 @@ async fn render(
     let destination_buffer = wgpu::ImageCopyBufferBase { buffer: &destination, layout: ImageDataLayout {
         offset: 0,
         //bytes_per_row: NonZeroU32::new(te_state.size.width * 4),
-        bytes_per_row: NonZeroU32::new(padded_width * 4),
+        bytes_per_row: Some(padded_width * 4),
         rows_per_image: None
     }};
     clickable_encoder.copy_texture_to_buffer(
