@@ -118,6 +118,10 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn new(name: String, model_name: &str, vertices: Vec<ModelVertex>, indices: Vec<u32>, material: usize, device: &wgpu::Device) -> Mesh {
+        if vertices.len() == 0 {
+            eprintln!("{model_name}");
+            panic!("HAS 0 VERTICES")
+        }
         let mut max_x = f32::NEG_INFINITY;
         let mut min_x = f32::INFINITY;
         let mut max_z = f32::NEG_INFINITY;

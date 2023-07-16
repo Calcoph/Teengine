@@ -49,8 +49,9 @@ impl RenderMatrix {
         ];
         let chunks = corners.into_iter().map(|(x, z)| {
             // TODO: take into account that f32 can be negative, but row and col can never be negative
-            let row = ((z/self.chunk_size.2).floor()) as usize;
-            let col = ((x/self.chunk_size.0).floor()) as usize;
+            // Right now this is "patched" by doing .abs(), but this means that no instances placed in a negative coordinate will be rendered correctly
+            let row = ((z/self.chunk_size.2).floor()).abs() as usize;
+            let col = ((x/self.chunk_size.0).floor()).abs() as usize;
             (row, col)
         }).collect::<HashSet<(usize, usize)>>();
         chunks.into_iter().for_each(|(row, col)| {
@@ -712,7 +713,6 @@ impl InstancesState {
 
         reference
     }
-
 
     fn place_model_absolute(
         &mut self,
