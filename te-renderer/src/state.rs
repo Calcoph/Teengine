@@ -6,7 +6,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-use crate::{model::{Vertex, Material}, render::{Draw2D, RendererClickable, InstanceFinder, Renderer}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}};
+use crate::{model::{Vertex, Material}, render::{Draw2D, RendererClickable, InstanceFinder, Renderer}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}, error::TError};
 use crate::{
     camera,
     initial_config::InitialConfiguration,
@@ -32,7 +32,7 @@ impl GpuState {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
         });
-        let surface = unsafe { instance.create_surface(window).unwrap() };
+        let surface = unsafe { instance.create_surface(window).expect("Unable to create surface") };
         // TODO: instance.enumerate_adapters to list all GPUs (tutorial 2 beginner)
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -41,7 +41,7 @@ impl GpuState {
                 force_fallback_adapter: false,
             })
             .await
-            .unwrap();
+            .expect("Unable to request adapter");
 
         let (device, queue) = adapter
             .request_device(
@@ -65,7 +65,7 @@ impl GpuState {
                 None,
             )
             .await
-            .unwrap();
+            .expect("Unable to request device");
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -547,7 +547,7 @@ impl TeState {
     ) {
         if self.render_3d {
             let mut render_pass = encoders.get_mut(0)
-                .unwrap()
+                .expect("Empty encoders vector")
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
                     color_attachments: &[
@@ -581,7 +581,7 @@ impl TeState {
 
         if self.render_2d {
             let mut render_pass = encoders.get_mut(1)
-                .unwrap()
+                .expect("Encoders vector too small")
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
                     color_attachments: &[
@@ -601,7 +601,7 @@ impl TeState {
         }
 
         if self.render_text {
-            self.draw_text(&gpu.device, encoders.get_mut(2).unwrap(), view, texts);
+            self.draw_text(&gpu.device, encoders.get_mut(2).expect("Encoders vector too small"), view, texts);
         }
     }
 
@@ -698,7 +698,7 @@ impl TeState {
             .instances
             .transparent_instances
             .iter()
-            .map(|name| self.instances.opaque_instances.get(name).unwrap())
+            .map(|name| self.instances.opaque_instances.get(name).expect("Invalid reference"))
             .filter(|instanced_model| {
                 match instanced_model {
                     crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
@@ -775,7 +775,7 @@ impl TeState {
             .instances
             .transparent_instances
             .iter()
-            .map(|name| self.instances.opaque_instances.get(name).unwrap())
+            .map(|name| self.instances.opaque_instances.get(name).expect("Invalid reference"))
             .filter(|instanced_model| {
                 match instanced_model {
                     crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
@@ -810,14 +810,24 @@ impl TeState {
             .instances
             .texts
             .iter()
-            .filter(|text| if let Some(t) = text {t.is_drawable()} else {false})
-            .map(|text| text.as_ref().unwrap() as &dyn Draw2D)
+            .filter(|text| { // TODO: use filter_map
+                if let Some(t) = text {
+                    t.is_drawable()
+                } else {
+                    false
+                }
+            })
+            .map(|text| text.as_ref().expect("Unreachable") as &dyn Draw2D)
             .collect();
         let sprites: Vec<&dyn Draw2D> = self.instances.sprite_instances.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
         sorted_2d.extend(sprites.into_iter());
         let anim_sprites: Vec<&dyn Draw2D> = self.instances.animated_sprites.iter().filter(|(_name, inst)| inst.is_drawable()).map(|(_name, inst)| inst as &dyn Draw2D).collect();
         sorted_2d.extend(anim_sprites.into_iter());
-        sorted_2d.sort_by(|inst1, inst2| inst1.get_depth().partial_cmp(&inst2.get_depth()).unwrap());
+        sorted_2d.sort_by(|inst1, inst2|
+            inst1.get_depth()
+                .partial_cmp(&inst2.get_depth())
+                .expect("Speciall f64 values such as NaN not allowed for instance depth")
+        );
         for draw in sorted_2d {
             draw.draw(render_pass, &self.camera.projection_bind_group, &self.sprite_vertices_buffer)
         }
@@ -857,28 +867,28 @@ impl TeState {
     }
 
     /// Creates a new 3D model at the specific position.
-    /// ### PANICS
-    /// Will panic if the model's file is not found
+    /// ### Errors
+    /// Will error if the model's file is not found
     pub fn place_model(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
-    ) -> InstanceReference {
+    ) -> Result<InstanceReference, TError> {
         self.instances.place_model(model_name, gpu, tile_position)
     }
 
     /// Places an already created model at the specific position.
     /// If that model has not been forgotten, you can place another with just its name, so model can be None
-    /// ### PANICS
-    /// Will panic if model is None and the model has been forgotten (or was never created)
+    /// ### Errors
+    /// Will error if model is None and the model has been forgotten (or was never created)
     pub fn place_custom_model(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
         model: Option<model::Model>
-    ) -> InstanceReference {
+    ) -> Result<InstanceReference, TError> {
         self.instances.place_custom_model(model_name, gpu, tile_position, model)
     }
 
@@ -888,7 +898,7 @@ impl TeState {
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
         model: Option<model::Model>
-    ) -> InstanceReference {
+    ) -> Result<InstanceReference, TError> {
         self.instances.place_custom_model_absolute(model_name, gpu, tile_position, model)
     }
 
@@ -905,15 +915,15 @@ impl TeState {
 
     /// Creates a new 2D sprite at the specified position.
     /// All 2D sprites created from the same file will have the same "z" position. And cannot be changed once set.
-    /// ### PANICS
-    /// Will panic if the sprite's file is not found
+    /// ### Errors
+    /// Will error if the sprite's file is not found
     pub fn place_sprite(
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32)
-    ) -> InstanceReference {
+    ) -> Result<InstanceReference, TError> {
         self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height)
     }
 
@@ -924,7 +934,7 @@ impl TeState {
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
         sprite: Option<(Material, f32, f32)>
-    ) -> InstanceReference {
+    ) -> Result<InstanceReference, TError> {
         self.instances.place_custom_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height, sprite)
     }
 
@@ -936,7 +946,7 @@ impl TeState {
         position: (f32, f32, f32),
         frame_delay: std::time::Duration,
         looping: bool
-    ) -> InstanceReference {
+    ) -> Result<InstanceReference, TError> {
         self.instances.place_animated_sprite(sprite_names, gpu, size, position, frame_delay, looping, self.size.width, self.size.height)
     }
 
@@ -944,6 +954,8 @@ impl TeState {
     /// ### PANICS
     /// will panic if the characters' files are not found
     /// see: model::Font
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn place_old_text(
         &mut self,
         text: Vec<String>,
@@ -955,6 +967,8 @@ impl TeState {
     }
 
     /// Eliminates the text from screen and memory.
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn forget_old_text(&mut self, text: OldTextReference) {
         self.instances.forget_text(text)
     }
@@ -977,7 +991,7 @@ impl TeState {
     }
 
     /// Load all 3D models from a .temap file.
-    pub fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) {
+    pub fn fill_from_temap(&mut self, map: temap::TeMap, gpu: &GpuState) -> Result<(), TError> {
         self.instances.fill_from_temap(map, gpu)
     }
 
@@ -1029,6 +1043,8 @@ impl TeState {
 
     /// Move a 2D text relative to it's current position.
     /// Ignores the z value.
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn move_old_text<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
         instance: &OldTextReference,
@@ -1040,6 +1056,8 @@ impl TeState {
 
     /// Move a 2D text to an absolute position.
     /// Ignores the z value.
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn set_old_text_position<P: Into<cgmath::Vector3<f32>>>(
         &mut self,
         instance: &OldTextReference,
@@ -1050,11 +1068,15 @@ impl TeState {
     }
 
     /// Gets a 2D text's position
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn get_old_text_position(&self, instance: &OldTextReference) -> (f32, f32) {
         self.instances.get_text_position(instance)
     }
 
     /// Resizes a 2D text
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn resize_old_text<V: Into<cgmath::Vector2<f32>>>(
         &mut self,
         instance: &OldTextReference,
@@ -1065,6 +1087,8 @@ impl TeState {
     }
 
     /// Gets a 2D text's size
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn get_old_text_size(&self, instance: &OldTextReference) -> (f32, f32) {
         self.instances.get_text_size(instance)
     }
@@ -1073,6 +1097,8 @@ impl TeState {
         self.instances.set_instance_animation(instance, animation)
     }
 
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn set_old_text_animation(&mut self, text: &OldTextReference, animation: Animation) {
         self.instances.set_text_animation(text, animation)
     }
@@ -1087,6 +1113,8 @@ impl TeState {
         }
     }
 
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn hide_old_text(&mut self, instance: &OldTextReference) {
         if !self.instances.is_text_hidden(instance) {
             self.instances.hide_text(instance)
@@ -1099,6 +1127,8 @@ impl TeState {
         }
     }
 
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn show_old_text(&mut self, instance: &OldTextReference) {
         if self.instances.is_text_hidden(instance) {
             self.instances.show_text(instance)
@@ -1108,7 +1138,9 @@ impl TeState {
     pub fn is_hidden(&self, instance: &InstanceReference) -> bool {
         self.instances.is_instance_hidden(instance)
     }
-    
+
+    #[deprecated]
+    #[allow(deprecated)]
     pub fn is_old_text_hidden(&self, instance: &OldTextReference) -> bool {
         self.instances.is_text_hidden(instance)
     }

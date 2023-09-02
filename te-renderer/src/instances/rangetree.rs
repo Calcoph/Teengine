@@ -83,7 +83,7 @@ impl RangeNode {
             match &self.right {
                 Some(node) => {
                     if num > 0 && node.contents.start == num-1 {
-                        let mut right = self.right.take().unwrap();
+                        let mut right = self.right.take().expect("Unreachable");
                         let new_right = right.right.take();
                         self.right = new_right;
                         self.contents.end = right.contents.end;
@@ -97,7 +97,7 @@ impl RangeNode {
             match &self.left {
                 Some(node) => {
                     if node.contents.end == num {
-                        let mut left = self.left.take().unwrap();
+                        let mut left = self.left.take().expect("Unreachable");
                         let new_left = left.left.take();
                         self.left = new_left;
                         self.contents.start = left.contents.start;

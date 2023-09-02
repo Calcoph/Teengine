@@ -71,7 +71,7 @@ impl Texture {
         queue: &wgpu::Queue,
         img: &image::ImageBuffer<Rgba<u8>, Vec<u8>>,
         label: Option<&str>,
-    ) -> std::io::Result<Self> {
+    ) -> Self {
         let size = wgpu::Extent3d {
             width: img.width(),
             height: img.height(),
@@ -115,11 +115,11 @@ impl Texture {
             ..Default::default()
         });
 
-        Ok(Self {
+        Self {
             texture,
             view,
             sampler,
-        })
+        }
     }
 
     pub fn create_depth_texture(

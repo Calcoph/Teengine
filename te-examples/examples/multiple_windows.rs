@@ -85,7 +85,7 @@ async fn as_main() {
                     let dt = now - *last_render_time;
                     *last_render_time = now;
                     state.borrow_mut().update(dt, &gpu.borrow());
-                    let output = gpu.borrow().surface.get_current_texture().unwrap();
+                    let output = gpu.borrow().surface.get_current_texture().expect("Couldn't get surface texture");
                     let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                     let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
                     state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder, &vec![]);

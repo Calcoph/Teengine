@@ -271,7 +271,7 @@ impl Model {
 
     pub fn new_simple(vertices: Vec<ModelVertex>, indices: Vec<u32>, img: &ImageBuffer<Rgba<u8>, Vec<u8>>, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
         let mesh = Mesh::new("mesh1".to_string(), "unnamed", vertices, indices, 0, &gpu.device);
-        let texture = Texture::from_dyn_image(&gpu.device, &gpu.queue, &img, None).unwrap();
+        let texture = Texture::from_dyn_image(&gpu.device, &gpu.queue, &img, None);
         let material = Material::new(&gpu.device, "mat1", texture, layout);
 
         Model {
@@ -343,7 +343,7 @@ impl AnimatedModel {
     }
 
     pub fn animate(&mut self, mesh_index: usize, material_index: usize) {
-        self.meshes.get_mut(mesh_index).unwrap().animate(material_index);
+        self.meshes.get_mut(mesh_index).expect("Index out of bounds").animate(material_index);
     }
 
     pub(crate) fn uncull_instance(&mut self) {
@@ -382,7 +382,7 @@ impl InstancedDraw for AnimatedModel {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -399,7 +399,7 @@ impl InstancedDraw for AnimatedModel {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }

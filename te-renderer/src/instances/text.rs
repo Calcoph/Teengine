@@ -53,7 +53,7 @@ impl InstancedText {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -63,7 +63,7 @@ impl InstancedText {
             &self.instance_buffer,
             (0 * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[self.instance.to_raw()]),
         );
     }
@@ -82,7 +82,7 @@ impl InstancedText {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -101,7 +101,7 @@ impl InstancedText {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -124,6 +124,7 @@ impl InstancedText {
 }
 
 /// Handle of a 2D text. You will need it when changing its properties.
+#[deprecated]
 pub struct OldTextReference {
     pub index: usize,
 }

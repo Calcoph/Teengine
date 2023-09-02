@@ -196,7 +196,7 @@ impl Frustum {
             &gpu.queue,
             &img,
             None
-        ).unwrap();
+        );
         let material = Material::new(
             &gpu.device,
             "frustum",

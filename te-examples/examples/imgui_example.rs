@@ -1,6 +1,6 @@
 use std::{rc::Rc, cell::RefCell};
 
-use te_player::{imgui::{self, PrepareResult, ImguiState}, event_loop::{PlaceholderTextSender}};
+use te_player::{imgui::{PrepareResult, ImguiState}, event_loop::PlaceholderTextSender};
 use te_renderer::{initial_config::InitialConfiguration, state::TeState};
 
 fn main() {

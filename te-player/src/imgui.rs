@@ -4,6 +4,7 @@ use std::{error::Error, cell::RefCell, rc::Rc};
 pub use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use te_renderer::{initial_config::InitialConfiguration, state::{TeState, GpuState}};
+use te_winit::event_loop::EventLoopBuilder;
 use wgpu::CommandEncoder;
 pub use winit as te_winit;
 use winit::{window, dpi, event_loop::EventLoop};
@@ -34,7 +35,8 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareR
         Ok(img) => Ok(img.to_rgba8()),
         Err(_) => Err(InitError::Unkown),
     }?;
-    let event_loop = EventLoop::with_user_event();
+
+    let event_loop = EventLoopBuilder::with_user_event().build();
     gamepad::listen(event_loop.create_proxy());
 
     let wb = window::WindowBuilder::new()
@@ -45,8 +47,7 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<PrepareR
             Err(_) => panic!("Couldn't get icon raw data")
         }));
 
-    let window = wb.build(&event_loop)
-        .unwrap();
+    let window = wb.build(&event_loop).expect("Couldn't create window");
 
     let gpu = GpuState::new(window.inner_size(), &window).await;
     let state = TeState::new(&window, &gpu, config).await;
@@ -88,8 +89,7 @@ pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<Con
             Err(_) => panic!("Couldn't get raw data")
         }));
 
-    let window = wb.build(event_loop)
-        .unwrap();
+    let window = wb.build(event_loop).expect("Couldn't create window");
 
     let gpu = GpuState::new(window.inner_size(), &window).await;
     let state = TeState::new(&window, &gpu, config).await;

@@ -1,8 +1,8 @@
-use std::{rc::Rc, num::NonZeroU32};
+use std::rc::Rc;
 
-use te_player::{event_loop::{Event, TextSender}, te_winit::{event_loop::ControlFlow, event::{WindowEvent, ElementState}, dpi::{PhysicalSize, LogicalSize}}};
+use te_player::{event_loop::{Event, TextSender}, te_winit::{event_loop::ControlFlow, event::{WindowEvent, ElementState}, dpi::PhysicalSize}};
 use te_renderer::{model::{Model, ModelVertex}, state::{TeColor, TeState, GpuState, Section, Text}, text::FontReference};
-use wgpu::{ImageDataLayout, Extent3d, SurfaceConfiguration, TextureUsages, Texture};
+use wgpu::{ImageDataLayout, Extent3d};
 
 pub(crate) const SQUARE_VERT: &[ModelVertex] = &[
     ModelVertex {
@@ -45,20 +45,20 @@ pub(crate) fn main() {
         te_gpu,
         te_window,
         te_state
-    ) = pollster::block_on(te_player::prepare(config, true)).unwrap();
-    let mut te_gpu = Rc::<_>::try_unwrap(te_gpu).unwrap().into_inner();
-    let te_window = Rc::<_>::try_unwrap(te_window).unwrap().into_inner();
-    let mut te_state = Rc::<_>::try_unwrap(te_state).unwrap().into_inner();
+    ) = pollster::block_on(te_player::prepare(config, true)).expect("Couldn't initilize");
+    let mut te_gpu = Rc::<_>::try_unwrap(te_gpu).expect("Unreachable").into_inner();
+    let te_window = Rc::<_>::try_unwrap(te_window).expect("Unreachable").into_inner();
+    let mut te_state = Rc::<_>::try_unwrap(te_state).expect("Unreachable").into_inner();
 
-    let img = image::open("resources/default_texture.png").unwrap();
-    let img = img.as_rgba8().unwrap();
+    let img = image::open("resources/default_texture.png").expect("make sure default_texture.png exists in \"resources\" directory");
+    let img = img.as_rgba8().expect(r#""resources/default_texture.png" should have an alpha channel, but it doesn't"#);
     let square_model = Model::new_simple(SQUARE_VERT.into(), SQUARE_IND.into(), img, &te_gpu, &te_state.instances.layout);
 
     let mut x_pos = 100.0;
     let mut y_pos = 200.0;
     let mut click = None;
     let mut mouse_pos = (0, 0);
-    te_state.place_custom_model("model_name", &te_gpu, ((x_pos/1000.0)-0.5, 0.0, (y_pos/1000.0)-0.5), Some(square_model));
+    te_state.place_custom_model("model_name", &te_gpu, ((x_pos/1000.0)-0.5, 0.0, (y_pos/1000.0)-0.5), Some(square_model)).expect("Unreachable");
     for j in 0..5 {
         for i in 0..5 {
             let posx = ((i as f32)/20.0)-0.3;
@@ -66,7 +66,7 @@ pub(crate) fn main() {
             let square_model = Model::new_simple(SQUARE_VERT.into(), SQUARE_IND.into(), img, &te_gpu, &te_state.instances.layout);
 
             // This is bad practice. Since model_name{i}_{j} is the same model as model_name, they both should be model_name. and the last argument should be None instead of Some(square_model)
-            te_state.place_custom_model(&format!("model_name{i}_{j}"), &te_gpu, (posx, -((i+j) as f32)/100.0, posy), Some(square_model));
+            te_state.place_custom_model(&format!("model_name{i}_{j}"), &te_gpu, (posx, -((i+j) as f32)/100.0, posy), Some(square_model)).expect("Unreachable");
         }
     }
 
@@ -208,7 +208,7 @@ async fn render(
     *last_render = now;
     *last_render_time = now;
     te_state.update(dt, &te_gpu);
-    let output = te_gpu.surface.get_current_texture().unwrap();
+    let output = te_gpu.surface.get_current_texture().expect("Couldn't get surface texture");
     let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
     let mut encoders = te_renderer::state::TeState::prepare_render(&te_gpu);
     //te_state.render(&view, &te_gpu, &mut encoder, &[]);
@@ -224,14 +224,14 @@ async fn render(
         view_formats: &[wgpu::TextureFormat::R32Uint]
     });
     if see_clickable {
-        let clickable_encoder = encoders.get_mut(0).unwrap();
+        let clickable_encoder = &mut encoders[0];
         te_state.clicakble_mask(&view, &te_gpu, clickable_encoder, true, None);
     } else {
         texts.draw_text(|texts| {
             te_state.render(&view, &te_gpu, &mut encoders, texts)
         });
     }
-    let clickable_encoder = encoders.get_mut(0).unwrap();
+    let clickable_encoder = &mut encoders[0];
     te_state.clicakble_mask(
         &click_texture.create_view(&wgpu::TextureViewDescriptor::default()),
         &te_gpu,
@@ -262,7 +262,7 @@ async fn render(
 
     let slice = destination.slice(..);
     let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-    slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+    slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).expect("Couldn't send"));
 
     te_gpu.device.poll(wgpu::Maintain::Wait);
     let result: Vec<u32> = match receiver.receive().await {

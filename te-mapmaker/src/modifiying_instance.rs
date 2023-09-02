@@ -15,7 +15,7 @@ impl InstancesState {
             texture_bind_group_layout,
             resources_path,
             default_texture_path
-        ).unwrap();
+        ).expect("Make sure the default texture and default models are valid");
         let modifying_instance = ModifyingInstance {
             model,
             x: 0.0,

@@ -389,9 +389,9 @@ impl RendererState {
                     instances = modifying_instance.into_renderable(&gpu.device, tile_size);
                     buffer = modifying_instance.buffer.as_ref();
                     model = Some(&modifying_instance.model);
-                    renderer.render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                    renderer.render_pass.set_vertex_buffer(1, buffer.expect("Unreachable").slice(..));
                     renderer.draw_model_instanced(
-                        &model.unwrap(),
+                        &model.expect("Unreachable"),
                         vec![0..instances as u32],
                     );
                 // 1 second = 1_000_000_000 nanoseconds
@@ -401,10 +401,10 @@ impl RendererState {
                 }
                 state.draw_transparent(&mut renderer.render_pass);
                 if model_visible {
-                    if model.unwrap().transparent_meshes.len() > 0 {
-                        renderer.render_pass.set_vertex_buffer(1, buffer.unwrap().slice(..));
+                    if model.expect("Unreachable").transparent_meshes.len() > 0 {
+                        renderer.render_pass.set_vertex_buffer(1, buffer.expect("Unreachable").slice(..));
                         renderer.tdraw_model_instanced(
-                            &model.unwrap(),
+                            &model.expect("Unreachable"),
                             vec![0..instances as u32],
                         );
                     }
@@ -436,7 +436,11 @@ fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directo
     let path = std::path::Path::new(&(path));
     match std::fs::read_dir(path) {
         Ok(files) => for file in files {
-            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
+            let file_name = file.expect("Error reading directory")
+                .file_name()
+                .to_str()
+                .expect("Invalid file name")
+                .to_string();
             let name = match dir_name {
                 "" => "".to_string(),
                 s => s.to_string() + "/" // TODO: don't hardcode "/"
@@ -445,7 +449,7 @@ fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directo
             let full_path = name + &file_name;
             let full_path = std::path::Path::new(&(full_path));
             if path.join(file_path).is_dir() {
-                dir.files.push(File::D(get_resource_names(resource_files_directory, full_path.to_str().unwrap())))
+                dir.files.push(File::D(get_resource_names(resource_files_directory, full_path.to_str().expect("Invalid file name"))))
             } else if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
                 dir.files.push(File::F(file_name));
             }
@@ -462,7 +466,11 @@ fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
     let path = std::path::Path::new(&(path));
     match std::fs::read_dir(path) {
         Ok(files) => for file in files {
-            let file_name = file.unwrap().file_name().to_str().unwrap().to_string();
+            let file_name = file.expect("Unable to read directory")
+                .file_name()
+                .to_str()
+                .expect("Invalid file name")
+                .to_string();
             let name = match dir_name {
                 "" => "".to_string(),
                 s => s.to_string() + "/" // TODO: don't hardcode "/"
@@ -470,7 +478,7 @@ fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
             let full_path = name + &file_name;
             let full_path = std::path::Path::new(&(full_path));
             if path.join(full_path).is_dir() {
-                dir.files.push(File::D(get_map_names(map_files_directory, full_path.to_str().unwrap())))
+                dir.files.push(File::D(get_map_names(map_files_directory, full_path.to_str().expect("Invalid file name"))))
             } else if file_name.ends_with(".temap") {
                 dir.files.push(File::F(file_name))
             }

@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::Display};
 
 use image::io::Reader as ImageReader;
-use winit::{event_loop::{EventLoop, ControlFlow}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
+use winit::{event_loop::{ControlFlow, EventLoopBuilder}, window::{WindowBuilder, Icon}, dpi, event::{Event, WindowEvent}};
 
 use te_renderer::initial_config::InitialConfiguration;
 use te_gamepad::gamepad;
@@ -34,7 +34,7 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
         Err(_) => Err(InitError::Unkown),
     }?;
 
-    let event_loop = EventLoop::with_user_event();
+    let event_loop = EventLoopBuilder::with_user_event().build();
     gamepad::listen(event_loop.create_proxy());
     let wb = WindowBuilder::new()
         .with_title("Tilengine")
@@ -44,8 +44,7 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
             Err(_) => Err(InitError::Opaque)
         }?));
 
-    let window = wb.build(&event_loop)
-        .unwrap();
+    let window = wb.build(&event_loop).expect("Unable to create window");
 
     let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone(), default_model).await;
     let mut last_render_time = std::time::Instant::now();

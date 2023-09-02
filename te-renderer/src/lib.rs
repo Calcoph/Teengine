@@ -8,6 +8,7 @@ pub mod temap;
 pub mod texture;
 pub mod text;
 pub mod render;
+pub mod error;
 
 #[cfg(test)]
 mod tests;

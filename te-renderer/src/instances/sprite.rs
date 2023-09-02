@@ -95,7 +95,7 @@ impl InstancedSprite {
         );
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
-        if self.instances.last().unwrap().in_viewport {
+        if self.instances.last().expect("Unreachable").in_viewport {
             self.shown_instances.add_num(self.instances.len() as u32-1)
         }
         self.instance_buffer.destroy();
@@ -118,14 +118,14 @@ impl InstancedSprite {
         new_size: V,
         queue: &wgpu::Queue,
     ) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         instance.resize(new_size);
         let raw = instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -137,7 +137,7 @@ impl InstancedSprite {
                     &self.instance_buffer,
                     (index * std::mem::size_of::<InstanceRaw>())
                         .try_into()
-                        .unwrap(),
+                        .expect("Too many instances"), // rare case when usize > u64
                     bytemuck::cast_slice(&[i.to_raw()]),
                 );
             }
@@ -145,7 +145,7 @@ impl InstancedSprite {
     }
 
     pub(crate) fn show(&mut self, index: usize) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         if instance.is_hidden() {
             instance.show();
             if instance.in_viewport {
@@ -155,7 +155,7 @@ impl InstancedSprite {
     }
 
     pub(crate) fn hide(&mut self, index: usize) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         if !instance.is_hidden() {
             instance.hide();
             if instance.in_viewport {
@@ -165,7 +165,7 @@ impl InstancedSprite {
     }
 
     pub(crate) fn is_hidden(&self, index: usize) -> bool {
-        let instance = self.instances.get(index).unwrap();
+        let instance = self.instances.get(index).expect("Unreachable");
         instance.is_hidden()
     }
 
@@ -181,7 +181,7 @@ impl InstancedSprite {
         screen_w: u32,
         screen_h: u32
     ) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         if let Some(show) = instance.move_direction(direction, screen_w, screen_h) {
             if show {
                 self.shown_instances.add_num(index as u32)
@@ -194,7 +194,7 @@ impl InstancedSprite {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -207,7 +207,7 @@ impl InstancedSprite {
         screen_w: u32,
         screen_h: u32
     ) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         if let Some(show) = instance.move_to(position, screen_w, screen_h) {
             if show {
                 self.shown_instances.add_num(index as u32)
@@ -220,7 +220,7 @@ impl InstancedSprite {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -289,7 +289,7 @@ impl AnimatedSprite {
                 *self.start_time.borrow_mut() += self.frame_delay * self.sprites.len() as u32;
                 self.get_sprite_rec(now)
             } else {
-                self.sprites.last().unwrap()
+                self.sprites.last().expect("Unreachable")
             },
         }
     }
@@ -306,7 +306,7 @@ impl AnimatedSprite {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -317,7 +317,7 @@ impl AnimatedSprite {
                 &self.instance_buffer,
                 (0)
                     .try_into()
-                    .unwrap(),
+                    .expect("Too many instances"), // rare case when usize > u64
                 bytemuck::cast_slice(&[self.instance.to_raw()]),
             );
         }
@@ -349,7 +349,7 @@ impl AnimatedSprite {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -368,7 +368,7 @@ impl AnimatedSprite {
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }

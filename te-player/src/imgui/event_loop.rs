@@ -58,7 +58,7 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
                 last_render_time = now;
 
                 state.borrow_mut().update(dt, &gpu.borrow());
-                let output = gpu.borrow().surface.get_current_texture().unwrap();
+                let output = gpu.borrow().surface.get_current_texture().expect("Couldn't get surface texture");
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoders = te_renderer::state::TeState::prepare_render(&gpu.borrow());
 

@@ -67,7 +67,7 @@ impl InstancedModel {
 
     pub(crate) fn uncull_instance(&mut self, index: usize) {
         if !self.unculled_indices.contains(&(index as u32)) {
-            if !self.instances.get(index).unwrap().hidden {
+            if !self.instances.get(index).expect("Unreachable").hidden {
                 self.unculled_instances += 1;
                 self.unculled_indices.add_num(index as u32);
             }
@@ -84,17 +84,17 @@ impl InstancedModel {
     }
 
     pub(crate) fn hide(&mut self, index: usize) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         instance.hide()
     }
 
     pub(crate) fn show(&mut self, index: usize) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         instance.show()
     }
 
     pub(crate) fn is_hidden(&self, index: usize) -> bool {
-        let instance = self.instances.get(index).unwrap();
+        let instance = self.instances.get(index).expect("Unreachable");
         instance.is_hidden()
     }
 }
@@ -106,14 +106,14 @@ impl InstancedDraw for InstancedModel {
         direction: V,
         queue: &wgpu::Queue,
     ) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         instance.move_direction(direction);
         let raw = instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }
@@ -124,14 +124,14 @@ impl InstancedDraw for InstancedModel {
         position: P,
         queue: &wgpu::Queue,
     ) {
-        let instance = self.instances.get_mut(index).unwrap();
+        let instance = self.instances.get_mut(index).expect("Unreachable");
         instance.move_to(position);
         let raw = instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
             (index * std::mem::size_of::<InstanceRaw>())
                 .try_into()
-                .unwrap(),
+                .expect("Too many instances"), // rare case when usize > u64
             bytemuck::cast_slice(&[raw]),
         );
     }

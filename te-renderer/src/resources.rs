@@ -2,6 +2,7 @@ use gltf;
 use gltf::buffer;
 use gltf::{Accessor, Semantic, Texture};
 
+use crate::error::TError;
 use crate::{model, texture};
 
 pub fn load_texture(
@@ -13,6 +14,7 @@ pub fn load_texture(
     texture::Texture::from_image(device, queue, image, Some(file_name))
 }
 
+/// Doesn't implement the full glb spec, so it will throw errors on some valid glb files
 pub fn load_glb_model(
     file_name: &str,
     device: &wgpu::Device,
@@ -27,15 +29,14 @@ pub fn load_glb_model(
             eprintln!("Failed to load {}", file_name);
             Err(err)
         }
-    }
-    .unwrap(); // TODO: don't hardcode the path
+    }?; // TODO: don't hardcode the path
 
     let mut meshes = Vec::new();
     let mut transparent_meshes = Vec::new();
     let mut materials = Vec::new();
     let mut mat_index = 0;
     for glb_mesh in document.meshes() {
-        let name = glb_mesh.name().unwrap().to_string();
+        let name = glb_mesh.name().ok_or(TError::NamelessGLB)?.to_string();
         for glb_primitive in glb_mesh.primitives() {
             // TODO: sort out the opaque, transparent and translucent primitives so we can correctly draw them using these steps:
             // 1. Draw all opaque primitives
@@ -54,13 +55,13 @@ pub fn load_glb_model(
                     match glb_color {
                         [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
                             // base color multiplier is so close to being 1 that it's not worth to process it
-                            let image = images.get(image_index).unwrap();
-                            load_texture(image, device, queue, texture_name).unwrap()
+                            let image = images.get(image_index).ok_or(TError::InvalidGLB)?;
+                            load_texture(image, device, queue, texture_name)?
                         }
                         [_, _, _, _] => {
-                            let image = images.get(image_index).unwrap();
+                            let image = images.get(image_index).ok_or(TError::InvalidGLB)?;
                             let image = apply_base_color(image, glb_color);
-                            load_texture(&image, device, queue, texture_name).unwrap()
+                            load_texture(&image, device, queue, texture_name)?
                         }
                     }
                 }
@@ -81,11 +82,11 @@ pub fn load_glb_model(
                     match glb_color {
                         [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
                             // base color multiplier is so close to being 1 that it's not worth to process it
-                            load_texture(&image, device, queue, texture_name).unwrap()
+                            load_texture(&image, device, queue, texture_name)?
                         }
                         [_, _, _, _] => {
                             let image = apply_base_color(&image, glb_color);
-                            load_texture(&image, device, queue, texture_name).unwrap()
+                            load_texture(&image, device, queue, texture_name)?
                         }
                     }
                 }
@@ -96,7 +97,7 @@ pub fn load_glb_model(
             materials.push(model::Material::new(device, &name, diffuse_texture, layout));
 
             // get the indices of the triangles
-            let indices_accessor = glb_primitive.indices().unwrap();
+            let indices_accessor = glb_primitive.indices().ok_or(TError::InvalidGLB)?;
             let indices_buffer_index = get_buffer_index(&indices_accessor);
             let indices = load_scalar(indices_accessor, &buffers[indices_buffer_index]); // TODO: handle the case of no indices
 
@@ -125,13 +126,13 @@ pub fn load_glb_model(
                 Some(coords) => coords,
                 None => positions
                     .as_ref()
-                    .unwrap()
+                    .ok_or(TError::InvalidGLB)?
                     .iter()
                     .map(|[x, y, _z]| [*x, *y])
                     .collect::<Vec<[f32; 2]>>(), // it doesn't matter what tex_coords are since the model doesn't have a texture anyway
             };
             let vertices = positions
-                .unwrap()
+                .ok_or(TError::InvalidGLB)?
                 .into_iter()
                 .zip(tex_coords)
                 .map(|(position, tex_coords)| model::ModelVertex {
@@ -165,7 +166,7 @@ fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
         gltf::accessor::Dimensions::Vec3 => {}
         _ => panic!("vertex data should be Vec3!"),
     }
-    let offset = accessor.offset() + accessor.view().unwrap().offset();
+    let offset = accessor.offset() + accessor.view().expect("Sparse accessor").offset();
     let readable_size = accessor.count() * accessor.size();
     let vec3_data = &buffer[offset..offset + readable_size];
     let mut vec3 = Vec::new();
@@ -188,7 +189,7 @@ fn load_vec2(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 2]> {
         gltf::accessor::Dimensions::Vec2 => {}
         _ => panic!("tex coords should be Vec2!"),
     }
-    let offset = accessor.offset() + accessor.view().unwrap().offset();
+    let offset = accessor.offset() + accessor.view().expect("Sparse accessor").offset();
     let readable_size = accessor.count() * accessor.size();
     let vec2_data = &buffer[offset..offset + readable_size];
     let mut vec2 = Vec::new();
@@ -213,7 +214,7 @@ fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
         gltf::accessor::Dimensions::Scalar => {}
         _ => panic!("scalars should be Scalar!"),
     }
-    let offset = accessor.offset() + accessor.view().unwrap().offset();
+    let offset = accessor.offset() + accessor.view().expect("Sparse accessor").offset();
     let readable_size = accessor.count() * accessor.size();
     let scalar_data = &buffer[offset..offset + readable_size];
     let mut scalar = Vec::new();
@@ -226,7 +227,7 @@ fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
 }
 
 fn get_buffer_index(accessor: &Accessor) -> usize {
-    accessor.view().unwrap().buffer().index()
+    accessor.view().expect("Sparse accessor").buffer().index()
 }
 
 fn get_texture_name(tex: Texture) -> &str {
@@ -271,7 +272,7 @@ pub fn load_sprite(
     let full_path = resources_path + "/" + file_name;
     let img = image::open(&full_path)?;
     let img = img.as_rgba8().expect(&format!("The image {full_path} doesn't contain an alpha channel. Only RGBA images are supported"));
-    let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name))?;
+    let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name));
     Ok((
         model::Material::new(device, file_name, diffuse_texture, layout),
         img.width() as f32,
