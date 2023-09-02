@@ -1,12 +1,11 @@
-use std::{collections::HashMap, cmp::Reverse};
+use std::collections::HashMap;
 
 use glyph_brush::{ab_glyph::FontArc, Section};
 use image::{Rgba, ImageBuffer};
-use sorted_vec::ReverseSortedVec;
 use wgpu::util::StagingBelt;
 use wgpu_glyph::{GlyphBrushBuilder, GlyphBrush};
 
-use crate::{state::{GpuState, TeColor}, model::Material, texture};
+use crate::{state::GpuState, model::Material, texture};
 
 #[derive(Debug)]
 pub struct Font {

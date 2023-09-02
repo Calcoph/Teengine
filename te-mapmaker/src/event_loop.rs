@@ -93,10 +93,10 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     winit::event::DeviceEvent::Text { codepoint: _codepoint } => (),//println!("TODO: Device Text ({:?}, {:?})", device_id, codepoint), // TODO
                 }
             },
-            Event::UserEvent(gamepad::ControllerEvent::Connected { device_id, axes }) => {
-                // save tha axes and device_id somewhere
+            Event::UserEvent(gamepad::ControllerEvent::Connected { device_id: _, axes: _ }) => {
+                // TODO: save the axes and device_id somewhere
             },
-            Event::UserEvent(gamepad::ControllerEvent::Other { device_id, event }) => {
+            Event::UserEvent(gamepad::ControllerEvent::Other { device_id: _, event }) => {
                 match event {
                     gilrs_core::EventType::ButtonPressed(_code) => (),//println!("TODO: ButtonPressed ({:?}, {:?})", event.device_id, code), // TODO
                     gilrs_core::EventType::ButtonReleased(_code) => (),//println!("TODO: ButtonReleased ({:?}, {:?})", event.device_id, code), // TODO

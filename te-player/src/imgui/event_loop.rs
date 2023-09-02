@@ -4,7 +4,7 @@ use imgui::{Context, Io};
 use imgui_wgpu::Renderer;
 use imgui_winit_support::WinitPlatform;
 use te_gamepad::gamepad::ControllerEvent;
-use te_renderer::{state::{TeState, GpuState, Section}, text::FontReference};
+use te_renderer::state::{TeState, GpuState};
 use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
 pub use winit::event::Event as Event;
 

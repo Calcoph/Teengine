@@ -54,8 +54,8 @@ pub(crate) fn main() {
     let img = img.as_rgba8().expect(r#""resources/default_texture.png" should have an alpha channel, but it doesn't"#);
     let square_model = Model::new_simple(SQUARE_VERT.into(), SQUARE_IND.into(), img, &te_gpu, &te_state.instances.layout);
 
-    let mut x_pos = 100.0;
-    let mut y_pos = 200.0;
+    let x_pos = 100.0;
+    let y_pos = 200.0;
     let mut click = None;
     let mut mouse_pos = (0, 0);
     te_state.place_custom_model("model_name", &te_gpu, ((x_pos/1000.0)-0.5, 0.0, (y_pos/1000.0)-0.5), Some(square_model)).expect("Unreachable");
@@ -122,10 +122,10 @@ pub(crate) fn main() {
                         te_gpu.resize(**new_inner_size);
                         te_state.resize(**new_inner_size)
                     },
-                    WindowEvent::CursorMoved { device_id, position, .. } => {
+                    WindowEvent::CursorMoved { device_id: _, position, .. } => {
                         mouse_pos = (position.x.floor() as u32, position.y.floor() as u32)
                     },
-                    WindowEvent::KeyboardInput { device_id, input, is_synthetic } => {
+                    WindowEvent::KeyboardInput { device_id: _, input, is_synthetic: _ } => {
                         if let ElementState::Pressed = input.state {
                             match input.virtual_keycode {
                                 Some(key) => match key {
@@ -144,7 +144,7 @@ pub(crate) fn main() {
                             }
                         }
                     },
-                    WindowEvent::MouseInput { device_id, state, button, .. } => {
+                    WindowEvent::MouseInput { device_id: _, state, button, .. } => {
                         match (state, button) {
                             (
                                 te_player::te_winit::event::ElementState::Pressed,

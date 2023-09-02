@@ -6,6 +6,7 @@ use winit::{
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
+#[allow(deprecated)]
 use crate::{model::{Vertex, Material}, render::{Draw2D, RendererClickable, InstanceFinder, Renderer}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}, error::TError};
 use crate::{
     camera,
@@ -375,9 +376,9 @@ impl TeState {
         self.text.load_font(font_path, &gpu.device, gpu.config.format)
     }
 
-    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) {
+    pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) -> Result<(), TError> {
         let map = temap::TeMap::from_file(file_name, self.maps_path.clone());
-        self.instances.fill_from_temap(map, gpu);
+        self.instances.fill_from_temap(map, gpu)
     }
 
     fn get_layouts(

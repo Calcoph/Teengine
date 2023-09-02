@@ -14,6 +14,7 @@ use crate::{
     temap, camera, model::{Model, AnimatedModel, Material}, text::Font, error::TError
 };
 
+#[allow(deprecated)]
 use self::{animation::Animation, model::InstancedModel, sprite::{InstancedSprite, AnimatedSprite}, text::{InstancedText, OldTextReference}};
 
 struct QuadTree {
@@ -984,6 +985,7 @@ impl InstancesState {
     /// will panic if the characters' files are not found
     /// see: model::Font
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn place_text(
         &mut self,
         text: Vec<String>,
@@ -1020,6 +1022,7 @@ impl InstancesState {
 
     /// Eliminates the text from screen and memory.
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn forget_text(&mut self, text: OldTextReference) {
         self.texts.get_mut(text.index).expect("Invalid text reference").take();
         self.deleted_texts.push(text.index)
@@ -1221,6 +1224,7 @@ impl InstancesState {
     /// Move a 2D text relative to it's current position.
     /// Ignores the z value.
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn move_text(
         &mut self,
         instance: &OldTextReference,
@@ -1241,6 +1245,7 @@ impl InstancesState {
     /// Move a 2D text to an absolute position.
     /// Ignores the z value.
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn set_text_position(
         &mut self,
         instance: &OldTextReference,
@@ -1260,6 +1265,7 @@ impl InstancesState {
 
     /// Gets a 2D text's position
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn get_text_position(&self, instance: &OldTextReference) -> (f32, f32) {
         let text = self.get_text(instance);
         text.position.into()
@@ -1267,6 +1273,7 @@ impl InstancesState {
 
     /// Resizes a 2D text
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn resize_text(
         &mut self,
         instance: &OldTextReference,
@@ -1284,6 +1291,7 @@ impl InstancesState {
 
     /// Gets a 2D text's size
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn get_text_size(&self, instance: &OldTextReference) -> (f32, f32) {
         let text = self.get_text(instance);
         text.size.into()
@@ -1298,6 +1306,7 @@ impl InstancesState {
     }
 
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn set_text_animation(&mut self, text: &OldTextReference, animation: Animation) {
         self.get_mut_text(text).animation = Some(animation)
     }
@@ -1316,6 +1325,7 @@ impl InstancesState {
     }
 
     #[deprecated]
+    #[allow(deprecated)]
     fn get_text(&self, text: &OldTextReference) -> &Instance2D {
         let text = self.texts.get(text.index).expect("Invalid reference").as_ref().expect("Invalid reference");
         &text.instance
@@ -1335,6 +1345,7 @@ impl InstancesState {
     }
 
     #[deprecated]
+    #[allow(deprecated)]
     fn get_mut_text(&mut self, text: &OldTextReference) -> &mut Instance2D {
         let text = self.texts.get_mut(text.index).expect("Invalid reference").as_mut().expect("Invalid reference");
         &mut text.instance
@@ -1391,6 +1402,7 @@ impl InstancesState {
     }
 
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn hide_text(&mut self, instance: &OldTextReference) {
         let text = self.texts.get_mut(instance.index);
         if let Some(text) = text.expect("Invalid reference") {
@@ -1416,6 +1428,7 @@ impl InstancesState {
     }
 
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn show_text(&mut self, instance: &OldTextReference) {
         let text = self.texts.get_mut(instance.index);
         if let Some(text) = text.expect("Invalid reference") {
@@ -1441,6 +1454,7 @@ impl InstancesState {
     }
 
     #[deprecated]
+    #[allow(deprecated)]
     pub(crate) fn is_text_hidden(&self, instance: &OldTextReference) -> bool {
         let text = self.texts.get(instance.index);
         if let Some(text) = text.expect("Invalid reference") {

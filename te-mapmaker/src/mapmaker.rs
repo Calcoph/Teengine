@@ -231,8 +231,7 @@ impl ImguiState {
                             &self.mod_instance.modifying_name,
                             &self.gpu,
                             (x, y, z)
-                            
-                        );
+                        ).expect("Model not found");
                     }
                     ui.separator();
                     ui.checkbox("Blink selected model", &mut self.renderer_s.blinking);
