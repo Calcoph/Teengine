@@ -923,9 +923,10 @@ impl TeState {
         sprite_name: &str,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
-        position: (f32, f32, f32)
+        position: (f32, f32, f32),
+        force_new_instance_id: Option<&str>
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height)
+        self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height, force_new_instance_id)
     }
 
     pub fn place_custom_sprite(

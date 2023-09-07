@@ -808,9 +808,11 @@ impl InstancesState {
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
+        force_new_instance_id: Option<&str>
     ) -> Result<InstanceReference, TError> {
-        if let Some(instanced_s) = self.sprite_instances.get_mut(sprite_name) {
+        let instance_name = sprite_name.to_string() + force_new_instance_id.unwrap_or_default();
+        if let Some(instanced_s) = self.sprite_instances.get_mut(&instance_name) {
             instanced_s.add_instance(
                 position.0,
                 position.1,
@@ -843,11 +845,11 @@ impl InstancesState {
                 screen_h
             );
             self.sprite_instances
-                .insert(sprite_name.to_string(), instanced_s);
+                .insert(instance_name.clone(), instanced_s);
         }
 
         let mut inst_ref = InstanceReference {
-            name: sprite_name.to_string(),
+            name: instance_name,
             index: 0, // 0 is placeholder
             dimension: InstanceType::Sprite,
         };
