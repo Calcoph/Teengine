@@ -24,7 +24,7 @@ impl InstancedText {
         screen_w: u32,
         screen_h: u32
     ) -> Self {
-        let mut instance = Instance2D::new(cgmath::Vector2 { x, y }, cgmath::Vector2 { x: w, y: h }, None, screen_w, screen_h);
+        let mut instance = Instance2D::new(cgmath::Vector2 { x, y }, cgmath::Vector2 { x: w, y: h }, depth, None, screen_w, screen_h);
 
         let instance_data = [instance.to_raw()];
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

@@ -3,6 +3,7 @@ struct InstanceInput {
     @location(6) model_matrix_1: vec4<f32>,
     @location(7) model_matrix_2: vec4<f32>,
     @location(8) model_matrix_3: vec4<f32>,
+    @location(9) depth: f32
 }
 
 // Vertex shader
@@ -20,6 +21,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
+    @location(1) depth: f32
 }
 
 @vertex
@@ -36,7 +38,13 @@ fn vs_main(
     var out: VertexOutput;
     out.clip_position = projection.data * model_matrix * vec4<f32>(model.position, 0.0, 1.0);
     out.tex_coords = model.tex_coords;
+    out.depth = instance.depth;
     return out;
+}
+
+struct FragmentOutput {
+    @builtin(frag_depth) depth: f32,
+    @location(0) texture_sample: vec4<f32>
 }
 
 // Fragment shader
@@ -46,6 +54,9 @@ var t_diffuse: texture_2d<f32>;
 var s_diffuse: sampler;
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.tex_coords);
+fn fs_main(in: VertexOutput) -> FragmentOutput {
+    var out: FragmentOutput;
+    out.depth = in.depth;
+    out.texture_sample = textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    return out;
 }

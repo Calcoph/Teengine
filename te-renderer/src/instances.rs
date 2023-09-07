@@ -158,6 +158,56 @@ impl crate::model::Vertex for InstanceRaw {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct DepthedInstanceRaw {
+    model: [[f32; 4]; 4],
+    depth: f32
+}
+
+impl crate::model::Vertex for DepthedInstanceRaw {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<DepthedInstanceRaw>() as wgpu::BufferAddress,
+            // We need to switch from using a step mode of Vertex to Instance
+            // This means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
+                // for each vec4. We'll have to reassemble the mat4 in
+                // the shader.
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Float32,
+                },
+            ],
+        }
+    }
+}
+
 pub trait Instance {
     fn to_raw(&mut self) -> InstanceRaw;
 
@@ -170,17 +220,19 @@ pub trait Instance {
 pub struct Instance2D {
     pub position: cgmath::Vector2<f32>,
     pub size: cgmath::Vector2<f32>,
+    depth: f32,
     animation: Option<Animation>,
     hidden: bool,
     in_viewport: bool
 }
 
 impl Instance2D {
-    fn new(position: cgmath::Vector2<f32>, size: cgmath::Vector2<f32>, animation: Option<Animation>, screen_w: u32, screen_h: u32) -> Self {
+    fn new(position: cgmath::Vector2<f32>, size: cgmath::Vector2<f32>, depth: f32, animation: Option<Animation>, screen_w: u32, screen_h: u32) -> Self {
         let in_viewport = inside_viewport(position.into(), size.into(), (screen_w, screen_h));
         Instance2D {
             position,
             size,
+            depth,
             animation,
             hidden: false,
             in_viewport
@@ -199,6 +251,7 @@ impl Instance2D {
         let scale = animation.get_scale();
         let x = self.position.x + translation.x;
         let y = self.position.y + translation.y;
+        let depth = self.depth + translation.z;
         let w = self.size.x + scale.x;
         let h = self.size.y + scale.y;
         let position = cgmath::Vector2{ x, y };
@@ -206,6 +259,7 @@ impl Instance2D {
         Instance2D {
             position,
             size,
+            depth,
             animation: None,
             hidden: self.hidden,
             in_viewport: self.in_viewport
@@ -224,7 +278,7 @@ impl Instance2D {
         self.hidden
     }
 
-    fn to_raw(&mut self) -> InstanceRaw {
+    fn to_raw(&mut self) -> DepthedInstanceRaw {
         let animation;
         let instance = if self.animation.is_some() {
             animation = self.get_animated();
@@ -238,8 +292,9 @@ impl Instance2D {
             z: 0.0,
         }) * cgmath::Matrix4::from_nonuniform_scale(instance.size.x, instance.size.y, 1.0);
 
-        InstanceRaw {
+        DepthedInstanceRaw {
             model: sprite.into(),
+            depth: instance.depth
         }
     }
 

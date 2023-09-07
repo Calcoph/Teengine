@@ -11,7 +11,7 @@ use crate::{model::{Vertex, Material}, render::{Draw2D, RendererClickable, Insta
 use crate::{
     camera,
     initial_config::InitialConfiguration,
-    instances::{InstanceRaw, InstancesState},
+    instances::{InstanceRaw, InstancesState, DepthedInstanceRaw},
     model,
     temap, texture,
 };
@@ -265,7 +265,7 @@ impl TeState {
             create_r32uint_render_pipeline(
                 &gpu.device,
                 &clickable_pipeline_layout,
-                Some(texture::Texture::DEPTH_FORMAT),
+                texture::Texture::DEPTH_FORMAT,
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
                 EntryPoint::Main,
@@ -298,8 +298,9 @@ impl TeState {
             create_2d_render_pipeline(
                 &gpu.device,
                 &sprite_render_pipeline_layout,
+                texture::Texture::DEPTH_FORMAT,
                 gpu.config.format,
-                &[model::SpriteVertex::desc(), InstanceRaw::desc()],
+                &[model::SpriteVertex::desc(), DepthedInstanceRaw::desc()],
                 shader,
                 true,
             )
@@ -596,7 +597,14 @@ impl TeState {
                             },
                         }),
                     ],
-                    depth_stencil_attachment: None,
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &gpu.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),
                 });
             self.draw_sprites(&mut render_pass);
         }
@@ -1218,6 +1226,7 @@ fn create_render_pipeline(
 fn create_2d_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
+    depth_format: wgpu::TextureFormat,
     color_format: wgpu::TextureFormat,
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
@@ -1230,7 +1239,7 @@ fn create_2d_render_pipeline(
     };
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Render Pipeline"),
+        label: Some("2D Render Pipeline"),
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: &shader,
@@ -1258,7 +1267,13 @@ fn create_2d_render_pipeline(
             // Requires Features::CONSERVATIVE_RASTERIZATION
             conservative: false,
         },
-        depth_stencil: None,
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: depth_format,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,
@@ -1271,7 +1286,7 @@ fn create_2d_render_pipeline(
 fn create_r32uint_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
-    depth_format: Option<wgpu::TextureFormat>,
+    depth_format: wgpu::TextureFormat,
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
     entry_point: EntryPoint,
@@ -1313,8 +1328,8 @@ fn create_r32uint_render_pipeline(
             // Requires Features::CONSERVATIVE_RASTERIZATION
             conservative: false,
         },
-        depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
-            format,
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: depth_format,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::Less,
             stencil: wgpu::StencilState::default(),

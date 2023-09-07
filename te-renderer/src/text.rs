@@ -153,7 +153,7 @@ impl TextState {
                 view,
                 window_size.0,
                 window_size.1
-            ).expect("Error drawing old text");
+            ).expect("Error drawing text");
         }
     }
 }
