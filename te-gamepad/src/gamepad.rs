@@ -1,9 +1,9 @@
-use gilrs_core::{Gilrs, Event};
-pub use gilrs_core::EvCode as EvCode;
-pub use gilrs_core::AxisInfo as AxisInfo;
-pub use gilrs_core::EventType as EventType;
+pub use gilrs_core::AxisInfo;
+pub use gilrs_core::EvCode;
+pub use gilrs_core::EventType;
+use gilrs_core::{Event, Gilrs};
+use std::{collections::HashMap, thread};
 use winit::event_loop::EventLoopProxy;
-use std::{thread, collections::HashMap};
 
 pub fn listen(event_loop: EventLoopProxy<ControllerEvent>) {
     thread::spawn(move || {
@@ -19,13 +19,16 @@ pub fn listen(event_loop: EventLoopProxy<ControllerEvent>) {
                         }
                     }
 
-                    event_loop.send_event(ControllerEvent::Connected {
-                        device_id: ev.id,
-                        axes
-                    }).expect("Event loop no longer exists");
-
+                    event_loop
+                        .send_event(ControllerEvent::Connected {
+                            device_id: ev.id,
+                            axes,
+                        })
+                        .expect("Event loop no longer exists");
                 } else {
-                    event_loop.send_event(ControllerEvent::new(ev)).expect("Event loop no longer exists");
+                    event_loop
+                        .send_event(ControllerEvent::new(ev))
+                        .expect("Event loop no longer exists");
                 }
             }
         }
@@ -36,16 +39,19 @@ pub fn listen(event_loop: EventLoopProxy<ControllerEvent>) {
 pub enum ControllerEvent {
     Connected {
         device_id: usize,
-        axes: HashMap<EvCode, AxisInfo>
+        axes: HashMap<EvCode, AxisInfo>,
     },
     Other {
         device_id: usize,
-        event: EventType
-    }
+        event: EventType,
+    },
 }
 
 impl ControllerEvent {
     fn new(ev: Event) -> ControllerEvent {
-        ControllerEvent::Other { device_id: ev.id, event: ev.event }
+        ControllerEvent::Other {
+            device_id: ev.id,
+            event: ev.event,
+        }
     }
 }

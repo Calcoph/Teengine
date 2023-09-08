@@ -1,10 +1,15 @@
-use imgui_winit_support::WinitPlatform;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
-use winit::{window::Window, event::WindowEvent};
+use imgui_winit_support::WinitPlatform;
 use wgpu;
+use winit::{event::WindowEvent, window::Window};
 
-use te_renderer::{state::{TeState, GpuState}, initial_config::InitialConfiguration, camera::SAFE_CAMERA_ANGLE, resources};
+use te_renderer::{
+    camera::SAFE_CAMERA_ANGLE,
+    initial_config::InitialConfiguration,
+    resources,
+    state::{GpuState, TeState},
+};
 
 use crate::modifiying_instance::{self, InstancesState, ModifyingInstance};
 
@@ -20,7 +25,7 @@ pub struct ImguiState {
     model_selector_win: ModelSelectorWin,
     object_control_win: ObjectControlWin,
     mod_instance: modifiying_instance::InstancesState,
-    renderer_s: RendererState
+    renderer_s: RendererState,
 }
 
 struct CameraControlsWin {
@@ -30,26 +35,26 @@ struct CameraControlsWin {
 struct ModelSelectorWin {
     search_str_gltf: String,
     search_str_temap: String,
-    save_map_name: String
+    save_map_name: String,
 }
 
 struct ObjectControlWin {
-    _blinking: bool // TODO: Remove unused variable
+    _blinking: bool, // TODO: Remove unused variable
 }
 
 impl ImguiState {
-    pub async fn new(
-        window: &Window,
-        config: InitialConfiguration,
-        default_model: &str
-    ) -> Self {
+    pub async fn new(window: &Window, config: InitialConfiguration, default_model: &str) -> Self {
         let size = window.inner_size();
         let gpu = GpuState::new(size, window).await;
         let state = TeState::new(window, &gpu, config.clone()).await;
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
-        platform.attach_window(context.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
-        
+        platform.attach_window(
+            context.io_mut(),
+            &window,
+            imgui_winit_support::HiDpiMode::Default,
+        );
+
         let renderer_config = RendererConfig {
             texture_format: gpu.config.format,
             ..Default::default()
@@ -68,23 +73,27 @@ impl ImguiState {
         let model_selector_win = ModelSelectorWin {
             search_str_gltf: String::new(),
             search_str_temap: String::new(),
-            save_map_name: String::new()
+            save_map_name: String::new(),
         };
 
-        let object_control_win = ObjectControlWin {
-            _blinking: true
-        };
+        let object_control_win = ObjectControlWin { _blinking: true };
 
         let blinking = true;
         let blink_time = std::time::Instant::now();
         let blink_freq = 1;
-        let renderer_s = RendererState { blinking, blink_time, blink_freq };
+        let renderer_s = RendererState {
+            blinking,
+            blink_time,
+            blink_freq,
+        };
 
-        let mod_instance = InstancesState::new(&gpu,
+        let mod_instance = InstancesState::new(
+            &gpu,
             &state.instances.layout,
             state.instances.resources_path.clone(),
             &state.instances.default_texture_path,
-            default_model);
+            default_model,
+        );
 
         ImguiState {
             gpu,
@@ -98,12 +107,20 @@ impl ImguiState {
             model_selector_win,
             object_control_win,
             mod_instance,
-            renderer_s
+            renderer_s,
         }
     }
 
-    pub fn render_imgui(&mut self, view: &wgpu::TextureView, window: &Window, resource_files_directory: &str, map_files_directory: &str) {
-        self.platform.prepare_frame(self.context.io_mut(), window).expect("Failed to prepare frame");
+    pub fn render_imgui(
+        &mut self,
+        view: &wgpu::TextureView,
+        window: &Window,
+        resource_files_directory: &str,
+        map_files_directory: &str,
+    ) {
+        self.platform
+            .prepare_frame(self.context.io_mut(), window)
+            .expect("Failed to prepare frame");
         let ui = self.context.frame();
         {
             let mut opened = false;
@@ -135,17 +152,29 @@ impl ImguiState {
                     camera.set_zfar(zfar);
 
                     let mut yaw = camera.get_yaw();
-                    ui.slider("yaw", -2.0*SAFE_CAMERA_ANGLE as f32, 2.0*SAFE_CAMERA_ANGLE as f32, &mut yaw);
+                    ui.slider(
+                        "yaw",
+                        -2.0 * SAFE_CAMERA_ANGLE as f32,
+                        2.0 * SAFE_CAMERA_ANGLE as f32,
+                        &mut yaw,
+                    );
                     camera.set_yaw(yaw);
 
                     let mut pitch = camera.get_pitch();
-                    VerticalSlider::new("pitch", [50.0, 100.0], -SAFE_CAMERA_ANGLE as f32, SAFE_CAMERA_ANGLE as f32).build(&ui, &mut pitch);
+                    VerticalSlider::new(
+                        "pitch",
+                        [50.0, 100.0],
+                        -SAFE_CAMERA_ANGLE as f32,
+                        SAFE_CAMERA_ANGLE as f32,
+                    )
+                    .build(&ui, &mut pitch);
                     camera.set_pitch(pitch);
 
                     ui.same_line();
                     let mut zoom = 0.0;
-                    VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32).build(&ui, &mut zoom);
-                    
+                    VerticalSlider::new("zooom", [20.0, 100.0], -4.0 as f32, 4.0 as f32)
+                        .build(&ui, &mut zoom);
+
                     ui.same_line();
                     if ui.button("Go to origin") {
                         camera.move_absolute((0.0, 0.0, 0.0))
@@ -169,31 +198,32 @@ impl ImguiState {
                     let state = &mut self.model_selector_win;
                     ui.text("Put your gltf/glb models in\nignore/resources/ so they show up here");
                     ui.separator();
-                    ui.child_window("models")
-                        .size([250.0, 0.0])
-                        .build(|| {
-                            if ui.button("Refresh") {
-                                self.resources = get_resource_names(resource_files_directory, "");
-                            };
-                            ui.input_text("search", &mut state.search_str_gltf).build();
-                            show_resources_directory(
-                                resource_files_directory,
-                                &self.resources,
-                                &ui,
-                                state,
-                                &self.gpu,
-                                &self.state,
-                                &mut self.mod_instance,
-                                &mut self.renderer_s
-                            )
-                        });
+                    ui.child_window("models").size([250.0, 0.0]).build(|| {
+                        if ui.button("Refresh") {
+                            self.resources = get_resource_names(resource_files_directory, "");
+                        };
+                        ui.input_text("search", &mut state.search_str_gltf).build();
+                        show_resources_directory(
+                            resource_files_directory,
+                            &self.resources,
+                            &ui,
+                            state,
+                            &self.gpu,
+                            &self.state,
+                            &mut self.mod_instance,
+                            &mut self.renderer_s,
+                        )
+                    });
                     ui.same_line();
                     ui.child_window("maps").build(|| {
                         ui.input_text("map name", &mut state.save_map_name).build();
                         //ui.modal
                         if ui.button("Save map") {
                             if state.save_map_name != "" {
-                                self.state.save_temap(&state.save_map_name, map_files_directory.to_string())
+                                self.state.save_temap(
+                                    &state.save_map_name,
+                                    map_files_directory.to_string(),
+                                )
                             } else {
                                 ui.open_popup("SAVE FAILED");
                             }
@@ -210,7 +240,14 @@ impl ImguiState {
                             self.maps = get_map_names(map_files_directory, "");
                         };
                         ui.input_text("search", &mut state.search_str_temap).build();
-                        show_maps_directory(map_files_directory, &self.maps, &ui, state, &mut self.state, &self.gpu);
+                        show_maps_directory(
+                            map_files_directory,
+                            &self.maps,
+                            &ui,
+                            state,
+                            &mut self.state,
+                            &self.gpu,
+                        );
                     })
                 });
             ui.window("Object control")
@@ -220,18 +257,25 @@ impl ImguiState {
                     let _state = &mut self.object_control_win;
                     let mod_inst = &mut self.mod_instance.modifying_instance;
                     ui.text("position");
-                    ui.input_float("x", &mut mod_inst.x).step(1.0).step_fast(5.0).build();
-                    ui.input_float("y", &mut mod_inst.y).step(1.0).step_fast(5.0).build();
-                    ui.input_float("z", &mut mod_inst.z).step(1.0).step_fast(5.0).build();
+                    ui.input_float("x", &mut mod_inst.x)
+                        .step(1.0)
+                        .step_fast(5.0)
+                        .build();
+                    ui.input_float("y", &mut mod_inst.y)
+                        .step(1.0)
+                        .step_fast(5.0)
+                        .build();
+                    ui.input_float("z", &mut mod_inst.z)
+                        .step(1.0)
+                        .step_fast(5.0)
+                        .build();
                     if ui.button("place") {
                         let x = self.mod_instance.modifying_instance.x;
                         let y = self.mod_instance.modifying_instance.y;
                         let z = self.mod_instance.modifying_instance.z;
-                        self.state.place_model(
-                            &self.mod_instance.modifying_name,
-                            &self.gpu,
-                            (x, y, z)
-                        ).expect("Model not found");
+                        self.state
+                            .place_model(&self.mod_instance.modifying_name, &self.gpu, (x, y, z))
+                            .expect("Model not found");
                     }
                     ui.separator();
                     ui.checkbox("Blink selected model", &mut self.renderer_s.blinking);
@@ -242,9 +286,12 @@ impl ImguiState {
             ui.show_demo_window(&mut opened);
         }
 
-        let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("ImGui Render Encoder")
-        });
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("ImGui Render Encoder"),
+            });
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -258,7 +305,14 @@ impl ImguiState {
                 })],
                 depth_stencil_attachment: None,
             });
-            self.renderer.render(self.context.render(), &self.gpu.queue, &self.gpu.device, &mut render_pass).expect("Rendering failed");
+            self.renderer
+                .render(
+                    self.context.render(),
+                    &self.gpu.queue,
+                    &self.gpu.device,
+                    &mut render_pass,
+                )
+                .expect("Rendering failed");
         }
         self.gpu.queue.submit(std::iter::once(encoder.finish())); // TODO: call submit only once. right now it is called twice
     }
@@ -278,19 +332,41 @@ impl ImguiState {
         self.state.update(dt, &self.gpu);
     }
 
-    pub fn render(&mut self, window: &Window, tile_size: (f32, f32, f32), resource_files_directory: &str, map_files_directory: &str) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(
+        &mut self,
+        window: &Window,
+        tile_size: (f32, f32, f32),
+        resource_files_directory: &str,
+        map_files_directory: &str,
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.gpu.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.renderer_s.render_state(&view, tile_size, &mut self.state, &self.gpu, &mut self.mod_instance.modifying_instance);
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        self.renderer_s.render_state(
+            &view,
+            tile_size,
+            &mut self.state,
+            &self.gpu,
+            &mut self.mod_instance.modifying_instance,
+        );
         self.render_imgui(&view, window, resource_files_directory, map_files_directory);
         output.present();
 
         Ok(())
     }
-
 }
 
-fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, gpu: &GpuState, state: &TeState, mod_instance: &mut InstancesState, renderer_s: &mut RendererState) {
+fn show_resources_directory(
+    root: &str,
+    dir: &Directory,
+    ui: &Ui,
+    window_state: &ModelSelectorWin,
+    gpu: &GpuState,
+    state: &TeState,
+    mod_instance: &mut InstancesState,
+    renderer_s: &mut RendererState,
+) {
     ui.text(&dir.directory_name);
     ui.separator();
 
@@ -301,21 +377,42 @@ fn show_resources_directory(root: &str, dir: &Directory, ui: &Ui, window_state: 
                     Some(n) => n,
                     None => match file_name.strip_suffix(".gltf") {
                         Some(n) => n,
-                        None => ""
+                        None => "",
                     },
                 };
                 if name.contains(&window_state.search_str_gltf) && name != "" {
                     if ui.button(name) {
-                        renderer_s.change_model(&(dir.directory_name.clone() + "/" + &file_name), gpu, state, mod_instance) // TODO: don't hardcode "/"
+                        renderer_s.change_model(
+                            &(dir.directory_name.clone() + "/" + &file_name),
+                            gpu,
+                            state,
+                            mod_instance,
+                        ) // TODO: don't hardcode "/"
                     };
                 }
-            },
-            File::D(nested_dir) => show_resources_directory(root, &nested_dir, ui, window_state, gpu, state, mod_instance, renderer_s),
+            }
+            File::D(nested_dir) => show_resources_directory(
+                root,
+                &nested_dir,
+                ui,
+                window_state,
+                gpu,
+                state,
+                mod_instance,
+                renderer_s,
+            ),
         }
     }
 }
 
-fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &ModelSelectorWin, state: &mut TeState, gpu: &GpuState) {
+fn show_maps_directory(
+    root: &str,
+    dir: &Directory,
+    ui: &Ui,
+    window_state: &ModelSelectorWin,
+    state: &mut TeState,
+    gpu: &GpuState,
+) {
     ui.text(&dir.directory_name);
     ui.separator();
 
@@ -329,79 +426,100 @@ fn show_maps_directory(root: &str, dir: &Directory, ui: &Ui, window_state: &Mode
                 if name.contains(&window_state.search_str_temap) && name != "" {
                     if ui.button(name) {
                         state.forget_all_instances();
-                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu); // TODO: don't hardcode "/"
+                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu);
+                        // TODO: don't hardcode "/"
                     };
                 }
-            },
-            File::D(nested_dir) => show_maps_directory(root, &nested_dir, ui, window_state, state, gpu),
+            }
+            File::D(nested_dir) => {
+                show_maps_directory(root, &nested_dir, ui, window_state, state, gpu)
+            }
         }
-    };
+    }
 }
 
 struct RendererState {
     blinking: bool,
     blink_time: std::time::Instant,
-    blink_freq: u64
+    blink_freq: u64,
 }
 
 impl RendererState {
-    fn render_state(&mut self, view: &wgpu::TextureView, tile_size: (f32, f32, f32), state: &mut TeState, gpu: &GpuState, modifying_instance: &mut ModifyingInstance) {
-        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder")
-        });
+    fn render_state(
+        &mut self,
+        view: &wgpu::TextureView,
+        tile_size: (f32, f32, f32),
+        state: &mut TeState,
+        gpu: &GpuState,
+        modifying_instance: &mut ModifyingInstance,
+    ) {
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
         {
             let time_elapsed = std::time::Instant::now() - self.blink_time;
-            let model_visible = !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
+            let model_visible =
+                !self.blinking || time_elapsed < std::time::Duration::new(self.blink_freq, 0);
             let mut instances = 0;
             let mut buffer = None;
             let mut model = None;
             {
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
-                    color_attachments: &[
-                        Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: 0.0,
-                                    g: 0.0,
-                                    b: 0.0,
-                                    a: 1.0
-                                }),
-                                store: true
-                            }
-                        })
-                    ],
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: true,
+                        },
+                    })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &gpu.depth_texture.view,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
-                            store: true
+                            store: true,
                         }),
-                        stencil_ops: None
-                    })
+                        stencil_ops: None,
+                    }),
                 });
-                let mut renderer = te_renderer::render::Renderer::new(&mut render_pass, &state.camera.camera_bind_group);
+                let mut renderer = te_renderer::render::Renderer::new(
+                    &mut render_pass,
+                    &state.camera.camera_bind_group,
+                );
                 state.draw_opaque(&mut renderer.render_pass);
                 if model_visible {
                     instances = modifying_instance.into_renderable(&gpu.device, tile_size);
                     buffer = modifying_instance.buffer.as_ref();
                     model = Some(&modifying_instance.model);
-                    renderer.render_pass.set_vertex_buffer(1, buffer.expect("Unreachable").slice(..));
+                    renderer
+                        .render_pass
+                        .set_vertex_buffer(1, buffer.expect("Unreachable").slice(..));
                     renderer.draw_model_instanced(
                         &model.expect("Unreachable"),
                         vec![0..instances as u32],
                     );
                 // 1 second = 1_000_000_000 nanoseconds
                 // 500_000_000ns = 1/2 seconds
-                } else if time_elapsed > std::time::Duration::new(self.blink_freq, 0)+std::time::Duration::new(0, 500_000_000) {
+                } else if time_elapsed
+                    > std::time::Duration::new(self.blink_freq, 0)
+                        + std::time::Duration::new(0, 500_000_000)
+                {
                     self.blink_time = std::time::Instant::now();
                 }
                 state.draw_transparent(&mut renderer.render_pass);
                 if model_visible {
                     if model.expect("Unreachable").transparent_meshes.len() > 0 {
-                        renderer.render_pass.set_vertex_buffer(1, buffer.expect("Unreachable").slice(..));
+                        renderer
+                            .render_pass
+                            .set_vertex_buffer(1, buffer.expect("Unreachable").slice(..));
                         renderer.tdraw_model_instanced(
                             &model.expect("Unreachable"),
                             vec![0..instances as u32],
@@ -410,18 +528,24 @@ impl RendererState {
                 }
             }
         }
-    
+
         gpu.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn change_model(&mut self, file_name: &str, gpu: &GpuState, state: &TeState, mod_instance: &mut InstancesState) {
+    pub fn change_model(
+        &mut self,
+        file_name: &str,
+        gpu: &GpuState,
+        state: &TeState,
+        mod_instance: &mut InstancesState,
+    ) {
         match resources::load_glb_model(
-            file_name, 
-            &gpu.device, 
+            file_name,
+            &gpu.device,
             &gpu.queue,
             &state.instances.layout,
             state.instances.resources_path.clone(),
-            &state.instances.default_texture_path
+            &state.instances.default_texture_path,
         ) {
             Ok(model) => mod_instance.set_model(file_name, model),
             Err(_) => (),
@@ -430,59 +554,83 @@ impl RendererState {
 }
 
 fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directory {
-    let mut dir = Directory { directory_name: dir_name.to_string(), files: Vec::new() };
+    let mut dir = Directory {
+        directory_name: dir_name.to_string(),
+        files: Vec::new(),
+    };
     let path = resource_files_directory.to_string() + "/" + dir_name;
     let path = std::path::Path::new(&(path));
     match std::fs::read_dir(path) {
-        Ok(files) => for file in files {
-            let file_name = file.expect("Error reading directory")
-                .file_name()
-                .to_str()
-                .expect("Invalid file name")
-                .to_string();
-            let name = match dir_name {
-                "" => "".to_string(),
-                s => s.to_string() + "/" // TODO: don't hardcode "/"
-            };
-            let file_path = std::path::Path::new(&(file_name));
-            let full_path = name + &file_name;
-            let full_path = std::path::Path::new(&(full_path));
-            if path.join(file_path).is_dir() {
-                dir.files.push(File::D(get_resource_names(resource_files_directory, full_path.to_str().expect("Invalid file name"))))
-            } else if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
-                dir.files.push(File::F(file_name));
+        Ok(files) => {
+            for file in files {
+                let file_name = file
+                    .expect("Error reading directory")
+                    .file_name()
+                    .to_str()
+                    .expect("Invalid file name")
+                    .to_string();
+                let name = match dir_name {
+                    "" => "".to_string(),
+                    s => s.to_string() + "/", // TODO: don't hardcode "/"
+                };
+                let file_path = std::path::Path::new(&(file_name));
+                let full_path = name + &file_name;
+                let full_path = std::path::Path::new(&(full_path));
+                if path.join(file_path).is_dir() {
+                    dir.files.push(File::D(get_resource_names(
+                        resource_files_directory,
+                        full_path.to_str().expect("Invalid file name"),
+                    )))
+                } else if file_name.ends_with(".glb") || file_name.ends_with(".gltf") {
+                    dir.files.push(File::F(file_name));
+                }
             }
-        },
-        Err(_) => dir.files.push(File::F(format!("Error accessing the directory {}", dir_name))),
+        }
+        Err(_) => dir.files.push(File::F(format!(
+            "Error accessing the directory {}",
+            dir_name
+        ))),
     };
 
     dir
 }
 
 fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
-    let mut dir = Directory { directory_name: dir_name.to_string(), files: Vec::new() };
+    let mut dir = Directory {
+        directory_name: dir_name.to_string(),
+        files: Vec::new(),
+    };
     let path = map_files_directory.to_string() + "/" + dir_name; // TODO: don't hardcode "/"
     let path = std::path::Path::new(&(path));
     match std::fs::read_dir(path) {
-        Ok(files) => for file in files {
-            let file_name = file.expect("Unable to read directory")
-                .file_name()
-                .to_str()
-                .expect("Invalid file name")
-                .to_string();
-            let name = match dir_name {
-                "" => "".to_string(),
-                s => s.to_string() + "/" // TODO: don't hardcode "/"
-            };
-            let full_path = name + &file_name;
-            let full_path = std::path::Path::new(&(full_path));
-            if path.join(full_path).is_dir() {
-                dir.files.push(File::D(get_map_names(map_files_directory, full_path.to_str().expect("Invalid file name"))))
-            } else if file_name.ends_with(".temap") {
-                dir.files.push(File::F(file_name))
+        Ok(files) => {
+            for file in files {
+                let file_name = file
+                    .expect("Unable to read directory")
+                    .file_name()
+                    .to_str()
+                    .expect("Invalid file name")
+                    .to_string();
+                let name = match dir_name {
+                    "" => "".to_string(),
+                    s => s.to_string() + "/", // TODO: don't hardcode "/"
+                };
+                let full_path = name + &file_name;
+                let full_path = std::path::Path::new(&(full_path));
+                if path.join(full_path).is_dir() {
+                    dir.files.push(File::D(get_map_names(
+                        map_files_directory,
+                        full_path.to_str().expect("Invalid file name"),
+                    )))
+                } else if file_name.ends_with(".temap") {
+                    dir.files.push(File::F(file_name))
+                }
             }
-        },
-        Err(_) => dir.files.push(File::F(format!("Error accessing the directory {}", dir_name))),
+        }
+        Err(_) => dir.files.push(File::F(format!(
+            "Error accessing the directory {}",
+            dir_name
+        ))),
     };
 
     dir
@@ -490,10 +638,10 @@ fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
 
 enum File {
     F(String),
-    D(Directory)
+    D(Directory),
 }
 
 struct Directory {
     directory_name: String,
-    files: Vec<File>
+    files: Vec<File>,
 }

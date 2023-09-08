@@ -15,11 +15,7 @@ pub struct Animation {
 }
 
 impl Animation {
-    pub fn new<
-        T: Into<Vector3<f32>>,
-        U: Into<Vector3<f32>>,
-        V: Into<Vector3<f32>>,
-    >(
+    pub fn new<T: Into<Vector3<f32>>, U: Into<Vector3<f32>>, V: Into<Vector3<f32>>>(
         translation: T,
         rotation: U,
         scale: V,
@@ -36,11 +32,7 @@ impl Animation {
         )
     }
 
-    pub fn new_prepare<
-        T: Into<Vector3<f32>>,
-        U: Into<Vector3<f32>>,
-        V: Into<Vector3<f32>>,
-    >(
+    pub fn new_prepare<T: Into<Vector3<f32>>, U: Into<Vector3<f32>>, V: Into<Vector3<f32>>>(
         translation: T,
         rotation: U,
         scale: V,
@@ -120,11 +112,7 @@ impl Animation {
         )
     }
 
-    pub fn new_scale<T: Into<Vector3<f32>>>(
-        scale: T,
-        duration: Duration,
-        looping: bool,
-    ) -> Self {
+    pub fn new_scale<T: Into<Vector3<f32>>>(scale: T, duration: Duration, looping: bool) -> Self {
         Animation::new_prepare(
             (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0),
@@ -176,7 +164,8 @@ impl Animation {
                 vec
             }
         } else {
-            let animated_proportion = (now - self.start_time).as_secs_f32() / self.duration.as_secs_f32();
+            let animated_proportion =
+                (now - self.start_time).as_secs_f32() / self.duration.as_secs_f32();
             vector_proportion(vec, animated_proportion)
         }
     }
@@ -186,6 +175,6 @@ fn vector_proportion(vec: Vector3<f32>, mult: f32) -> Vector3<f32> {
     Vector3 {
         x: vec.x * mult,
         y: vec.y * mult,
-        z: vec.z * mult
+        z: vec.z * mult,
     }
 }

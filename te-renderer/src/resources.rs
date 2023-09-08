@@ -141,7 +141,8 @@ pub fn load_glb_model(
                 })
                 .collect::<Vec<model::ModelVertex>>();
 
-            let mesh = model::Mesh::new(name.clone(), file_name, vertices, indices, material, device);
+            let mesh =
+                model::Mesh::new(name.clone(), file_name, vertices, indices, material, device);
 
             match alpha {
                 gltf::material::AlphaMode::Opaque => meshes.push(mesh),
@@ -271,7 +272,9 @@ pub fn load_sprite(
 ) -> std::result::Result<(model::Material, f32, f32), Box<dyn std::error::Error>> {
     let full_path = resources_path + "/" + file_name;
     let img = image::open(&full_path)?;
-    let img = img.as_rgba8().expect(&format!("The image {full_path} doesn't contain an alpha channel. Only RGBA images are supported"));
+    let img = img.as_rgba8().expect(&format!(
+        "The image {full_path} doesn't contain an alpha channel. Only RGBA images are supported"
+    ));
     let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name));
     Ok((
         model::Material::new(device, file_name, diffuse_texture, layout),

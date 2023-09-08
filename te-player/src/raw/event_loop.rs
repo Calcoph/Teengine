@@ -1,9 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
 use te_gamepad::gamepad::ControllerEvent;
-use te_renderer::{state::{TeState, GpuState, Section}, text::FontReference};
-use winit::{window::Window, event_loop::{EventLoop, ControlFlow}, event::WindowEvent};
-pub use winit::event::Event as Event;
+use te_renderer::{
+    state::{GpuState, Section, TeState},
+    text::FontReference,
+};
+pub use winit::event::Event;
+use winit::{
+    event::WindowEvent,
+    event_loop::{ControlFlow, EventLoop},
+    window::Window,
+};
 
 #[cfg(feature = "draw_when_told")]
 type EventHandler = Box<dyn FnMut(Event<ControllerEvent>) -> bool>;
@@ -31,38 +38,49 @@ pub fn run<T: TextSender + 'static>(
                     WindowEvent::Resized(size) => {
                         gpu.borrow_mut().resize(*size);
                         state.borrow_mut().resize(*size);
-                    },
+                    }
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a pointer to the next action we wanna do. In this case, exit the program
-                    WindowEvent::ScaleFactorChanged { scale_factor: _, new_inner_size } => {
+                    WindowEvent::ScaleFactorChanged {
+                        scale_factor: _,
+                        new_inner_size,
+                    } => {
                         gpu.borrow_mut().resize(**new_inner_size);
                         state.borrow_mut().resize(**new_inner_size)
-                    },
+                    }
                     _ => (),
                 }
-            },
+            }
             Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
             Event::Resumed => (), // TODO: confirm that it unpauses the game
-            Event::MainEventsCleared => {
+            Event::MainEventsCleared =>
+            {
                 #[cfg(not(feature = "draw_when_told"))]
                 window.borrow().request_redraw()
-            },
-            Event::RedrawRequested(window_id) => if *window_id == window.borrow().id() {
-                let now = std::time::Instant::now();
-                let dt = now - last_render_time;
-                last_render_time = now;
-                state.borrow_mut().update(dt, &gpu.borrow());
-                if let Ok(output) = gpu.borrow().surface.get_current_texture() {
-                    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
-                    text.borrow_mut().draw_text(|text| {
-                        state.borrow_mut().render(&view, &gpu.borrow(), &mut encoder, text);
-                    });
-                    state.borrow_mut().end_render(&gpu.borrow(), encoder);
-                    output.present();
-                    state.borrow_mut().text.after_present()
+            }
+            Event::RedrawRequested(window_id) => {
+                if *window_id == window.borrow().id() {
+                    let now = std::time::Instant::now();
+                    let dt = now - last_render_time;
+                    last_render_time = now;
+                    state.borrow_mut().update(dt, &gpu.borrow());
+                    if let Ok(output) = gpu.borrow().surface.get_current_texture() {
+                        let view = output
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        let mut encoder =
+                            te_renderer::state::TeState::prepare_render(&gpu.borrow());
+                        text.borrow_mut().draw_text(|text| {
+                            state
+                                .borrow_mut()
+                                .render(&view, &gpu.borrow(), &mut encoder, text);
+                        });
+                        state.borrow_mut().end_render(&gpu.borrow(), encoder);
+                        output.present();
+                        state.borrow_mut().text.after_present()
+                    }
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
 
         #[cfg(feature = "draw_when_told")]
@@ -75,7 +93,7 @@ pub fn run<T: TextSender + 'static>(
 }
 
 pub trait TextSender {
-    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, drawer: T );
+    fn draw_text<T: FnMut(&[(FontReference, Vec<Section>)])>(&mut self, drawer: T);
 }
 
 pub struct PlaceholderTextSender;
@@ -92,4 +110,3 @@ impl TextSender for PlaceholderTextSender {
         drawer(&vec![])
     }
 }
-

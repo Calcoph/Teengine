@@ -1,16 +1,34 @@
 pub mod event_loop;
 
-use std::{io::Error, cell::RefCell, rc::Rc};
-use te_renderer::{initial_config::InitialConfiguration, state::{TeState, GpuState}};
+use image::io::Reader as ImageReader;
+use std::{cell::RefCell, io::Error, rc::Rc};
+use te_renderer::{
+    initial_config::InitialConfiguration,
+    state::{GpuState, TeState},
+};
 use te_winit::event_loop::EventLoopBuilder;
 pub use winit as te_winit;
-use winit::{window::{WindowBuilder, Icon, Window}, dpi, event_loop::EventLoop};
-use image::io::Reader as ImageReader;
+use winit::{
+    dpi,
+    event_loop::EventLoop,
+    window::{Icon, Window, WindowBuilder},
+};
 
 use te_gamepad::gamepad::{self, ControllerEvent};
 
 /// Get all the structs needed to start the engine, skipping the boilerplate.
-pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLoop<ControllerEvent>, Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<TeState>>), Error> {
+pub async fn prepare(
+    config: InitialConfiguration,
+    log: bool,
+) -> Result<
+    (
+        EventLoop<ControllerEvent>,
+        Rc<RefCell<GpuState>>,
+        Rc<RefCell<Window>>,
+        Rc<RefCell<TeState>>,
+    ),
+    Error,
+> {
     if log {
         env_logger::init();
     }
@@ -25,10 +43,13 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLo
 
     let wb = WindowBuilder::new()
         .with_title(&config.window_name)
-        .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
+        .with_inner_size(dpi::LogicalSize::new(
+            config.screen_width,
+            config.screen_height,
+        ))
         .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => icon,
-            Err(_) => panic!("Couldn't get icon raw data")
+            Err(_) => panic!("Couldn't get icon raw data"),
         }));
 
     let window = wb.build(&event_loop).expect("Unable to create window");
@@ -36,11 +57,26 @@ pub async fn prepare(config: InitialConfiguration, log: bool) -> Result<(EventLo
     let gpu = GpuState::new(window.inner_size(), &window).await;
     let state = TeState::new(&window, &gpu, config).await;
 
-    Ok((event_loop, Rc::new(RefCell::new(gpu)), Rc::new(RefCell::new(window)), Rc::new(RefCell::new(state))))
+    Ok((
+        event_loop,
+        Rc::new(RefCell::new(gpu)),
+        Rc::new(RefCell::new(window)),
+        Rc::new(RefCell::new(state)),
+    ))
 }
 
 /// After calling prepare() call new_window() for each extra window.
-pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<ControllerEvent>) -> Result<(Rc<RefCell<GpuState>>, Rc<RefCell<Window>>, Rc<RefCell<TeState>>), Error> {
+pub async fn new_window(
+    config: InitialConfiguration,
+    event_loop: &EventLoop<ControllerEvent>,
+) -> Result<
+    (
+        Rc<RefCell<GpuState>>,
+        Rc<RefCell<Window>>,
+        Rc<RefCell<TeState>>,
+    ),
+    Error,
+> {
     let img = match ImageReader::open(&config.icon_path)?.decode() {
         Ok(img) => img.to_rgba8(),
         Err(_) => panic!("Couldn't find icon"),
@@ -48,10 +84,13 @@ pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<Con
 
     let wb = WindowBuilder::new()
         .with_title(&config.window_name)
-        .with_inner_size(dpi::LogicalSize::new(config.screen_width, config.screen_height))
+        .with_inner_size(dpi::LogicalSize::new(
+            config.screen_width,
+            config.screen_height,
+        ))
         .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => icon,
-            Err(_) => panic!("Couldn't get raw data")
+            Err(_) => panic!("Couldn't get raw data"),
         }));
 
     let window = wb.build(event_loop).expect("Unable to create window");
@@ -59,5 +98,9 @@ pub async fn new_window(config: InitialConfiguration, event_loop: &EventLoop<Con
     let gpu = GpuState::new(window.inner_size(), &window).await;
     let state = TeState::new(&window, &gpu, config).await;
 
-    Ok((Rc::new(RefCell::new(gpu)), Rc::new(RefCell::new(window)), Rc::new(RefCell::new(state))))
+    Ok((
+        Rc::new(RefCell::new(gpu)),
+        Rc::new(RefCell::new(window)),
+        Rc::new(RefCell::new(state)),
+    ))
 }

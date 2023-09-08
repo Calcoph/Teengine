@@ -2,7 +2,7 @@ use wgpu::util::DeviceExt;
 
 use crate::model;
 
-use super::{InstanceRaw, Instance2D};
+use super::{Instance2D, InstanceRaw};
 
 #[derive(Debug)]
 pub struct InstancedText {
@@ -22,9 +22,15 @@ impl InstancedText {
         w: f32,
         h: f32,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) -> Self {
-        let mut instance = Instance2D::new(cgmath::Vector2 { x, y }, cgmath::Vector2 { x: w, y: h }, None, screen_w, screen_h);
+        let mut instance = Instance2D::new(
+            cgmath::Vector2 { x, y },
+            cgmath::Vector2 { x: w, y: h },
+            None,
+            screen_w,
+            screen_h,
+        );
 
         let instance_data = [instance.to_raw()];
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -74,7 +80,7 @@ impl InstancedText {
         direction: V,
         queue: &wgpu::Queue,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let _ = self.instance.move_direction(direction, screen_w, screen_h);
         let raw = self.instance.to_raw();
@@ -93,7 +99,7 @@ impl InstancedText {
         position: P,
         queue: &wgpu::Queue,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let _ = self.instance.move_to(position, screen_w, screen_h);
         let raw = self.instance.to_raw();

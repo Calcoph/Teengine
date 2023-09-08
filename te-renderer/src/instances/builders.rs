@@ -1,13 +1,20 @@
 use cgmath::Vector3;
 
-use crate::{state::{GpuState, TeState}, model, error::TError, resources::load_glb_model};
+use crate::{
+    error::TError,
+    model,
+    resources::load_glb_model,
+    state::{GpuState, TeState},
+};
 
-use super::{InstanceReference, model::InstancedModel, DrawModel, InstanceType, InstanceMap, InstancedDraw};
+use super::{
+    model::InstancedModel, DrawModel, InstanceMap, InstanceReference, InstanceType, InstancedDraw,
+};
 
 enum ModelType {
     Normal(model::Model),
     Animated(model::AnimatedModel),
-    None
+    None,
 }
 
 pub struct ModelBuilder<'state, 'gpu, 'a> {
@@ -16,7 +23,7 @@ pub struct ModelBuilder<'state, 'gpu, 'a> {
     gpu: &'gpu GpuState,
     position: (f32, f32, f32),
     absolute_position: bool,
-    model: ModelType
+    model: ModelType,
 }
 
 impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
@@ -57,7 +64,10 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
         }
     }
 
-    pub fn with_animated_model(self, model: model::AnimatedModel) -> ModelBuilder<'state, 'gpu, 'a> {
+    pub fn with_animated_model(
+        self,
+        model: model::AnimatedModel,
+    ) -> ModelBuilder<'state, 'gpu, 'a> {
         ModelBuilder {
             model: ModelType::Animated(model),
             ..self
@@ -90,19 +100,22 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     let model = Some(model).ok_or(TError::UninitializedModel)?;
                     let transparent_meshes = model.transparent_meshes.len();
                     let instanced_m = InstancedModel::new(model, &self.gpu.device, x, y, z);
-                    instances.opaque_instances
+                    instances
+                        .opaque_instances
                         .insert(self.model_name.to_string(), DrawModel::M(instanced_m));
                     if transparent_meshes > 0 {
-                        instances.transparent_instances.insert(self.model_name.to_string());
+                        instances
+                            .transparent_instances
+                            .insert(self.model_name.to_string());
                     }
                 }
-        
+
                 let mut reference = InstanceReference {
                     name: self.model_name.to_string(),
                     index: 0, // 0 is placeholder
                     dimension: InstanceType::Opaque3D,
                 };
-        
+
                 reference.index = instances
                     .opaque_instances
                     .instance(&reference)
@@ -110,29 +123,33 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     .instances
                     .len()
                     - 1;
-        
+
                 instances.render_matrix.register_instance(
                     reference.clone(),
                     cgmath::vec3(x, y, z),
-                    instances.opaque_instances
+                    instances
+                        .opaque_instances
                         .instance(&reference)
                         .get_m()
                         .model
                         .get_extremes(),
                 );
-        
+
                 Ok(reference)
-            },
+            }
             ModelType::Animated(mut model) => {
                 let instances = &mut self.te_state.instances;
 
                 model.set_instance_position(0, Vector3::new(x, y, z), &self.gpu.queue); // TODO: Investigate why this is needed
                 let transparent_meshes = model.transparent_meshes.len();
                 let position = model.instance.position;
-                instances.opaque_instances
+                instances
+                    .opaque_instances
                     .insert(self.model_name.to_string(), DrawModel::A(model));
                 if transparent_meshes > 0 {
-                    instances.transparent_instances.insert(self.model_name.to_string());
+                    instances
+                        .transparent_instances
+                        .insert(self.model_name.to_string());
                 }
 
                 let reference = InstanceReference {
@@ -144,14 +161,15 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 instances.render_matrix.register_instance(
                     reference.clone(),
                     position,
-                    instances.opaque_instances
+                    instances
+                        .opaque_instances
                         .instance(&reference)
                         .get_a()
                         .get_extremes(),
                 );
 
                 Ok(reference)
-            },
+            }
             ModelType::None => {
                 let instances = &mut self.te_state.instances;
 
@@ -170,19 +188,22 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     .map_err(|_| TError::GLBModelLoadingFail)?;
                     let transparent_meshes = model.transparent_meshes.len();
                     let instanced_m = InstancedModel::new(model, &self.gpu.device, x, y, z);
-                    instances.opaque_instances
+                    instances
+                        .opaque_instances
                         .insert(self.model_name.to_string(), DrawModel::M(instanced_m));
                     if transparent_meshes > 0 {
-                        instances.transparent_instances.insert(self.model_name.to_string());
+                        instances
+                            .transparent_instances
+                            .insert(self.model_name.to_string());
                     }
                 }
-        
+
                 let mut reference = InstanceReference {
                     name: self.model_name.to_string(),
                     index: 0, // 0 is placeholder
                     dimension: InstanceType::Opaque3D,
                 };
-        
+
                 reference.index = instances
                     .opaque_instances
                     .instance(&reference)
@@ -190,19 +211,20 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     .instances
                     .len()
                     - 1;
-        
+
                 instances.render_matrix.register_instance(
                     reference.clone(),
                     cgmath::vec3(x, y, z),
-                    instances.opaque_instances
+                    instances
+                        .opaque_instances
                         .instance(&reference)
                         .get_m()
                         .model
                         .get_extremes(),
                 );
-        
+
                 Ok(reference)
-            },
+            }
         }
     }
 }

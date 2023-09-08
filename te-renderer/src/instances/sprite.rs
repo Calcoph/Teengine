@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 
 use crate::model;
 
-use super::{Instance2D, InstanceRaw, rangetree::RangeTree};
+use super::{rangetree::RangeTree, Instance2D, InstanceRaw};
 
 #[derive(Debug)]
 pub struct InstancedSprite {
@@ -14,7 +14,7 @@ pub struct InstancedSprite {
     pub instances: Vec<Instance2D>,
     pub instance_buffer: wgpu::Buffer,
     pub depth: f32,
-    shown_instances: RangeTree
+    shown_instances: RangeTree,
 }
 
 impl InstancedSprite {
@@ -27,14 +27,14 @@ impl InstancedSprite {
         w: f32,
         h: f32,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) -> Self {
         let instances = vec![Instance2D::new(
             cgmath::Vector2 { x, y },
             cgmath::Vector2 { x: w, y: h },
             None,
             screen_w,
-            screen_h
+            screen_h,
         )];
 
         InstancedSprite::new_premade(sprite, device, instances, depth, w, h)
@@ -48,7 +48,10 @@ impl InstancedSprite {
         w: f32,
         h: f32,
     ) -> Self {
-        let instance_data = instances.iter_mut().map(Instance2D::to_raw).collect::<Vec<_>>();
+        let instance_data = instances
+            .iter_mut()
+            .map(Instance2D::to_raw)
+            .collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instance_data),
@@ -69,7 +72,7 @@ impl InstancedSprite {
             instances,
             instance_buffer,
             depth,
-            shown_instances
+            shown_instances,
         }
     }
 
@@ -80,7 +83,7 @@ impl InstancedSprite {
         size: Option<(f32, f32)>,
         device: &wgpu::Device,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let (w, h) = match size {
             Some((width, height)) => (width, height),
@@ -91,12 +94,13 @@ impl InstancedSprite {
             cgmath::Vector2 { x: w, y: h },
             None,
             screen_w,
-            screen_h
+            screen_h,
         );
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
         if self.instances.last().expect("Unreachable").in_viewport {
-            self.shown_instances.add_num(self.instances.len() as u32-1)
+            self.shown_instances
+                .add_num(self.instances.len() as u32 - 1)
         }
         self.instance_buffer.destroy();
         let instance_data = self
@@ -179,7 +183,7 @@ impl InstancedSprite {
         direction: V,
         queue: &wgpu::Queue,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let instance = self.instances.get_mut(index).expect("Unreachable");
         if let Some(show) = instance.move_direction(direction, screen_w, screen_h) {
@@ -205,7 +209,7 @@ impl InstancedSprite {
         position: P,
         queue: &wgpu::Queue,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let instance = self.instances.get_mut(index).expect("Unreachable");
         if let Some(show) = instance.move_to(position, screen_w, screen_h) {
@@ -234,7 +238,7 @@ pub struct AnimatedSprite {
     pub depth: f32,
     start_time: RefCell<std::time::Instant>,
     frame_delay: std::time::Duration,
-    looping: bool
+    looping: bool,
 }
 
 impl AnimatedSprite {
@@ -249,9 +253,15 @@ impl AnimatedSprite {
         frame_delay: std::time::Duration,
         looping: bool,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) -> Self {
-        let mut instance = Instance2D::new(cgmath::Vector2 { x, y }, cgmath::Vector2 { x: w, y: h }, None, screen_w, screen_h);
+        let mut instance = Instance2D::new(
+            cgmath::Vector2 { x, y },
+            cgmath::Vector2 { x: w, y: h },
+            None,
+            screen_w,
+            screen_h,
+        );
 
         let instance_data = instance.to_raw();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -267,7 +277,7 @@ impl AnimatedSprite {
             depth,
             start_time: RefCell::new(std::time::Instant::now()),
             frame_delay,
-            looping
+            looping,
         }
     }
 
@@ -285,12 +295,14 @@ impl AnimatedSprite {
         let frame = (dt.as_secs_f32() / self.frame_delay.as_secs_f32()).floor() as usize;
         match self.sprites.get(frame) {
             Some(frame) => frame,
-            None => if self.looping {
-                *self.start_time.borrow_mut() += self.frame_delay * self.sprites.len() as u32;
-                self.get_sprite_rec(now)
-            } else {
-                self.sprites.last().expect("Unreachable")
-            },
+            None => {
+                if self.looping {
+                    *self.start_time.borrow_mut() += self.frame_delay * self.sprites.len() as u32;
+                    self.get_sprite_rec(now)
+                } else {
+                    self.sprites.last().expect("Unreachable")
+                }
+            }
         }
     }
 
@@ -315,9 +327,7 @@ impl AnimatedSprite {
         if self.instance.animation.is_some() {
             queue.write_buffer(
                 &self.instance_buffer,
-                (0)
-                    .try_into()
-                    .expect("Too many instances"), // rare case when usize > u64
+                (0).try_into().expect("Too many instances"), // rare case when usize > u64
                 bytemuck::cast_slice(&[self.instance.to_raw()]),
             );
         }
@@ -341,7 +351,7 @@ impl AnimatedSprite {
         direction: V,
         queue: &wgpu::Queue,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let _ = self.instance.move_direction(direction, screen_w, screen_h);
         let raw = self.instance.to_raw();
@@ -360,7 +370,7 @@ impl AnimatedSprite {
         position: P,
         queue: &wgpu::Queue,
         screen_w: u32,
-        screen_h: u32
+        screen_h: u32,
     ) {
         let _ = self.instance.move_to(position, screen_w, screen_h);
         let raw = self.instance.to_raw();

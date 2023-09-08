@@ -4,7 +4,12 @@ use std::time::Duration;
 use wgpu::util::DeviceExt;
 use winit::{dpi, event::*};
 
-use crate::{initial_config::InitialConfiguration, model::{ModelVertex, Mesh, Model, Material}, state::GpuState, texture::Texture};
+use crate::{
+    initial_config::InitialConfiguration,
+    model::{Material, Mesh, Model, ModelVertex},
+    state::GpuState,
+    texture::Texture,
+};
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -18,14 +23,17 @@ pub const SAFE_CAMERA_ANGLE: f32 = FRAC_PI_2 - 0.0001;
 
 #[derive(Debug)]
 struct Plan {
-    normal:cgmath::Vector3<f32>,
-    distance: f32
+    normal: cgmath::Vector3<f32>,
+    distance: f32,
 }
 
 impl Plan {
     fn new(p1: cgmath::Point3<f32>, norm: cgmath::Vector3<f32>) -> Self {
         let normal = norm.normalize();
-        Plan { normal, distance: p1.dot(normal) }
+        Plan {
+            normal,
+            distance: p1.dot(normal),
+        }
     }
 
     fn is_in_or_forward(&self, corner: &Point3<f32>, tolerance: f32) -> bool {
@@ -41,14 +49,15 @@ pub struct Frustum {
     left_face: Plan,
     far_face: Plan,
     near_face: Plan,
-    chunk_size: (f32, f32, f32)
+    chunk_size: (f32, f32, f32),
 }
 
 impl Frustum {
     fn new(camera: &Camera, projection: &Projection, config: InitialConfiguration) -> Self {
         let chunk_size = config.chunk_size;
 
-        let (top_face, bottom_face, right_face, left_face, far_face, near_face) = Frustum::make_faces(camera, projection);
+        let (top_face, bottom_face, right_face, left_face, far_face, near_face) =
+            Frustum::make_faces(camera, projection);
 
         Frustum {
             top_face,
@@ -57,34 +66,35 @@ impl Frustum {
             left_face,
             far_face,
             near_face,
-            chunk_size
+            chunk_size,
         }
     }
 
     pub fn is_inside(&self, row: usize, col: usize) -> bool {
-        let max_x = (col+1) as f32 * self.chunk_size.0;
+        let max_x = (col + 1) as f32 * self.chunk_size.0;
         let min_x = col as f32 * self.chunk_size.0;
-        let max_z = (row+1) as f32 * self.chunk_size.2;
+        let max_z = (row + 1) as f32 * self.chunk_size.2;
         let min_z = row as f32 * self.chunk_size.2;
         let corners = vec![
             cgmath::point3(max_x, 0.0, max_z),
             cgmath::point3(max_x, 0.0, min_z),
             cgmath::point3(min_x, 0.0, max_z),
-            cgmath::point3(min_x, 0.0, min_z)
+            cgmath::point3(min_x, 0.0, min_z),
         ];
 
         corners.iter().any(|corner| {
-            self.top_face.is_in_or_forward(corner, self.chunk_size.0) &&
-            self.bottom_face.is_in_or_forward(corner, self.chunk_size.0) &&
-            self.right_face.is_in_or_forward(corner, self.chunk_size.0) &&
-            self.left_face.is_in_or_forward(corner, self.chunk_size.0) &&
-            self.near_face.is_in_or_forward(corner, self.chunk_size.0) &&
-            self.far_face.is_in_or_forward(corner, self.chunk_size.0)
+            self.top_face.is_in_or_forward(corner, self.chunk_size.0)
+                && self.bottom_face.is_in_or_forward(corner, self.chunk_size.0)
+                && self.right_face.is_in_or_forward(corner, self.chunk_size.0)
+                && self.left_face.is_in_or_forward(corner, self.chunk_size.0)
+                && self.near_face.is_in_or_forward(corner, self.chunk_size.0)
+                && self.far_face.is_in_or_forward(corner, self.chunk_size.0)
         })
     }
 
     fn update(&mut self, camera: &Camera, projection: &Projection) {
-        let (top_face, bottom_face, right_face, left_face, far_face, near_face) = Frustum::make_faces(camera, projection);
+        let (top_face, bottom_face, right_face, left_face, far_face, near_face) =
+            Frustum::make_faces(camera, projection);
         self.top_face = top_face;
         self.bottom_face = bottom_face;
         self.right_face = right_face;
@@ -93,7 +103,10 @@ impl Frustum {
         self.near_face = near_face;
     }
 
-    fn make_faces(camera: &Camera, projection: &Projection) -> (Plan, Plan, Plan, Plan, Plan, Plan) {
+    fn make_faces(
+        camera: &Camera,
+        projection: &Projection,
+    ) -> (Plan, Plan, Plan, Plan, Plan, Plan) {
         let x = camera.yaw.cos() * camera.pitch.cos();
         let y = camera.pitch.sin();
         let z = camera.yaw.sin() * camera.pitch.cos();
@@ -108,33 +121,39 @@ impl Frustum {
 
         let top_face = Plan::new(
             camera.position,
-            (front_mult_far + up * half_v_side).cross(right)
+            (front_mult_far + up * half_v_side).cross(right),
         );
         let bottom_face = Plan::new(
             camera.position,
-            right.cross(front_mult_far - up * half_v_side)
+            right.cross(front_mult_far - up * half_v_side),
         );
         let right_face = Plan::new(
             camera.position,
-            up.cross(front_mult_far + right * half_h_side)
+            up.cross(front_mult_far + right * half_h_side),
         );
         let left_face = Plan::new(
             camera.position,
-            (front_mult_far - right * half_h_side).cross(up)
+            (front_mult_far - right * half_h_side).cross(up),
         );
-        let far_face = Plan::new(
-            camera.position + front_mult_far,
-            -front
-        );
-        let near_face = Plan::new(
-            camera.position + projection.znear * front,
-            front
-        );
+        let far_face = Plan::new(camera.position + front_mult_far, -front);
+        let near_face = Plan::new(camera.position + projection.znear * front, front);
 
-        (top_face, bottom_face, right_face, left_face, far_face, near_face)
+        (
+            top_face,
+            bottom_face,
+            right_face,
+            left_face,
+            far_face,
+            near_face,
+        )
     }
 
-    pub(crate) fn get_model(camera: &Camera, projection: &Projection, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
+    pub(crate) fn get_model(
+        camera: &Camera,
+        projection: &Projection,
+        gpu: &GpuState,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Model {
         let fovy = projection.get_fovy();
         let x = camera.yaw.cos() * camera.pitch.cos();
         let y = camera.pitch.sin();
@@ -144,7 +163,7 @@ impl Frustum {
         let right = front.cross(up).normalize();
         let up = right.cross(front).normalize();
 
-        let half_v_side = projection.zfar * (fovy*0.5).tan();
+        let half_v_side = projection.zfar * (fovy * 0.5).tan();
         let v1 = up * half_v_side;
         let v2 = up * -half_v_side;
         let half_h_side = half_v_side * projection.aspect;
@@ -154,10 +173,10 @@ impl Frustum {
         let camx = camera.position.x;
         let camy = camera.position.y;
         let camz = camera.position.z;
-        let x = front_mult_far.x+camx;
-        let y = front_mult_far.y+camy;
-        let z = front_mult_far.z+camz;
-        let front_mult_far = Point3::new(x,y,z);
+        let x = front_mult_far.x + camx;
+        let y = front_mult_far.y + camy;
+        let z = front_mult_far.z + camz;
+        let front_mult_far = Point3::new(x, y, z);
         let p1 = (front_mult_far + h2 + v2).into();
         let p2 = (front_mult_far + h1 + v2).into();
         let p3 = (front_mult_far + h2 + v1).into();
@@ -165,46 +184,48 @@ impl Frustum {
         let p5 = camera.position.into();
 
         let vertices = vec![
-            ModelVertex { position: p1, tex_coords: [0.0, 0.0] }, // A
-            ModelVertex { position: p2, tex_coords: [0.0, 0.0] }, // B
-            ModelVertex { position: p3, tex_coords: [0.0, 0.0] }, // C
-            ModelVertex { position: p4, tex_coords: [0.0, 0.0] }, // D
-            ModelVertex { position: p5, tex_coords: [0.0, 0.0] },
+            ModelVertex {
+                position: p1,
+                tex_coords: [0.0, 0.0],
+            }, // A
+            ModelVertex {
+                position: p2,
+                tex_coords: [0.0, 0.0],
+            }, // B
+            ModelVertex {
+                position: p3,
+                tex_coords: [0.0, 0.0],
+            }, // C
+            ModelVertex {
+                position: p4,
+                tex_coords: [0.0, 0.0],
+            }, // D
+            ModelVertex {
+                position: p5,
+                tex_coords: [0.0, 0.0],
+            },
         ];
         // A B
         // C D
-        let indices = vec![
-            1,0,4,
-            0,2,4,
-            3,1,4,
-            2,3,4,
-            0,2,1,
-            1,2,3
-        ];
+        let indices = vec![1, 0, 4, 0, 2, 4, 3, 1, 4, 2, 3, 4, 0, 2, 1, 1, 2, 3];
         let mesh = Mesh::new(
             "frustum".to_string(),
             "frustum",
             vertices,
             indices,
             0,
-            &gpu.device
-        );
-        let mut img = image::ImageBuffer::new(1,1);
-        img.put_pixel(0, 0, image::Rgba::from([128,0,128,255]));
-        let diffuse_texture = Texture::from_dyn_image(
             &gpu.device,
-            &gpu.queue,
-            &img,
-            None
         );
-        let material = Material::new(
-            &gpu.device,
-            "frustum",
-            diffuse_texture,
-            layout
-        );
+        let mut img = image::ImageBuffer::new(1, 1);
+        img.put_pixel(0, 0, image::Rgba::from([128, 0, 128, 255]));
+        let diffuse_texture = Texture::from_dyn_image(&gpu.device, &gpu.queue, &img, None);
+        let material = Material::new(&gpu.device, "frustum", diffuse_texture, layout);
 
-        Model { meshes: vec![mesh], transparent_meshes: vec![], materials: vec![material] }
+        Model {
+            meshes: vec![mesh],
+            transparent_meshes: vec![],
+            materials: vec![material],
+        }
     }
 }
 
@@ -261,7 +282,7 @@ pub struct CameraState {
     camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
     pub(crate) camera_controller: CameraController,
-    pub(crate) frustum: Frustum
+    pub(crate) frustum: Frustum,
 }
 
 impl CameraState {
@@ -328,11 +349,15 @@ impl CameraState {
             camera_buffer,
             camera_bind_group,
             camera_controller,
-            frustum
+            frustum,
         }
     }
 
-    pub(crate) fn get_frustum_model(&self, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
+    pub(crate) fn get_frustum_model(
+        &self,
+        gpu: &GpuState,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Model {
         Frustum::get_model(&self.camera, &self.projection, gpu, layout)
     }
 
@@ -513,7 +538,6 @@ impl Projection {
         let a: cgmath::Rad<f32> = cgmath::Deg(self.fovy).into();
         a.0
     }
-
 }
 
 #[derive(Debug)]

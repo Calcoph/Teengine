@@ -4,7 +4,7 @@ use std::ops::Range;
 pub(crate) struct RangeTree {
     // TODO: Make this more efficient
     // TODO: Make it self-balanced
-    first_node: Option<RangeNode>
+    first_node: Option<RangeNode>,
 }
 
 impl RangeTree {
@@ -47,7 +47,7 @@ impl RangeTree {
                         None => None,
                     }
                 }
-            },
+            }
             None => (),
         }
     }
@@ -71,7 +71,7 @@ struct RangeNode {
 impl RangeNode {
     fn new(num: u32) -> Self {
         RangeNode {
-            contents: num..num+1,
+            contents: num..num + 1,
             left: None,
             right: None,
             //avl_value: AVLValue::Balanced
@@ -82,18 +82,18 @@ impl RangeNode {
         if self.contents.end == num {
             match &self.right {
                 Some(node) => {
-                    if num > 0 && node.contents.start == num-1 {
+                    if num > 0 && node.contents.start == num - 1 {
                         let mut right = self.right.take().expect("Unreachable");
                         let new_right = right.right.take();
                         self.right = new_right;
                         self.contents.end = right.contents.end;
                     } else {
-                        self.contents.end = num+1
+                        self.contents.end = num + 1
                     }
-                },
-                None => self.contents.end = num+1,
+                }
+                None => self.contents.end = num + 1,
             }
-        } else if self.contents.start > 0 && self.contents.start-1 == num {
+        } else if self.contents.start > 0 && self.contents.start - 1 == num {
             match &self.left {
                 Some(node) => {
                     if node.contents.end == num {
@@ -104,7 +104,7 @@ impl RangeNode {
                     } else {
                         self.contents.start = num
                     }
-                },
+                }
                 None => self.contents.start = num,
             }
         } else if num > self.contents.end {
@@ -112,7 +112,7 @@ impl RangeNode {
                 Some(node) => node.add_num(num),
                 None => self.right = Some(Box::new(RangeNode::new(num))),
             }
-        } else if num < self.contents.start-1 {
+        } else if num < self.contents.start - 1 {
             match &mut self.left {
                 Some(node) => node.add_num(num),
                 None => self.left = Some(Box::new(RangeNode::new(num))),
@@ -124,14 +124,14 @@ impl RangeNode {
 
     fn contains(&self, num: &u32) -> bool {
         self.contents.contains(num)
-        || match &self.left {
-            Some(node) => node.contains(num),
-            None => false,
-        }
-        || match &self.right {
-            Some(node) => node.contains(num),
-            None => false,
-        }
+            || match &self.left {
+                Some(node) => node.contains(num),
+                None => false,
+            }
+            || match &self.right {
+                Some(node) => node.contains(num),
+                None => false,
+            }
     }
 
     fn get_vec(&self) -> Vec<Range<u32>> {
@@ -140,7 +140,7 @@ impl RangeNode {
                 let mut v = node.get_vec();
                 v.push(self.contents.clone());
                 v
-            },
+            }
             None => vec![self.contents.clone()],
         };
 
@@ -166,20 +166,20 @@ impl RangeNode {
     /// true if this node should be deleted. In that case replace it with Option<Self>
     fn remove_num(&mut self, num: u32) -> (bool, Option<Box<Self>>) {
         if self.contents.start == num {
-            if self.contents.end == num+1 {
+            if self.contents.end == num + 1 {
                 let left = self.left.take();
                 match self.right.take() {
                     Some(mut right) => {
                         right.place_left(left);
                         (true, Some(right))
-                    },
+                    }
                     None => (true, left),
                 }
             } else {
-                self.contents.start = num+1;
+                self.contents.start = num + 1;
                 (false, None)
             }
-        } else if self.contents.end == num+1 {
+        } else if self.contents.end == num + 1 {
             self.contents.end = num;
             (false, None)
         } else if self.contents.start > num {
@@ -189,24 +189,25 @@ impl RangeNode {
                     if is_removed {
                         self.left = new_node
                     }
-                },
+                }
                 None => (),
             };
             (false, None)
-        } else if self.contents.end-1 < num {
+        } else if self.contents.end - 1 < num {
             match &mut self.right {
                 Some(node) => {
                     let (is_removed, new_node) = node.remove_num(num);
                     if is_removed {
                         self.right = new_node
                     }
-                },
+                }
                 None => (),
             };
             (false, None)
-        } else { // num is in the middle of the range
+        } else {
+            // num is in the middle of the range
             let left = self.contents.start..num;
-            let right = num+1..self.contents.end;
+            let right = num + 1..self.contents.end;
             match &self.left {
                 Some(_) => match &mut self.right {
                     Some(node) => {
@@ -214,7 +215,7 @@ impl RangeNode {
                         for i in right {
                             node.add_num(i) // TODO: Optimize this, so the range isn't converted to int to be converted to range again
                         }
-                    },
+                    }
                     None => {
                         self.right = Some(Box::new(RangeNode {
                             contents: right,
@@ -222,7 +223,7 @@ impl RangeNode {
                             right: None,
                         }));
                         self.contents = left;
-                    },
+                    }
                 },
                 None => {
                     self.left = Some(Box::new(RangeNode {
@@ -231,7 +232,7 @@ impl RangeNode {
                         right: None,
                     }));
                     self.contents = right;
-                },
+                }
             };
             (false, None)
         }

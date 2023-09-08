@@ -8,7 +8,7 @@ pub enum TError {
     UninitializedSprite,
     EmptySpriteArray,
     NamelessGLB,
-    InvalidGLB
+    InvalidGLB,
 }
 
 impl Display for TError {
@@ -25,6 +25,4 @@ impl Display for TError {
     }
 }
 
-impl std::error::Error for TError {
-    
-}
+impl std::error::Error for TError {}

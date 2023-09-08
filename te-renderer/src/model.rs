@@ -1,8 +1,8 @@
-use image::{ImageBuffer,Rgba};
+use image::{ImageBuffer, Rgba};
 
 use crate::state::GpuState;
 use crate::texture::Texture;
-use crate::{texture, instances};
+use crate::{instances, texture};
 
 pub trait Vertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
@@ -117,7 +117,14 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(name: String, model_name: &str, vertices: Vec<ModelVertex>, indices: Vec<u32>, material: usize, device: &wgpu::Device) -> Mesh {
+    pub fn new(
+        name: String,
+        model_name: &str,
+        vertices: Vec<ModelVertex>,
+        indices: Vec<u32>,
+        material: usize,
+        device: &wgpu::Device,
+    ) -> Mesh {
         if vertices.len() == 0 {
             eprintln!("{model_name}");
             panic!("HAS 0 VERTICES")
@@ -179,11 +186,18 @@ pub struct AnimatedMesh {
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
     pub materials: Vec<usize>,
-    pub selected_material: usize
+    pub selected_material: usize,
 }
 
 impl AnimatedMesh {
-    pub fn new(name: String, model_name: &str, vertices: Vec<ModelVertex>, indices: Vec<u32>, materials: Vec<usize>, device: &wgpu::Device) -> AnimatedMesh {
+    pub fn new(
+        name: String,
+        model_name: &str,
+        vertices: Vec<ModelVertex>,
+        indices: Vec<u32>,
+        materials: Vec<usize>,
+        device: &wgpu::Device,
+    ) -> AnimatedMesh {
         let mut max_x = f32::NEG_INFINITY;
         let mut min_x = f32::INFINITY;
         let mut max_z = f32::NEG_INFINITY;
@@ -222,7 +236,7 @@ impl AnimatedMesh {
             index_buffer,
             num_elements,
             materials,
-            selected_material: 0
+            selected_material: 0,
         }
     }
 
@@ -248,29 +262,44 @@ impl Model {
         let mut min_x = f32::INFINITY;
         let mut max_z = f32::NEG_INFINITY;
         let mut min_z = f32::INFINITY;
-        self.meshes.iter().map(|mesh| {
-            mesh.get_extremes()
-        }).for_each(|(max, mix, maz, miz)| {
-            max_x = f32::max(max_x, max);
-            min_x = f32::min(min_x, mix);
-            max_z = f32::max(max_z, maz);
-            min_z = f32::min(min_z, miz);
-        });
+        self.meshes
+            .iter()
+            .map(|mesh| mesh.get_extremes())
+            .for_each(|(max, mix, maz, miz)| {
+                max_x = f32::max(max_x, max);
+                min_x = f32::min(min_x, mix);
+                max_z = f32::max(max_z, maz);
+                min_z = f32::min(min_z, miz);
+            });
 
-        self.transparent_meshes.iter().map(|mesh| {
-            mesh.get_extremes()
-        }).for_each(|(max, mix, maz, miz)| {
-            max_x = f32::max(max_x, max);
-            min_x = f32::min(min_x, mix);
-            max_z = f32::max(max_z, maz);
-            min_z = f32::min(min_z, miz);
-        });
+        self.transparent_meshes
+            .iter()
+            .map(|mesh| mesh.get_extremes())
+            .for_each(|(max, mix, maz, miz)| {
+                max_x = f32::max(max_x, max);
+                min_x = f32::min(min_x, mix);
+                max_z = f32::max(max_z, maz);
+                min_z = f32::min(min_z, miz);
+            });
 
         (max_x, min_x, max_z, min_z)
     }
 
-    pub fn new_simple(vertices: Vec<ModelVertex>, indices: Vec<u32>, img: &ImageBuffer<Rgba<u8>, Vec<u8>>, gpu: &GpuState, layout: &wgpu::BindGroupLayout) -> Model {
-        let mesh = Mesh::new("mesh1".to_string(), "unnamed", vertices, indices, 0, &gpu.device);
+    pub fn new_simple(
+        vertices: Vec<ModelVertex>,
+        indices: Vec<u32>,
+        img: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+        gpu: &GpuState,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Model {
+        let mesh = Mesh::new(
+            "mesh1".to_string(),
+            "unnamed",
+            vertices,
+            indices,
+            0,
+            &gpu.device,
+        );
         let texture = Texture::from_dyn_image(&gpu.device, &gpu.queue, &img, None);
         let material = Material::new(&gpu.device, "mat1", texture, layout);
 
@@ -289,15 +318,24 @@ pub struct AnimatedModel {
     pub materials: Vec<Material>,
     pub instance: instances::Instance3D,
     pub instance_buffer: wgpu::Buffer,
-    pub unculled_instance: bool
+    pub unculled_instance: bool,
 }
 
 impl AnimatedModel {
-    pub fn new(meshes: Vec<AnimatedMesh>, transparent_meshes: Vec<AnimatedMesh>, materials: Vec<Material>, device: &wgpu::Device) -> AnimatedModel {
+    pub fn new(
+        meshes: Vec<AnimatedMesh>,
+        transparent_meshes: Vec<AnimatedMesh>,
+        materials: Vec<Material>,
+        device: &wgpu::Device,
+    ) -> AnimatedModel {
         let mut instance = instances::Instance3D {
-            position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
+            position: cgmath::Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
             animation: None,
-            hidden: false
+            hidden: false,
         };
         use wgpu::util::DeviceExt;
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -321,29 +359,34 @@ impl AnimatedModel {
         let mut min_x = f32::INFINITY;
         let mut max_z = f32::NEG_INFINITY;
         let mut min_z = f32::INFINITY;
-        self.meshes.iter().map(|mesh| {
-            mesh.get_extremes()
-        }).for_each(|(max, mix, maz, miz)| {
-            max_x = f32::max(max_x, max);
-            min_x = f32::min(min_x, mix);
-            max_z = f32::max(max_z, maz);
-            min_z = f32::min(min_z, miz);
-        });
+        self.meshes
+            .iter()
+            .map(|mesh| mesh.get_extremes())
+            .for_each(|(max, mix, maz, miz)| {
+                max_x = f32::max(max_x, max);
+                min_x = f32::min(min_x, mix);
+                max_z = f32::max(max_z, maz);
+                min_z = f32::min(min_z, miz);
+            });
 
-        self.transparent_meshes.iter().map(|mesh| {
-            mesh.get_extremes()
-        }).for_each(|(max, mix, maz, miz)| {
-            max_x = f32::max(max_x, max);
-            min_x = f32::min(min_x, mix);
-            max_z = f32::max(max_z, maz);
-            min_z = f32::min(min_z, miz);
-        });
+        self.transparent_meshes
+            .iter()
+            .map(|mesh| mesh.get_extremes())
+            .for_each(|(max, mix, maz, miz)| {
+                max_x = f32::max(max_x, max);
+                min_x = f32::min(min_x, mix);
+                max_z = f32::max(max_z, maz);
+                min_z = f32::min(min_z, miz);
+            });
 
         (max_x, min_x, max_z, min_z)
     }
 
     pub fn animate(&mut self, mesh_index: usize, material_index: usize) {
-        self.meshes.get_mut(mesh_index).expect("Index out of bounds").animate(material_index);
+        self.meshes
+            .get_mut(mesh_index)
+            .expect("Index out of bounds")
+            .animate(material_index);
     }
 
     pub(crate) fn uncull_instance(&mut self) {
@@ -367,8 +410,8 @@ impl AnimatedModel {
     }
 }
 
-use crate::instances::{InstancedDraw, InstanceRaw};
 use crate::instances::Instance;
+use crate::instances::{InstanceRaw, InstancedDraw};
 impl InstancedDraw for AnimatedModel {
     fn move_instance<V: Into<cgmath::Vector3<f32>>>(
         &mut self,

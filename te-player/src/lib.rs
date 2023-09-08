@@ -1,15 +1,15 @@
-mod raw;
 #[cfg(feature = "imgui-0-8")]
 pub mod imgui;
+mod raw;
 
-use std::{fmt::Display, error::Error};
+use std::{error::Error, fmt::Display};
 
 pub use crate::raw::*;
 
 #[derive(Debug)]
 enum InitError {
     Unkown,
-    Opaque
+    Opaque,
 }
 
 impl Display for InitError {

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use glyph_brush::{ab_glyph::FontArc, Section};
-use image::{Rgba, ImageBuffer};
+use image::{ImageBuffer, Rgba};
 use wgpu::util::StagingBelt;
-use wgpu_glyph::{GlyphBrushBuilder, GlyphBrush};
+use wgpu_glyph::{GlyphBrush, GlyphBrushBuilder};
 
-use crate::{state::GpuState, model::Material, texture};
+use crate::{model::Material, state::GpuState, texture};
 
 #[derive(Debug)]
 pub struct Font {
@@ -23,7 +23,11 @@ impl Font {
         let mut height = 0;
         let mut container = Vec::new();
         for charac in characters.iter() {
-            let bitmap = self.characters.get(charac).expect("That character is not available in the font").clone();
+            let bitmap = self
+                .characters
+                .get(charac)
+                .expect("That character is not available in the font")
+                .clone();
             width += bitmap.width();
             if bitmap.height() > height {
                 height = bitmap.height();
@@ -36,11 +40,17 @@ impl Font {
         }
 
         for charac in characters.iter() {
-            let bitmap = self.characters.get(charac).expect("That character is not available in the font").clone();
+            let bitmap = self
+                .characters
+                .get(charac)
+                .expect("That character is not available in the font")
+                .clone();
             let height_diff = height - bitmap.height();
             for i in 0..height_diff {
                 for _ in 0..bitmap.width() {
-                    v.get_mut(i as usize).expect("Unreachable").push(Rgba([0, 0, 0, 0]));
+                    v.get_mut(i as usize)
+                        .expect("Unreachable")
+                        .push(Rgba([0, 0, 0, 0]));
                 }
             }
             for (i, row) in bitmap.enumerate_rows() {
@@ -61,11 +71,10 @@ impl Font {
             }
         }
 
-        let new_image =
-            ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(width, height, container).expect("Unreachable");
+        let new_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(width, height, container)
+            .expect("Unreachable");
 
-        let tex =
-            texture::Texture::from_dyn_image(&gpu.device, &gpu.queue, &new_image, None);
+        let tex = texture::Texture::from_dyn_image(&gpu.device, &gpu.queue, &new_image, None);
         (
             Material::new(&gpu.device, "text", tex, layout),
             width as f32,
@@ -75,7 +84,8 @@ impl Font {
 
     pub fn new(font_dir_path: String) -> Font {
         let mut characters = HashMap::new();
-        for file in std::fs::read_dir(font_dir_path.clone()).expect("Could not read font directory") {
+        for file in std::fs::read_dir(font_dir_path.clone()).expect("Could not read font directory")
+        {
             let file_name = file.expect("Could not read font directory").file_name();
             let file_name = file_name.to_str().expect("Invalid file name");
             if std::path::Path::new(&(font_dir_path.clone() + "/" + file_name)).is_file()
@@ -96,7 +106,7 @@ impl Font {
 
 #[derive(Clone)]
 pub struct FontReference {
-    index: usize
+    index: usize,
 }
 
 #[derive(Debug)]
@@ -116,7 +126,12 @@ impl TextState {
         }
     }
 
-    pub(crate) fn load_font(&mut self, font_path: String, device: &wgpu::Device, render_format: wgpu::TextureFormat) -> Result<FontReference, FontError>{
+    pub(crate) fn load_font(
+        &mut self,
+        font_path: String,
+        device: &wgpu::Device,
+        render_format: wgpu::TextureFormat,
+    ) -> Result<FontReference, FontError> {
         let font_data = match std::fs::read(&font_path) {
             Ok(f) => Ok(f),
             Err(_) => Err(FontError),
@@ -125,9 +140,10 @@ impl TextState {
             Ok(f) => Ok(f),
             Err(_) => Err(FontError),
         }?;
-        let brush = GlyphBrushBuilder::using_font(font)
-            .build(device, render_format);
-        let reference = FontReference { index: self.brushes.len() };
+        let brush = GlyphBrushBuilder::using_font(font).build(device, render_format);
+        let reference = FontReference {
+            index: self.brushes.len(),
+        };
         self.brushes.push(brush);
         Ok(reference)
     }
@@ -140,20 +156,32 @@ impl TextState {
         self.buffer.recall()
     }
 
-    pub(crate) fn draw(&mut self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, window_size: (u32, u32), sections: &[(FontReference, Vec<Section>)]) {
+    pub(crate) fn draw(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        window_size: (u32, u32),
+        sections: &[(FontReference, Vec<Section>)],
+    ) {
         for (font, texts) in sections {
-            let brush = self.brushes.get_mut(font.index).expect("Invalid font reference");
+            let brush = self
+                .brushes
+                .get_mut(font.index)
+                .expect("Invalid font reference");
             for text in texts {
                 brush.queue(text)
             }
-            brush.draw_queued(
-                device,
-                &mut self.buffer,
-                encoder,
-                view,
-                window_size.0,
-                window_size.1
-            ).expect("Error drawing old text");
+            brush
+                .draw_queued(
+                    device,
+                    &mut self.buffer,
+                    encoder,
+                    view,
+                    window_size.0,
+                    window_size.1,
+                )
+                .expect("Error drawing old text");
         }
     }
 }

@@ -2,9 +2,8 @@ use std::ops::Range;
 
 use wgpu::util::DeviceExt;
 
+use super::{rangetree::RangeTree, Instance, Instance3D, InstanceRaw, InstancedDraw};
 use crate::model;
-use super::{InstancedDraw, InstanceRaw, Instance3D, Instance, rangetree::RangeTree};
-
 
 #[derive(Debug)]
 pub struct InstancedModel {
@@ -12,7 +11,7 @@ pub struct InstancedModel {
     pub instances: Vec<Instance3D>,
     pub instance_buffer: wgpu::Buffer,
     pub unculled_instances: usize,
-    unculled_indices: RangeTree
+    unculled_indices: RangeTree,
 }
 
 impl InstancedModel {
@@ -20,14 +19,21 @@ impl InstancedModel {
         let instances = vec![Instance3D {
             position: cgmath::Vector3 { x, y, z },
             animation: None,
-            hidden: false
+            hidden: false,
         }];
 
         InstancedModel::new_premade(model, device, instances)
     }
 
-    pub fn new_premade(model: model::Model, device: &wgpu::Device, mut instances: Vec<Instance3D>) -> Self {
-        let instance_data = instances.iter_mut().map(Instance3D::to_raw).collect::<Vec<_>>();
+    pub fn new_premade(
+        model: model::Model,
+        device: &wgpu::Device,
+        mut instances: Vec<Instance3D>,
+    ) -> Self {
+        let instance_data = instances
+            .iter_mut()
+            .map(Instance3D::to_raw)
+            .collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instance_data),
@@ -39,7 +45,7 @@ impl InstancedModel {
             instances,
             instance_buffer,
             unculled_instances: 0,
-            unculled_indices: RangeTree::new()
+            unculled_indices: RangeTree::new(),
         }
     }
 
@@ -47,7 +53,7 @@ impl InstancedModel {
         let new_instance = Instance3D {
             position: cgmath::Vector3 { x, y, z },
             animation: None,
-            hidden: false
+            hidden: false,
         };
         //TODO: see if there is a better way than replacing the buffer with a new one
         self.instances.push(new_instance);
