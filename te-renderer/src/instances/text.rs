@@ -127,6 +127,10 @@ impl InstancedText {
     pub(crate) fn is_hidden(&self) -> bool {
         self.instance.is_hidden()
     }
+
+    pub(crate) fn change_depth(&mut self, depth: f32) {
+        self.depth = depth
+    }
 }
 
 /// Handle of a 2D text. You will need it when changing its properties.

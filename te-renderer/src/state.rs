@@ -1191,6 +1191,30 @@ impl TeState {
         )
     }
 
+    #[deprecated]
+    #[allow(deprecated)]
+    pub fn change_old_text_depth(
+        &mut self,
+        instance: &OldTextReference,
+        depth: f32
+    ) {
+        self.instances.change_text_depth(
+            instance,
+            depth
+        )
+    }
+
+    #[deprecated]
+    #[allow(deprecated)]
+    pub fn get_old_text_depth(
+        &mut self,
+        instance: &OldTextReference,
+    ) -> f32 {
+        self.instances.get_text_depth(
+            instance
+        )
+    }
+
     /// Move a 2D text to an absolute position.
     /// Ignores the z value.
     #[deprecated]

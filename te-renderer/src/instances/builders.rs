@@ -282,7 +282,6 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
     pub fn build(self) -> Result<InstanceReference, TError> {
         // TODO: refractor
         if let Some(material) = self.material {
-            // TODO: use force_new_instance_id
             let instances = &mut self.te_state.instances;
             let screen_w = self.te_state.size.width;
             let screen_h = self.te_state.size.height;

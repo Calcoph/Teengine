@@ -1379,6 +1379,37 @@ impl InstancesState {
         text.move_instance(0, direction, queue, screen_w, screen_h);
     }
 
+    #[deprecated]
+    #[allow(deprecated)]
+    pub(crate) fn change_text_depth(
+        &mut self,
+        instance: &OldTextReference,
+        depth: f32
+    ) {
+        let text = self
+            .texts
+            .get_mut(instance.index)
+            .expect("Invalid reference")
+            .as_mut()
+            .expect("Invalid reference");
+        text.change_depth(depth);
+    }
+
+    #[deprecated]
+    #[allow(deprecated)]
+    pub(crate) fn get_text_depth(
+        &mut self,
+        instance: &OldTextReference,
+    ) -> f32 {
+        let text = self
+            .texts
+            .get_mut(instance.index)
+            .expect("Invalid reference")
+            .as_mut()
+            .expect("Invalid reference");
+        text.depth
+    }
+
     /// Move a 2D text to an absolute position.
     /// Ignores the z value.
     #[deprecated]
