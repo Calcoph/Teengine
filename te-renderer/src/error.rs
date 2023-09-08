@@ -9,6 +9,7 @@ pub enum TError {
     EmptySpriteArray,
     NamelessGLB,
     InvalidGLB,
+    SizeRequired,
 }
 
 impl Display for TError {
@@ -21,6 +22,7 @@ impl Display for TError {
             TError::EmptySpriteArray => write!(f, "EmptySpriteArray"),
             TError::NamelessGLB => write!(f, "NamelessGLB"),
             TError::InvalidGLB => write!(f, "InvalidGLB"),
+            TError::SizeRequired => write!(f, "SizeRequired"),
         }
     }
 }

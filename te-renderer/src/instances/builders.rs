@@ -3,12 +3,13 @@ use cgmath::Vector3;
 use crate::{
     error::TError,
     model,
-    resources::load_glb_model,
+    resources::{load_glb_model, load_sprite},
     state::{GpuState, TeState},
 };
 
 use super::{
-    model::InstancedModel, DrawModel, InstanceMap, InstanceReference, InstanceType, InstancedDraw,
+    model::InstancedModel, sprite::InstancedSprite, DrawModel, InstanceMap, InstanceReference,
+    InstanceType, InstancedDraw,
 };
 
 enum ModelType {
@@ -225,6 +226,172 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
 
                 Ok(reference)
             }
+        }
+    }
+}
+
+pub struct SpriteBuilder<'state, 'gpu, 'a, 'b> {
+    te_state: &'state mut TeState,
+    sprite_name: &'a str,
+    gpu: &'gpu GpuState,
+    position: (f32, f32, f32),
+    force_new_instance_id: Option<&'b str>,
+    size: Option<(f32, f32)>,
+    material: Option<model::Material>,
+}
+
+impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
+    pub(crate) fn new(
+        te_state: &'state mut TeState,
+        sprite_name: &'a str,
+        gpu: &'gpu GpuState,
+        position: (f32, f32, f32),
+    ) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
+        SpriteBuilder {
+            te_state,
+            sprite_name,
+            gpu,
+            position,
+            force_new_instance_id: None,
+            size: None,
+            material: None,
+        }
+    }
+
+    pub fn with_id(self, id: &'b str) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
+        SpriteBuilder {
+            force_new_instance_id: Some(id),
+            ..self
+        }
+    }
+
+    pub fn with_size(self, size: (f32, f32)) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
+        SpriteBuilder {
+            size: Some(size),
+            ..self
+        }
+    }
+
+    pub fn with_material(self, material: model::Material) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
+        SpriteBuilder {
+            material: Some(material),
+            ..self
+        }
+    }
+
+    pub fn build(self) -> Result<InstanceReference, TError> {
+        // TODO: refractor
+        if let Some(material) = self.material {
+            // TODO: use force_new_instance_id
+            let instances = &mut self.te_state.instances;
+            let screen_w = self.te_state.size.width;
+            let screen_h = self.te_state.size.height;
+
+            let instance_name =
+                self.sprite_name.to_string() + self.force_new_instance_id.unwrap_or_default();
+            if let Some(instanced_s) = instances.sprite_instances.get_mut(&instance_name) {
+                instanced_s.add_instance(
+                    self.position.0,
+                    self.position.1,
+                    self.size,
+                    &self.gpu.device,
+                    screen_w,
+                    screen_h,
+                );
+            } else {
+                let (width, height) = match self.size {
+                    Some((w, h)) => (w, h),
+                    None => return Err(TError::SizeRequired),
+                };
+                let instanced_s = InstancedSprite::new(
+                    material,
+                    &self.gpu.device,
+                    self.position.0,
+                    self.position.1,
+                    self.position.2,
+                    width,
+                    height,
+                    screen_w,
+                    screen_h,
+                );
+                instances
+                    .sprite_instances
+                    .insert(instance_name.to_string(), instanced_s);
+            }
+
+            let mut instance_ref = InstanceReference {
+                name: instance_name.to_string(),
+                index: 0, // 0 is placeholder
+                dimension: InstanceType::Sprite,
+            };
+
+            instance_ref.index = instances
+                .sprite_instances
+                .instance(&instance_ref)
+                .instances
+                .len()
+                - 1;
+
+            Ok(instance_ref)
+        } else {
+            let instances = &mut self.te_state.instances;
+            let screen_w = self.te_state.size.width;
+            let screen_h = self.te_state.size.height;
+
+            let instance_name =
+                self.sprite_name.to_string() + self.force_new_instance_id.unwrap_or_default();
+            if let Some(instanced_s) = instances.sprite_instances.get_mut(&instance_name) {
+                instanced_s.add_instance(
+                    self.position.0,
+                    self.position.1,
+                    self.size,
+                    &self.gpu.device,
+                    screen_w,
+                    screen_h,
+                );
+            } else {
+                let (sprite, width, height) = load_sprite(
+                    self.sprite_name,
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    &instances.layout,
+                    instances.resources_path.clone(),
+                )
+                .map_err(|_| TError::SpriteLoadingFail)?;
+                let (width, height) = match self.size {
+                    Some((w, h)) => (w, h),
+                    None => (width, height),
+                };
+                let instanced_s = InstancedSprite::new(
+                    sprite,
+                    &self.gpu.device,
+                    self.position.0,
+                    self.position.1,
+                    self.position.2,
+                    width,
+                    height,
+                    screen_w,
+                    screen_h,
+                );
+                instances
+                    .sprite_instances
+                    .insert(instance_name.clone(), instanced_s);
+            }
+
+            let mut inst_ref = InstanceReference {
+                name: instance_name,
+                index: 0, // 0 is placeholder
+                dimension: InstanceType::Sprite,
+            };
+
+            inst_ref.index = instances
+                .sprite_instances
+                .instance(&inst_ref)
+                .instances
+                .len()
+                - 1;
+
+            Ok(inst_ref)
         }
     }
 }

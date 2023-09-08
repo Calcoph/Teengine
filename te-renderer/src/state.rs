@@ -992,10 +992,20 @@ impl TeState {
             .place_custom_animated_model(model_name, gpu, tile_position, model)
     }
 
+    pub fn add_sprite<'a, 'b, 'c, 'd>(
+        &'a mut self,
+        sprite_name: &'b str,
+        gpu: &'c GpuState,
+        position: (f32, f32, f32),
+    ) -> SpriteBuilder<'a, 'c, 'b, 'd> {
+        SpriteBuilder::new(self, sprite_name, gpu, position)
+    }
+
     /// Creates a new 2D sprite at the specified position.
     /// All 2D sprites created from the same file will have the same "z" position. And cannot be changed once set.
     /// ### Errors
     /// Will error if the sprite's file is not found
+    #[deprecated]
     pub fn place_sprite(
         &mut self,
         sprite_name: &str,
@@ -1015,6 +1025,7 @@ impl TeState {
         )
     }
 
+    #[deprecated]
     pub fn place_custom_sprite(
         &mut self,
         sprite_name: &str,
@@ -1034,6 +1045,7 @@ impl TeState {
         )
     }
 
+    // TODO: Do this with builder
     pub fn place_animated_sprite(
         &mut self,
         sprite_names: Vec<&str>,
