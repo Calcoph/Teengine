@@ -1,19 +1,28 @@
 pub use glyph_brush::{Section, Text};
-use wgpu::{util::DeviceExt, CommandBuffer, BindGroupLayout, CommandEncoder, PushConstantRange, ShaderStages, InstanceDescriptor};
+use wgpu::{
+    util::DeviceExt, BindGroupLayout, CommandBuffer, CommandEncoder, InstanceDescriptor,
+    PushConstantRange, ShaderStages,
+};
 use winit::{
     dpi,
     event::{KeyboardInput, WindowEvent},
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
-#[allow(deprecated)]
-use crate::{model::{Vertex, Material}, render::{Draw2D, RendererClickable, InstanceFinder, Renderer}, instances::{InstanceReference, text::OldTextReference, animation::Animation}, text::{TextState, FontReference, FontError}, error::TError};
+pub use crate::instances::builders::*;
 use crate::{
     camera,
     initial_config::InitialConfiguration,
     instances::{InstanceRaw, InstancesState},
-    model,
-    temap, texture,
+    model, temap, texture,
+};
+#[allow(deprecated)]
+use crate::{
+    error::TError,
+    instances::{animation::Animation, text::OldTextReference, InstanceReference},
+    model::{Material, Vertex},
+    render::{Draw2D, InstanceFinder, Renderer, RendererClickable},
+    text::{FontError, FontReference, TextState},
 };
 
 #[derive(Debug)]
@@ -33,7 +42,11 @@ impl GpuState {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
         });
-        let surface = unsafe { instance.create_surface(window).expect("Unable to create surface") };
+        let surface = unsafe {
+            instance
+                .create_surface(window)
+                .expect("Unable to create surface")
+        };
         // TODO: instance.enumerate_adapters to list all GPUs (tutorial 2 beginner)
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -104,7 +117,7 @@ impl GpuState {
 pub struct TeColor {
     red: f64,
     green: f64,
-    blue: f64
+    blue: f64,
 }
 
 impl TeColor {
@@ -128,10 +141,14 @@ impl TeColor {
 
     pub fn set_red(&mut self, mut red: f64) {
         if red < 0.0 {
-            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            eprintln!(
+                "TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0"
+            );
             red = 0.0;
         } else if red > 1.0 {
-            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            eprintln!(
+                "TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0"
+            );
             red = 1.0;
         }
         self.red = red
@@ -143,10 +160,14 @@ impl TeColor {
 
     pub fn set_green(&mut self, mut green: f64) {
         if green < 0.0 {
-            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            eprintln!(
+                "TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0"
+            );
             green = 0.0;
         } else if green > 1.0 {
-            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            eprintln!(
+                "TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0"
+            );
             green = 1.0;
         }
         self.green = green
@@ -158,10 +179,14 @@ impl TeColor {
 
     pub fn set_blue(&mut self, mut blue: f64) {
         if blue < 0.0 {
-            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0");
+            eprintln!(
+                "TeColor values must be between 0.0 and 1.0. It was automatically set to 0.0"
+            );
             blue = 0.0;
         } else if blue > 1.0 {
-            eprintln!("TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0");
+            eprintln!(
+                "TeColor values must be between 0.0 and 1.0. It was automatically set to 1.0"
+            );
             blue = 1.0;
         }
         self.blue = blue
@@ -196,7 +221,7 @@ pub struct TeState {
     /// Whether to render texts.
     pub render_text: bool,
     pub bgcolor: TeColor,
-    instance_finder: InstanceFinder
+    instance_finder: InstanceFinder,
 }
 
 impl TeState {
@@ -236,7 +261,7 @@ impl TeState {
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
                 EntryPoint::Mask,
-                "Render Pipeline"
+                "Render Pipeline",
             )
         };
 
@@ -253,7 +278,7 @@ impl TeState {
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
                 EntryPoint::Main,
-                "Transparent pipeline"
+                "Transparent pipeline",
             )
         };
 
@@ -269,7 +294,7 @@ impl TeState {
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
                 EntryPoint::Main,
-                "Clickable pipeline"
+                "Clickable pipeline",
             )
         };
 
@@ -286,7 +311,7 @@ impl TeState {
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
                 EntryPoint::Color,
-                "Clickable color pipeline"
+                "Clickable color pipeline",
             )
         };
 
@@ -367,13 +392,22 @@ impl TeState {
             render_2d: true,
             render_3d: true,
             render_text: true,
-            bgcolor: TeColor { red: 0.0, green: 0.0, blue: 0.0 },
-            instance_finder: InstanceFinder::new()
+            bgcolor: TeColor {
+                red: 0.0,
+                green: 0.0,
+                blue: 0.0,
+            },
+            instance_finder: InstanceFinder::new(),
         }
     }
 
-    pub fn load_font(&mut self, font_path: String, gpu: &GpuState) -> Result<FontReference, FontError> {
-        self.text.load_font(font_path, &gpu.device, gpu.config.format)
+    pub fn load_font(
+        &mut self,
+        font_path: String,
+        gpu: &GpuState,
+    ) -> Result<FontReference, FontError> {
+        self.text
+            .load_font(font_path, &gpu.device, gpu.config.format)
     }
 
     pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) -> Result<(), TError> {
@@ -464,9 +498,11 @@ impl TeState {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Clickable Pipeline Layout"),
                 bind_group_layouts: &[&camera_bind_group_layout],
-                push_constant_ranges: &[PushConstantRange { stages: ShaderStages::VERTEX, range: 0..4 }],
+                push_constant_ranges: &[PushConstantRange {
+                    stages: ShaderStages::VERTEX,
+                    range: 0..4,
+                }],
             });
-
 
         (
             texture_bind_group_layout,
@@ -532,7 +568,7 @@ impl TeState {
                     txt.animate(queue);
                 }
             }
-    
+
             for (_name, sprite) in &mut self.instances.sprite_instances {
                 sprite.animate(queue);
             }
@@ -544,10 +580,11 @@ impl TeState {
         view: &wgpu::TextureView,
         gpu: &GpuState,
         encoders: &mut Vec<wgpu::CommandEncoder>,
-        texts: &[(FontReference, Vec<Section>)]
+        texts: &[(FontReference, Vec<Section>)],
     ) {
         if self.render_3d {
-            let mut render_pass = encoders.get_mut(0)
+            let mut render_pass = encoders
+                .get_mut(0)
                 .expect("Empty encoders vector")
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
@@ -581,7 +618,8 @@ impl TeState {
         }
 
         if self.render_2d {
-            let mut render_pass = encoders.get_mut(1)
+            let mut render_pass = encoders
+                .get_mut(1)
                 .expect("Encoders vector too small")
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Render Pass"),
@@ -602,7 +640,12 @@ impl TeState {
         }
 
         if self.render_text {
-            self.draw_text(&gpu.device, encoders.get_mut(2).expect("Encoders vector too small"), view, texts);
+            self.draw_text(
+                &gpu.device,
+                encoders.get_mut(2).expect("Encoders vector too small"),
+                view,
+                texts,
+            );
         }
     }
 
@@ -616,7 +659,14 @@ impl TeState {
         gpu.queue.submit(encoders);
     }
 
-    pub fn clicakble_mask(&mut self, view: &wgpu::TextureView, gpu: &GpuState, encoder: &mut wgpu::CommandEncoder, drawable: bool, depth_texture: Option<&wgpu::TextureView>) {
+    pub fn clicakble_mask(
+        &mut self,
+        view: &wgpu::TextureView,
+        gpu: &GpuState,
+        encoder: &mut wgpu::CommandEncoder,
+        drawable: bool,
+        depth_texture: Option<&wgpu::TextureView>,
+    ) {
         let depth_texture = match depth_texture {
             Some(dt) => dt,
             None => &gpu.depth_texture.view,
@@ -657,40 +707,37 @@ impl TeState {
         } else {
             render_pass.set_pipeline(&self.pipelines.clickable);
         }
-        let iter = self.instances.opaque_instances
+        let iter = self
+            .instances
+            .opaque_instances
             .iter()
-            .filter(|(_name, instanced_model)| {
-                match instanced_model {
-                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                    crate::instances::DrawModel::A(a) => a.unculled_instance,
-                }
+            .filter(|(_name, instanced_model)| match instanced_model {
+                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                crate::instances::DrawModel::A(a) => a.unculled_instance,
             });
 
-        let mut renderer = RendererClickable::new(
-            render_pass,
-            &self.camera.camera_bind_group,
-        );
+        let mut renderer = RendererClickable::new(render_pass, &self.camera.camera_bind_group);
 
         for (name, instanced_model) in iter {
             let instance_buffer = match instanced_model {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
             };
-            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
             match instanced_model {
                 crate::instances::DrawModel::M(m) => {
                     renderer.draw_model_instanced_mask(
                         &m.model,
                         m.get_instances_vec(),
-                        name.to_owned()
+                        name.to_owned(),
                     );
-                },
+                }
                 crate::instances::DrawModel::A(a) => {
                     // TODO: pass name
-                    renderer.draw_animated_model_instanced_mask(
-                        &a,
-                    );
-                },
+                    renderer.draw_animated_model_instanced_mask(&a);
+                }
             }
         }
 
@@ -699,31 +746,31 @@ impl TeState {
             .instances
             .transparent_instances
             .iter()
-            .map(|name| self.instances.opaque_instances.get(name).expect("Invalid reference"))
-            .filter(|instanced_model| {
-                match instanced_model {
-                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                    crate::instances::DrawModel::A(a) => a.unculled_instance,
-                }
+            .map(|name| {
+                self.instances
+                    .opaque_instances
+                    .get(name)
+                    .expect("Invalid reference")
+            })
+            .filter(|instanced_model| match instanced_model {
+                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                crate::instances::DrawModel::A(a) => a.unculled_instance,
             });
         for instanced_model in iter {
             let instance_buffer = match instanced_model {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
             };
-            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
             match instanced_model {
                 crate::instances::DrawModel::M(m) => {
-                    renderer.tdraw_model_instanced_mask(
-                        &m.model,
-                        m.get_instances_vec(),
-                    );
-                },
+                    renderer.tdraw_model_instanced_mask(&m.model, m.get_instances_vec());
+                }
                 crate::instances::DrawModel::A(a) => {
-                    renderer.tdraw_animated_model_instanced_mask(
-                        &a,
-                    );
-                },
+                    renderer.tdraw_animated_model_instanced_mask(&a);
+                }
             }
         }
 
@@ -732,75 +779,66 @@ impl TeState {
 
     pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_pipeline(&self.pipelines.render_3d);
-        let mut renderer = Renderer::new(
-            render_pass,
-            &self.camera.camera_bind_group,
-        );
-        let iter = self.instances.opaque_instances
+        let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
+        let iter = self
+            .instances
+            .opaque_instances
             .iter()
-            .filter(|(_name, instanced_model)| {
-                match instanced_model {
-                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                    crate::instances::DrawModel::A(a) => a.unculled_instance,
-                }
+            .filter(|(_name, instanced_model)| match instanced_model {
+                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                crate::instances::DrawModel::A(a) => a.unculled_instance,
             });
         for (_name, instanced_model) in iter {
             let instance_buffer = match instanced_model {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
             };
-            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
             match instanced_model {
                 crate::instances::DrawModel::M(m) => {
-                    renderer.draw_model_instanced(
-                        &m.model,
-                        m.get_instances_vec(),
-                    );
-                },
+                    renderer.draw_model_instanced(&m.model, m.get_instances_vec());
+                }
                 crate::instances::DrawModel::A(a) => {
-                    renderer.draw_animated_model_instanced(
-                        &a,
-                    );
-                },
+                    renderer.draw_animated_model_instanced(&a);
+                }
             }
         }
     }
 
     pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_pipeline(&self.pipelines.transparent);
-        let mut renderer = Renderer::new(
-            render_pass,
-            &self.camera.camera_bind_group,
-        );
+        let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
         let iter = self
             .instances
             .transparent_instances
             .iter()
-            .map(|name| self.instances.opaque_instances.get(name).expect("Invalid reference"))
-            .filter(|instanced_model| {
-                match instanced_model {
-                    crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                    crate::instances::DrawModel::A(a) => a.unculled_instance,
-                }
+            .map(|name| {
+                self.instances
+                    .opaque_instances
+                    .get(name)
+                    .expect("Invalid reference")
+            })
+            .filter(|instanced_model| match instanced_model {
+                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
+                crate::instances::DrawModel::A(a) => a.unculled_instance,
             });
         for instanced_model in iter {
             let instance_buffer = match instanced_model {
                 crate::instances::DrawModel::M(m) => &m.instance_buffer,
                 crate::instances::DrawModel::A(a) => &a.instance_buffer,
             };
-            renderer.render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
             match instanced_model {
                 crate::instances::DrawModel::M(m) => {
-                    renderer.tdraw_model_instanced(
-                        &m.model,
-                        m.get_instances_vec(),
-                    );
-                },
+                    renderer.tdraw_model_instanced(&m.model, m.get_instances_vec());
+                }
                 crate::instances::DrawModel::A(a) => {
-                    renderer.tdraw_animated_model_instanced(
-                        &a,
-                    );
-                },
+                    renderer.tdraw_animated_model_instanced(&a);
+                }
             }
         }
     }
@@ -811,7 +849,8 @@ impl TeState {
             .instances
             .texts
             .iter()
-            .filter(|text| { // TODO: use filter_map
+            .filter(|text| {
+                // TODO: use filter_map
                 if let Some(t) = text {
                     t.is_drawable()
                 } else {
@@ -820,22 +859,45 @@ impl TeState {
             })
             .map(|text| text.as_ref().expect("Unreachable") as &dyn Draw2D)
             .collect();
-        let sprites: Vec<&dyn Draw2D> = self.instances.sprite_instances.iter().map(|(_name, inst)| inst as &dyn Draw2D).collect();
+        let sprites: Vec<&dyn Draw2D> = self
+            .instances
+            .sprite_instances
+            .iter()
+            .map(|(_name, inst)| inst as &dyn Draw2D)
+            .collect();
         sorted_2d.extend(sprites.into_iter());
-        let anim_sprites: Vec<&dyn Draw2D> = self.instances.animated_sprites.iter().filter(|(_name, inst)| inst.is_drawable()).map(|(_name, inst)| inst as &dyn Draw2D).collect();
+        let anim_sprites: Vec<&dyn Draw2D> = self
+            .instances
+            .animated_sprites
+            .iter()
+            .filter(|(_name, inst)| inst.is_drawable())
+            .map(|(_name, inst)| inst as &dyn Draw2D)
+            .collect();
         sorted_2d.extend(anim_sprites.into_iter());
-        sorted_2d.sort_by(|inst1, inst2|
-            inst1.get_depth()
+        sorted_2d.sort_by(|inst1, inst2| {
+            inst1
+                .get_depth()
                 .partial_cmp(&inst2.get_depth())
                 .expect("Speciall f64 values such as NaN not allowed for instance depth")
-        );
+        });
         for draw in sorted_2d {
-            draw.draw(render_pass, &self.camera.projection_bind_group, &self.sprite_vertices_buffer)
+            draw.draw(
+                render_pass,
+                &self.camera.projection_bind_group,
+                &self.sprite_vertices_buffer,
+            )
         }
     }
 
-    pub fn draw_text(&mut self, device: &wgpu::Device, encoder: &mut CommandEncoder, view: &wgpu::TextureView, sections: &[(FontReference, Vec<Section>)]) {
-        self.text.draw(device, encoder, view, self.size.into(), sections)
+    pub fn draw_text(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut CommandEncoder,
+        view: &wgpu::TextureView,
+        sections: &[(FontReference, Vec<Section>)],
+    ) {
+        self.text
+            .draw(device, encoder, view, self.size.into(), sections)
     }
 
     fn cull_all3d(&mut self) {
@@ -846,7 +908,7 @@ impl TeState {
             }
         }
     }
-/* 
+    /*
     pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
         &mut self,
         instance: &InstanceReference,
@@ -867,9 +929,19 @@ impl TeState {
         &self.instances.layout
     }
 
+    pub fn add_model<'state, 'gpu, 'a>(
+        &'state mut self,
+        model_name: &'a str,
+        gpu: &'gpu GpuState,
+        position: (f32, f32, f32),
+    ) -> ModelBuilder<'state, 'gpu, 'a> {
+        ModelBuilder::new(self, model_name, gpu, position)
+    }
+
     /// Creates a new 3D model at the specific position.
     /// ### Errors
     /// Will error if the model's file is not found
+    #[deprecated]
     pub fn place_model(
         &mut self,
         model_name: &str,
@@ -883,35 +955,41 @@ impl TeState {
     /// If that model has not been forgotten, you can place another with just its name, so model can be None
     /// ### Errors
     /// Will error if model is None and the model has been forgotten (or was never created)
+    #[deprecated]
     pub fn place_custom_model(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
-        model: Option<model::Model>
+        model: Option<model::Model>,
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_custom_model(model_name, gpu, tile_position, model)
+        self.instances
+            .place_custom_model(model_name, gpu, tile_position, model)
     }
 
+    #[deprecated]
     pub fn place_custom_model_absolute(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
-        model: Option<model::Model>
+        model: Option<model::Model>,
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_custom_model_absolute(model_name, gpu, tile_position, model)
+        self.instances
+            .place_custom_model_absolute(model_name, gpu, tile_position, model)
     }
 
     /// Places an already created animated model at the specific position.
-    pub fn place_custom_animated_model (
+    #[deprecated]
+    pub fn place_custom_animated_model(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
-        model: model::AnimatedModel
+        model: model::AnimatedModel,
     ) -> InstanceReference {
-        self.instances.place_custom_animated_model(model_name, gpu, tile_position, model)
+        self.instances
+            .place_custom_animated_model(model_name, gpu, tile_position, model)
     }
 
     /// Creates a new 2D sprite at the specified position.
@@ -924,9 +1002,17 @@ impl TeState {
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
-        force_new_instance_id: Option<&str>
+        force_new_instance_id: Option<&str>,
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height, force_new_instance_id)
+        self.instances.place_sprite(
+            sprite_name,
+            gpu,
+            size,
+            position,
+            self.size.width,
+            self.size.height,
+            force_new_instance_id,
+        )
     }
 
     pub fn place_custom_sprite(
@@ -935,9 +1021,17 @@ impl TeState {
         gpu: &GpuState,
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
-        sprite: Option<(Material, f32, f32)>
+        sprite: Option<(Material, f32, f32)>,
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_custom_sprite(sprite_name, gpu, size, position, self.size.width, self.size.height, sprite)
+        self.instances.place_custom_sprite(
+            sprite_name,
+            gpu,
+            size,
+            position,
+            self.size.width,
+            self.size.height,
+            sprite,
+        )
     }
 
     pub fn place_animated_sprite(
@@ -947,9 +1041,18 @@ impl TeState {
         size: Option<(f32, f32)>,
         position: (f32, f32, f32),
         frame_delay: std::time::Duration,
-        looping: bool
+        looping: bool,
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_animated_sprite(sprite_names, gpu, size, position, frame_delay, looping, self.size.width, self.size.height)
+        self.instances.place_animated_sprite(
+            sprite_names,
+            gpu,
+            size,
+            position,
+            frame_delay,
+            looping,
+            self.size.width,
+            self.size.height,
+        )
     }
 
     /// Creates a new text at the specified position
@@ -963,9 +1066,10 @@ impl TeState {
         text: Vec<String>,
         gpu: &GpuState,
         size: Option<(f32, f32)>,
-        position: (f32, f32, f32)
+        position: (f32, f32, f32),
     ) -> OldTextReference {
-        self.instances.place_text(text, gpu, size, position, self.size.width, self.size.height)
+        self.instances
+            .place_text(text, gpu, size, position, self.size.width, self.size.height)
     }
 
     /// Eliminates the text from screen and memory.
@@ -1003,9 +1107,15 @@ impl TeState {
         &mut self,
         instance: &InstanceReference,
         direction: V,
-        queue: &wgpu::Queue
+        queue: &wgpu::Queue,
     ) {
-        self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
+        self.instances.move_instance(
+            instance,
+            direction.into(),
+            queue,
+            self.size.width,
+            self.size.height,
+        )
     }
 
     /// Move a 3D model or a 2D sprite to an absolute position.
@@ -1014,9 +1124,15 @@ impl TeState {
         &mut self,
         instance: &InstanceReference,
         position: P,
-        queue: &wgpu::Queue
+        queue: &wgpu::Queue,
     ) {
-        self.instances.set_instance_position(instance, position.into(), queue, self.size.width, self.size.height)
+        self.instances.set_instance_position(
+            instance,
+            position.into(),
+            queue,
+            self.size.width,
+            self.size.height,
+        )
     }
 
     /// Get a 3D model's or 2D sprite's position.
@@ -1033,7 +1149,8 @@ impl TeState {
         new_size: V,
         queue: &wgpu::Queue,
     ) {
-        self.instances.resize_sprite(instance, new_size.into(), queue)
+        self.instances
+            .resize_sprite(instance, new_size.into(), queue)
     }
 
     /// Get the sprite's size
@@ -1051,9 +1168,15 @@ impl TeState {
         &mut self,
         instance: &OldTextReference,
         direction: V,
-        queue: &wgpu::Queue
+        queue: &wgpu::Queue,
     ) {
-        self.instances.move_text(instance, direction.into(), queue, self.size.width, self.size.height)
+        self.instances.move_text(
+            instance,
+            direction.into(),
+            queue,
+            self.size.width,
+            self.size.height,
+        )
     }
 
     /// Move a 2D text to an absolute position.
@@ -1066,7 +1189,13 @@ impl TeState {
         position: P,
         queue: &wgpu::Queue,
     ) {
-        self.instances.set_text_position(instance, position.into(), queue, self.size.width, self.size.height)
+        self.instances.set_text_position(
+            instance,
+            position.into(),
+            queue,
+            self.size.width,
+            self.size.height,
+        )
     }
 
     /// Gets a 2D text's position
@@ -1105,8 +1234,14 @@ impl TeState {
         self.instances.set_text_animation(text, animation)
     }
 
-    pub fn animate_model(&mut self, instance: &InstanceReference, mesh_index: usize, material_index: usize) {
-        self.instances.animate_model(instance, mesh_index, material_index)
+    pub fn animate_model(
+        &mut self,
+        instance: &InstanceReference,
+        mesh_index: usize,
+        material_index: usize,
+    ) {
+        self.instances
+            .animate_model(instance, mesh_index, material_index)
     }
 
     pub fn hide_instance(&mut self, instance: &InstanceReference) {
@@ -1151,7 +1286,7 @@ impl TeState {
 enum EntryPoint {
     Main,
     Mask,
-    Color
+    Color,
 }
 
 fn create_render_pipeline(
@@ -1162,7 +1297,7 @@ fn create_render_pipeline(
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
     entry_point: EntryPoint,
-    name: &str
+    name: &str,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader);
     let entry_point = match entry_point {
@@ -1276,7 +1411,7 @@ fn create_r32uint_render_pipeline(
     vertex_layouts: &[wgpu::VertexBufferLayout],
     shader: wgpu::ShaderModuleDescriptor,
     entry_point: EntryPoint,
-    name: &str
+    name: &str,
 ) -> wgpu::RenderPipeline {
     let shader = device.create_shader_module(shader);
     let entry_point = match entry_point {

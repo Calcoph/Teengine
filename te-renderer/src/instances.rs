@@ -7,6 +7,7 @@ pub mod model;
 pub mod sprite;
 pub mod text;
 pub(crate) mod rangetree;
+pub(crate) mod builders;
 
 use crate::{
     resources::{load_glb_model, load_sprite},
