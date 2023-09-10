@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use imgui::{Context, Io};
 use imgui_wgpu::Renderer;
 use imgui_winit_support::WinitPlatform;
-use te_gamepad::gamepad::ControllerEvent;
+use te_gamepad::gamepad::gilrs::Event as GEvent;
 use te_renderer::state::{GpuState, TeState};
 pub use winit::event::Event;
 use winit::{
@@ -17,12 +17,12 @@ use crate::event_loop::TextSender;
 use super::ImguiState;
 
 #[cfg(feature = "draw_when_told")]
-type EventHandler<I> = Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io) -> bool>;
+type EventHandler<I> = Box<dyn FnMut(Event<GEvent>, &mut I, &mut Io) -> bool>;
 #[cfg(not(feature = "draw_when_told"))]
-type EventHandler<I> = Box<dyn FnMut(Event<ControllerEvent>, &mut I, &mut Io)>;
+type EventHandler<I> = Box<dyn FnMut(Event<GEvent>, &mut I, &mut Io)>;
 
 pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
-    event_loop: EventLoop<ControllerEvent>,
+    event_loop: EventLoop<GEvent>,
     window: Rc<RefCell<Window>>,
     gpu: Rc<RefCell<GpuState>>,
     state: Rc<RefCell<TeState>>,
@@ -100,7 +100,7 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
             _ => (),
         }
 
-        platform.handle_event(context.io_mut(), &window.borrow(), &event);
+        platform.handle_controller_event(context.io_mut(), &window.borrow(), &event);
         #[cfg(feature = "draw_when_told")]
         if event_handler(event, &mut imgui_state, context.io_mut()) {
             window.borrow().request_redraw()

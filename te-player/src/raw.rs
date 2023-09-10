@@ -14,7 +14,7 @@ use winit::{
     window::{Icon, Window, WindowBuilder},
 };
 
-use te_gamepad::gamepad::{self, ControllerEvent};
+use te_gamepad::gamepad::{self, gilrs::Event as GEvent};
 
 /// Get all the structs needed to start the engine, skipping the boilerplate.
 pub async fn prepare(
@@ -22,7 +22,7 @@ pub async fn prepare(
     log: bool,
 ) -> Result<
     (
-        EventLoop<ControllerEvent>,
+        EventLoop<GEvent>,
         Rc<RefCell<GpuState>>,
         Rc<RefCell<Window>>,
         Rc<RefCell<TeState>>,
@@ -68,7 +68,7 @@ pub async fn prepare(
 /// After calling prepare() call new_window() for each extra window.
 pub async fn new_window(
     config: InitialConfiguration,
-    event_loop: &EventLoop<ControllerEvent>,
+    event_loop: &EventLoop<GEvent>,
 ) -> Result<
     (
         Rc<RefCell<GpuState>>,

@@ -14,12 +14,12 @@ use wgpu::CommandEncoder;
 pub use winit as te_winit;
 use winit::{dpi, event_loop::EventLoop, window};
 
-use te_gamepad::gamepad::{self, ControllerEvent};
+use te_gamepad::gamepad::{self, gilrs::Event as GEvent};
 
 use crate::InitError;
 
 pub struct PrepareResult {
-    pub event_loop: EventLoop<ControllerEvent>,
+    pub event_loop: EventLoop<GEvent>,
     pub gpu: Rc<RefCell<GpuState>>,
     pub window: Rc<RefCell<window::Window>>,
     pub te_state: Rc<RefCell<TeState>>,
@@ -32,6 +32,8 @@ pub struct PrepareResult {
 pub async fn prepare(
     config: InitialConfiguration,
     log: bool,
+    enable_imgui_gamepad_nav: bool,
+    enable_imgui_keyboard_nav: bool,
 ) -> Result<PrepareResult, Box<dyn Error>> {
     if log {
         env_logger::init();
@@ -64,6 +66,12 @@ pub async fn prepare(
     let state = TeState::new(&window, &gpu, config).await;
 
     let mut context = Context::create();
+    if enable_imgui_gamepad_nav {
+        context.io_mut().config_flags |= imgui::ConfigFlags::NAV_ENABLE_GAMEPAD;
+    }
+    if enable_imgui_keyboard_nav {
+        context.io_mut().config_flags |= imgui::ConfigFlags::NAV_ENABLE_KEYBOARD;
+    }
     let mut platform = imgui_winit_support::WinitPlatform::init(&mut context);
     platform.attach_window(
         context.io_mut(),
@@ -92,7 +100,7 @@ pub async fn prepare(
 /// After calling prepare() call new_window() for each extra window.
 pub async fn new_window(
     config: InitialConfiguration,
-    event_loop: &EventLoop<ControllerEvent>,
+    event_loop: &EventLoop<GEvent>,
 ) -> Result<
     (
         Rc<RefCell<GpuState>>,

@@ -11,11 +11,11 @@ gilrs-core = "0.5.2"
 imgui = "0.11.0"
 imgui-winit-support = { version = "0.11.0", default-features = false }
 env_logger = "0.10.0"
-wgpu = "0.16.2"
+wgpu = "0.17.0"
 cgmath = "0.18"
 pollster = "0.3"
 bytemuck = { version = "1.4", features = [ "derive" ] }
-imgui-wgpu = "0.23.0"
+imgui-wgpu = "0.24.0"
 
 [dependencies.image]
 version = "0.24"

@@ -8,13 +8,13 @@ edition = "2021"
 [dependencies]
 json = "0.12.4"
 cgmath = "0.18"
-wgpu = "0.16.2"
+wgpu = "0.17.0"
 winit = "0.27.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 sorted-vec = "0.8.0"
 
 # Text
-wgpu_glyph = "0.20"
+wgpu_glyph = "0.21"
 glyph_brush = "0.7"
 
 [dependencies.gltf]

@@ -143,24 +143,6 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     } => (), //println!("TODO: Device Text ({:?}, {:?})", device_id, codepoint), // TODO
                 }
             }
-            Event::UserEvent(gamepad::ControllerEvent::Connected {
-                device_id: _,
-                axes: _,
-            }) => {
-                // TODO: save the axes and device_id somewhere
-            }
-            Event::UserEvent(gamepad::ControllerEvent::Other {
-                device_id: _,
-                event,
-            }) => {
-                match event {
-                    gilrs_core::EventType::ButtonPressed(_code) => (), //println!("TODO: ButtonPressed ({:?}, {:?})", event.device_id, code), // TODO
-                    gilrs_core::EventType::ButtonReleased(_code) => (), //println!("TODO: ButtonReleased ({:?}, {:?})", event.device_id, code), // TODO
-                    gilrs_core::EventType::AxisValueChanged(_value, _code) => (), //println!("TODO: AxisValueChanged ({:?}, {:?}, {:?})", event.device_id, code, value), // TODO
-                    gilrs_core::EventType::Connected => (), //println!("TODO: Connected ({:?})", event.device_id), // TODO
-                    gilrs_core::EventType::Disconnected => (), //println!("TODO: Disconnected ({:?})", event.device_id), // TODO
-                }
-            }
             Event::Suspended => *control_flow = ControlFlow::Wait,
             Event::MainEventsCleared => window.request_redraw(),
             Event::RedrawRequested(window_id) => {
@@ -190,6 +172,6 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
 
         mapmaker
             .platform
-            .handle_event(mapmaker.context.io_mut(), &window, &event)
+            .handle_controller_event(mapmaker.context.io_mut(), &window, &event)
     })
 }

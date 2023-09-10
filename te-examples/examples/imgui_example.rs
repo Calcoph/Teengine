@@ -26,12 +26,15 @@ async fn as_main() {
             ..InitialConfiguration::default()
         },
         true,
+        true,
+        true
     )
     .await
     .expect("Failed init");
 
     let my_imgui = MyImgui {
         te_state: te_state.clone(),
+        opened: true
     };
     te_player::imgui::event_loop::run(
         event_loop,
@@ -49,11 +52,45 @@ async fn as_main() {
 
 struct MyImgui {
     te_state: Rc<RefCell<TeState>>,
+    opened: bool
 }
 
 impl ImguiState for MyImgui {
     fn create_ui(&mut self, ui: &te_player::imgui::Ui) {
-        ui.window("Imgui example").build(|| {
+        ui.window("Hello world")
+            .size([300.0, 110.0], te_player::imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text_wrapped("Hello world!");
+                ui.text_wrapped("こんにちは世界！");
+                if ui.button("ads") {
+                }
+
+                ui.button("This...is...imgui-rs!");
+                ui.separator();
+                let mouse_pos = ui.io().mouse_pos;
+                ui.text(format!(
+                    "Mouse Position: ({:.1},{:.1})",
+                    mouse_pos[0], mouse_pos[1]
+                ));
+            });
+        
+        ui.window("Hello world2")
+            .size([300.0, 110.0], te_player::imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text_wrapped("Hello world!");
+                ui.text_wrapped("こんにちは世界！");
+                if ui.button("ads") {
+                }
+
+                ui.button("This...is...imgui-rs!");
+                ui.separator();
+                let mouse_pos = ui.io().mouse_pos;
+                ui.text(format!(
+                    "Mouse Position: ({:.1},{:.1})",
+                    mouse_pos[0], mouse_pos[1]
+                ));
+            });
+        /* ui.window("Imgui example").build(|| {
             let bgcolor = &mut self.te_state.borrow_mut().bgcolor;
             let mut red = bgcolor.get_red();
             let mut green = bgcolor.get_green();
@@ -67,5 +104,7 @@ impl ImguiState for MyImgui {
             bgcolor.set_green(green);
             bgcolor.set_blue(blue);
         });
+
+        ui.show_demo_window(&mut self.opened) */
     }
 }

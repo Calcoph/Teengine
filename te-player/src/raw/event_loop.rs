@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use te_gamepad::gamepad::ControllerEvent;
+use te_gamepad::gamepad::gilrs::Event as GEvent;
 use te_renderer::{
     state::{GpuState, Section, TeState},
     text::FontReference,
@@ -13,12 +13,12 @@ use winit::{
 };
 
 #[cfg(feature = "draw_when_told")]
-type EventHandler = Box<dyn FnMut(Event<ControllerEvent>) -> bool>;
+type EventHandler = Box<dyn FnMut(Event<GEvent>) -> bool>;
 #[cfg(not(feature = "draw_when_told"))]
-type EventHandler = Box<dyn FnMut(Event<ControllerEvent>)>;
+type EventHandler = Box<dyn FnMut(Event<GEvent>)>;
 
 pub fn run<T: TextSender + 'static>(
-    event_loop: EventLoop<ControllerEvent>,
+    event_loop: EventLoop<GEvent>,
     window: Rc<RefCell<Window>>,
     gpu: Rc<RefCell<GpuState>>,
     state: Rc<RefCell<TeState>>,
