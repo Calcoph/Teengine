@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 # window creator
-winit = "0.27.2"
+winit = "0.28.6"
 gilrs = { version = "0.10.2" }
 
 # renderer

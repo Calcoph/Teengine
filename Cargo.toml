@@ -9,6 +9,6 @@ members = [
 ]
 
 [patch.crates-io]
-imgui-winit-support = { git = "https://github.com/Calcoph/imgui-rs" }
-imgui = { git = "https://github.com/Calcoph/imgui-rs" }
-imgui-wgpu = { git = "https://github.com/Yatekii/imgui-wgpu-rs" }
+imgui-winit-support = { git = "https://github.com/Calcoph/imgui-rs", rev = "e5345a2" }
+imgui = { git = "https://github.com/Calcoph/imgui-rs", rev = "e5345a2" }
+imgui-wgpu = { git = "https://github.com/Yatekii/imgui-wgpu-rs", rev = "89394e0" }
