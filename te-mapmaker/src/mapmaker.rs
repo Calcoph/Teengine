@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
@@ -197,7 +199,7 @@ impl ImguiState {
                 .position([400.0, 200.0], Condition::FirstUseEver)
                 .build(|| {
                     let state = &mut self.model_selector_win;
-                    ui.text("Put your gltf/glb models in\nignore/resources/ so they show up here");
+                    ui.text("Put your gltf/glb models in\nresources/ so they show up here");
                     ui.separator();
                     ui.child_window("models").size([250.0, 0.0]).build(|| {
                         if ui.button("Refresh") {
@@ -394,11 +396,11 @@ fn show_resources_directory(
                 if name.contains(&window_state.search_str_gltf) && name != "" {
                     if ui.button(name) {
                         renderer_s.change_model(
-                            &(dir.directory_name.clone() + "/" + &file_name),
+                            Path::new(&dir.directory_name).join(file_name).to_str().unwrap(),
                             gpu,
                             state,
                             mod_instance,
-                        ) // TODO: don't hardcode "/"
+                        )
                     };
                 }
             }
@@ -437,8 +439,7 @@ fn show_maps_directory(
                 if name.contains(&window_state.search_str_temap) && name != "" {
                     if ui.button(name) {
                         state.forget_all_instances();
-                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu).unwrap();
-                        // TODO: don't hardcode "/"
+                        state.load_map(Path::new(&dir.directory_name).join(file_name).to_str().unwrap(), &gpu).unwrap();
                     };
                 }
             }
@@ -581,12 +582,8 @@ fn get_resource_names(resource_files_directory: &str, dir_name: &str) -> Directo
                     .to_str()
                     .expect("Invalid file name")
                     .to_string();
-                let name = match dir_name {
-                    "" => "".to_string(),
-                    s => s.to_string() + "/", // TODO: don't hardcode "/"
-                };
                 let file_path = std::path::Path::new(&(file_name));
-                let full_path = name + &file_name;
+                let full_path = Path::new(dir_name).join(&file_name);
                 let full_path = std::path::Path::new(&(full_path));
                 if path.join(file_path).is_dir() {
                     dir.files.push(File::D(get_resource_names(
@@ -612,7 +609,7 @@ fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
         directory_name: dir_name.to_string(),
         files: Vec::new(),
     };
-    let path = map_files_directory.to_string() + "/" + dir_name; // TODO: don't hardcode "/"
+    let path = Path::new(map_files_directory).join(dir_name);
     let path = std::path::Path::new(&(path));
     match std::fs::read_dir(path) {
         Ok(files) => {
@@ -623,11 +620,7 @@ fn get_map_names(map_files_directory: &str, dir_name: &str) -> Directory {
                     .to_str()
                     .expect("Invalid file name")
                     .to_string();
-                let name = match dir_name {
-                    "" => "".to_string(),
-                    s => s.to_string() + "/", // TODO: don't hardcode "/"
-                };
-                let full_path = name + &file_name;
+                let full_path = Path::new(dir_name).join(&file_name);
                 let full_path = std::path::Path::new(&(full_path));
                 if path.join(full_path).is_dir() {
                     dir.files.push(File::D(get_map_names(
