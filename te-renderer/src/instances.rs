@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
+use aabb_quadtree::{QuadTree, Spatial, ItemId};
 use cgmath::Vector3;
+use euclid::{TypedRect, TypedPoint2D, TypedSize2D, Rect};
 
 pub mod animation;
 pub(crate) mod builders;
@@ -26,125 +28,6 @@ use self::{
     sprite::{AnimatedSprite, InstancedSprite},
     text::{InstancedText, OldTextReference},
 };
-
-struct QuadTree {}
-
-#[derive(Debug)]
-struct RenderMatrix {
-    cells: Vec<Vec<Vec<InstanceReference>>>,
-    cols: usize,
-    chunk_size: (f32, f32, f32),
-}
-
-impl RenderMatrix {
-    fn new(chunk_size: (f32, f32, f32)) -> Self {
-        RenderMatrix {
-            cells: Vec::new(),
-            cols: 0,
-            chunk_size,
-        }
-    }
-
-    fn register_instance(
-        &mut self,
-        reference: InstanceReference,
-        position: cgmath::Vector3<f32>,
-        (max_x, min_x, max_z, min_z): (f32, f32, f32, f32),
-    ) {
-        let max_x = max_x + position.x;
-        let min_x = min_x + position.x;
-        let max_z = max_z + position.z;
-        let min_z = min_z + position.z;
-        let corners = vec![
-            (max_x, max_z),
-            (max_x, min_z),
-            (min_x, max_z),
-            (min_x, min_z),
-        ];
-        let chunks = corners
-            .into_iter()
-            .map(|(x, z)| {
-                // TODO: take into account that f32 can be negative, but row and col can never be negative
-                // Right now this is "patched" by doing .abs(), but this means that no instances placed in a negative coordinate will be rendered correctly
-                let row = ((z / self.chunk_size.2).floor()).abs() as usize;
-                let col = ((x / self.chunk_size.0).floor()).abs() as usize;
-                (row, col)
-            })
-            .collect::<HashSet<(usize, usize)>>();
-        chunks.into_iter().for_each(|(row, col)| {
-            while self.cells.len() <= row {
-                self.cells.push(Vec::new());
-            }
-            let row_vec = self.cells.get_mut(row).expect("Unreachable");
-            while row_vec.len() <= col {
-                row_vec.push(Vec::new());
-            }
-            row_vec
-                .get_mut(col)
-                .expect("Unreachable")
-                .push(reference.clone());
-            if col + 1 > self.cols {
-                self.cols = col + 1;
-            }
-        });
-    }
-
-    fn unregister_instance(
-        &mut self,
-        reference: &InstanceReference,
-        position: cgmath::Vector3<f32>,
-        (max_x, min_x, max_z, min_z): (f32, f32, f32, f32),
-    ) {
-        let max_x = max_x + position.x;
-        let min_x = min_x + position.x;
-        let max_z = max_z + position.z;
-        let min_z = min_z + position.z;
-        let corners = vec![
-            (max_x, max_z),
-            (max_x, min_z),
-            (min_x, max_z),
-            (min_x, min_z),
-        ];
-        let chunks = corners
-            .into_iter()
-            .map(|(x, z)| {
-                // TODO: take into account that f32 can be negative, but row and col can never be negative
-                let row = ((z / self.chunk_size.2).floor()) as usize;
-                let col = ((x / self.chunk_size.0).floor()) as usize;
-                (row, col)
-            })
-            .collect::<HashSet<(usize, usize)>>();
-        chunks.into_iter().for_each(|(row, col)| {
-            // TODO: analyze these "expect" to see if can return error instead
-            let row_vec = self.cells.get_mut(row).expect("Index out of bounds");
-            let chunk = row_vec.get_mut(col).expect("Index out of bounds");
-            let pos = chunk
-                .iter()
-                .enumerate()
-                .find(|(_, item)| **item == *reference)
-                .expect("Instance wasn't registered")
-                .0;
-            chunk.remove(pos);
-        });
-    }
-
-    fn update_rendered(&mut self, view_cone: &camera::Frustum) -> Vec<&InstanceReference> {
-        let mut viewed_chunks = Vec::new();
-        for (i, cell) in self.cells.iter().enumerate() {
-            for (j, references) in cell.iter().enumerate() {
-                if view_cone.is_inside(i, j) {
-                    viewed_chunks.extend(references.iter());
-                }
-            }
-        }
-        viewed_chunks
-    }
-
-    fn empty(&mut self) {
-        self.cells = Vec::new();
-        self.cols = 0;
-    }
-}
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -516,7 +399,9 @@ pub trait InstancedDraw {
 pub(crate) enum InstanceType {
     Sprite,
     Anim2D,
-    Opaque3D,
+    Opaque3D {
+        id: Option<ItemId>
+    },
 }
 
 /// Handle of a 3D model or 2D sprite. You will need it when changing their properties.
@@ -629,6 +514,35 @@ impl<T> InstanceVec<T> for Vec<T> {
     }
 }
 
+#[derive(Debug)]
+struct QuadTreeElement {
+    instance: InstanceReference,
+    aabb: TypedRect<f32, f32>
+}
+
+impl QuadTreeElement {
+    fn new(instance: InstanceReference, x: f32, z: f32, (max_x, min_x, max_z, min_z): (f32, f32, f32, f32)) -> QuadTreeElement {
+        let x = x + min_x;
+        let z = z + min_z;
+
+        let width = max_x - min_x;
+        let height = max_z - min_z;
+        QuadTreeElement {
+            instance,
+            aabb: TypedRect::new(
+                TypedPoint2D::new(x, z),
+                TypedSize2D::new(width, height)
+            )
+        }
+    }
+}
+
+impl Spatial<f32> for QuadTreeElement {
+    fn aabb(&self) -> TypedRect<f32, f32> {
+        self.aabb
+    }
+}
+
 /// Manages the window's 3D models, 2D sprites and 2D texts
 #[derive(Debug)]
 pub struct InstancesState {
@@ -643,7 +557,7 @@ pub struct InstancesState {
     pub resources_path: String,
     pub default_texture_path: String,
     font: Font,
-    render_matrix: RenderMatrix,
+    qtree: QuadTree<QuadTreeElement, f32, [(aabb_quadtree::ItemId, TypedRect<f32, f32>);0]>,
 }
 
 impl InstancesState {
@@ -662,7 +576,7 @@ impl InstancesState {
         let texts = Vec::new();
         let deleted_texts = Vec::new();
         let font = Font::new(font_dir_path);
-        let render_matrix = RenderMatrix::new(chunk_size);
+        let qtree = QuadTree::new(TypedRect::new(TypedPoint2D::origin(), TypedSize2D::new(1000.0, 1000.0)), true, 4, 4, 1000, 0);
 
         InstancesState {
             opaque_instances,
@@ -676,7 +590,7 @@ impl InstancesState {
             resources_path,
             default_texture_path,
             font,
-            render_matrix,
+            qtree,
         }
     }
 
@@ -738,7 +652,7 @@ impl InstancesState {
         let mut reference = InstanceReference {
             name: model_name.to_string(),
             index: 0, // 0 is placeholder
-            dimension: InstanceType::Opaque3D,
+            dimension: InstanceType::Opaque3D {id: None},
         };
 
         reference.index = self
@@ -749,15 +663,15 @@ impl InstancesState {
             .len()
             - 1;
 
-        self.render_matrix.register_instance(
-            reference.clone(),
-            cgmath::vec3(x, y, z),
-            self.opaque_instances
-                .instance(&reference)
-                .get_m()
-                .model
-                .get_extremes(),
-        );
+        let id = self.qtree.insert(
+            QuadTreeElement::new(reference.clone(), x, z, self.opaque_instances
+            .instance(&reference)
+            .get_m()
+            .model
+            .get_extremes())
+            );
+
+        reference.dimension = InstanceType::Opaque3D { id };
 
         Ok(reference)
     }
@@ -791,20 +705,18 @@ impl InstancesState {
             self.transparent_instances.insert(model_name.to_string());
         }
 
-        let reference = InstanceReference {
+        let mut reference = InstanceReference {
             name: model_name.to_string(),
             index: 0, // TODO: Should index be 0?
-            dimension: InstanceType::Opaque3D,
+            dimension: InstanceType::Opaque3D {id: None},
         };
 
-        self.render_matrix.register_instance(
-            reference.clone(),
-            position,
-            self.opaque_instances
-                .instance(&reference)
-                .get_a()
-                .get_extremes(),
-        );
+        let id = self.qtree.insert(QuadTreeElement::new(reference.clone(), position.x, position.z, self.opaque_instances
+        .instance(&reference)
+        .get_a()
+        .get_extremes()));
+
+        reference.dimension = InstanceType::Opaque3D { id };
 
         reference
     }
@@ -840,7 +752,7 @@ impl InstancesState {
         let mut reference = InstanceReference {
             name: model_name.to_string(),
             index: 0, // 0 is placeholder
-            dimension: InstanceType::Opaque3D,
+            dimension: InstanceType::Opaque3D { id: None }
         };
 
         reference.index = self
@@ -851,15 +763,13 @@ impl InstancesState {
             .len()
             - 1;
 
-        self.render_matrix.register_instance(
-            reference.clone(),
-            cgmath::vec3(x, y, z),
-            self.opaque_instances
-                .instance(&reference)
-                .get_m()
-                .model
-                .get_extremes(),
-        );
+        let id = self.qtree.insert(QuadTreeElement::new(reference.clone(), x, z, self.opaque_instances
+        .instance(&reference)
+        .get_m()
+        .model
+        .get_extremes()));
+
+        reference.dimension = InstanceType::Opaque3D { id };
 
         Ok(reference)
     }
@@ -1127,7 +1037,7 @@ impl InstancesState {
     pub(crate) fn forget_all_3d_instances(&mut self) {
         self.opaque_instances = HashMap::new();
         self.transparent_instances = HashSet::new();
-        self.render_matrix.empty();
+        self.qtree = QuadTree::new(TypedRect::new(TypedPoint2D::origin(), TypedSize2D::new(1000.0, 1000.0)), true, 4, 4, 1000, 0);
     }
 
     pub(crate) fn forget_all_instances(&mut self) {
@@ -1135,7 +1045,7 @@ impl InstancesState {
         self.sprite_instances = HashMap::new();
         self.opaque_instances = HashMap::new();
         self.transparent_instances = HashSet::new();
-        self.render_matrix.empty();
+        self.qtree = QuadTree::new(TypedRect::new(TypedPoint2D::origin(), TypedSize2D::new(1000.0, 1000.0)), true, 4, 4, 1000, 0);
     }
 
     /// Saves all the 3D models' positions in a .temap file.
@@ -1180,7 +1090,7 @@ impl InstancesState {
     /// Ignores z value on 2D sprites.
     pub(crate) fn move_instance(
         &mut self,
-        instance_ref: &InstanceReference,
+        instance_ref: &mut InstanceReference,
         direction: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
@@ -1191,38 +1101,22 @@ impl InstancesState {
                 let model = self.sprite_instances.mut_instance(instance_ref);
                 model.move_instance(instance_ref.index, direction, queue, screen_w, screen_h);
             }
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { mut id } => {
                 let model = self.opaque_instances.mut_instance(instance_ref);
                 match model {
                     DrawModel::M(m) => {
                         {
                             let instance = m.instances.instance(instance_ref);
-                            self.render_matrix.unregister_instance(
-                                instance_ref,
-                                instance.position,
-                                m.model.get_extremes(),
-                            );
+                            self.qtree.remove(id.take().unwrap()); // TODO: use the returning QuadTreeElement instead of creating a new one right after
                         }
                         m.move_instance(instance_ref.index, direction, queue);
                         let instance = m.instances.instance(instance_ref);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            instance.position,
-                            m.model.get_extremes(),
-                        );
+                        id = self.qtree.insert(QuadTreeElement::new(instance_ref.clone(), instance.position.x, instance.position.z, m.model.get_extremes()));
                     }
                     DrawModel::A(a) => {
-                        self.render_matrix.unregister_instance(
-                            instance_ref,
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
+                        self.qtree.remove(id.take().unwrap()); // TODO: use the returning QuadTreeElement instead of creating a new one right after
                         a.move_instance(instance_ref.index, direction, queue);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
+                        id = self.qtree.insert(QuadTreeElement::new(instance_ref.clone(), a.instance.position.x, a.instance.position.z, a.get_extremes()));
                     }
                 };
             }
@@ -1237,7 +1131,7 @@ impl InstancesState {
     /// Ignores z value on 2D sprites.
     pub(crate) fn set_instance_position(
         &mut self,
-        instance_ref: &InstanceReference,
+        instance_ref: &mut InstanceReference,
         position: cgmath::Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
@@ -1254,38 +1148,22 @@ impl InstancesState {
                     screen_h,
                 );
             }
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { mut id } => {
                 let model = self.opaque_instances.mut_instance(instance_ref);
                 match model {
                     DrawModel::M(m) => {
                         {
                             let instance = m.instances.instance(instance_ref);
-                            self.render_matrix.unregister_instance(
-                                instance_ref,
-                                instance.position,
-                                m.model.get_extremes(),
-                            );
+                            self.qtree.remove(id.take().unwrap()); // TODO: use the returning QuadTreeElement instead of creating a new one right after
                         }
                         m.set_instance_position(instance_ref.index, position, queue);
                         let instance = m.instances.instance(instance_ref);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            instance.position,
-                            m.model.get_extremes(),
-                        );
+                        id = self.qtree.insert(QuadTreeElement::new(instance_ref.clone(), instance.position.x, instance.position.z, m.model.get_extremes()));
                     }
                     DrawModel::A(a) => {
-                        self.render_matrix.unregister_instance(
-                            instance_ref,
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
+                        self.qtree.remove(id.take().unwrap()); // TODO: use the returning QuadTreeElement instead of creating a new one right after
                         a.set_instance_position(instance_ref.index, position, queue);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
+                        self.qtree.insert(QuadTreeElement::new(instance_ref.clone(), a.instance.position.x, a.instance.position.z, a.get_extremes()));
                     }
                 };
             }
@@ -1304,7 +1182,7 @@ impl InstancesState {
                 let position = sprite.instances.instance(instance).position;
                 (position.x, position.y, sprite.depth)
             }
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { .. } => {
                 let model = self.opaque_instances.instance(instance);
                 match model {
                     DrawModel::M(m) => m.instances.instance(instance).position.into(),
@@ -1333,7 +1211,7 @@ impl InstancesState {
                 let sprite = self.sprite_instances.mut_instance(instance);
                 sprite.resize(instance.index, new_size, queue);
             }
-            InstanceType::Opaque3D => panic!("That is not a sprite"),
+            InstanceType::Opaque3D { .. } => panic!("That is not a sprite"),
             InstanceType::Anim2D => {
                 let sprite = self.animated_sprites.mut_instance(instance);
                 sprite.resize(instance.index, new_size, queue);
@@ -1350,7 +1228,7 @@ impl InstancesState {
                 let sprite = self.get_sprite(instance);
                 sprite.size.into()
             }
-            InstanceType::Opaque3D => panic!("That is not a sprite"),
+            InstanceType::Opaque3D { .. } => panic!("That is not a sprite"),
             InstanceType::Anim2D => {
                 let sprite = self.get_anim_sprite(instance);
                 sprite.size.into()
@@ -1472,7 +1350,7 @@ impl InstancesState {
     ) {
         match instance.dimension {
             InstanceType::Sprite => self.get_mut_sprite(instance).animation = Some(animation),
-            InstanceType::Opaque3D => self.get_mut_model(instance).animation = Some(animation),
+            InstanceType::Opaque3D { .. } => self.get_mut_model(instance).animation = Some(animation),
             InstanceType::Anim2D => todo!(),
         }
     }
@@ -1557,7 +1435,7 @@ impl InstancesState {
         match instance.dimension {
             InstanceType::Sprite => (),
             InstanceType::Anim2D => (),
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { .. } => {
                 let model = self.opaque_instances.get_mut(instance.get_name());
                 match model {
                     Some(mo) => match mo {
@@ -1580,7 +1458,7 @@ impl InstancesState {
                 let anim = self.animated_sprites.mut_instance(instance);
                 anim.hide();
             }
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { .. } => {
                 let model = self.opaque_instances.mut_instance(instance);
                 model.hide(instance.get_id());
             }
@@ -1606,7 +1484,7 @@ impl InstancesState {
                 let anim = self.animated_sprites.mut_instance(instance);
                 anim.show();
             }
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { .. } => {
                 let model = self.opaque_instances.mut_instance(instance);
                 model.show(instance.get_id());
             }
@@ -1632,7 +1510,7 @@ impl InstancesState {
                 let anim = self.animated_sprites.instance(instance);
                 anim.is_hidden()
             }
-            InstanceType::Opaque3D => {
+            InstanceType::Opaque3D { .. } => {
                 let model = self.opaque_instances.instance(instance);
                 model.is_hidden(instance.get_id())
             }

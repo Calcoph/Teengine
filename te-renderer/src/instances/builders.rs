@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     model::InstancedModel, sprite::InstancedSprite, DrawModel, InstanceMap, InstanceReference,
-    InstanceType, InstancedDraw,
+    InstanceType, InstancedDraw, QuadTreeElement,
 };
 
 enum ModelType {
@@ -114,7 +114,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 let mut reference = InstanceReference {
                     name: self.model_name.to_string(),
                     index: 0, // 0 is placeholder
-                    dimension: InstanceType::Opaque3D,
+                    dimension: InstanceType::Opaque3D { id: None },
                 };
 
                 reference.index = instances
@@ -125,16 +125,14 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     .len()
                     - 1;
 
-                instances.render_matrix.register_instance(
-                    reference.clone(),
-                    cgmath::vec3(x, y, z),
-                    instances
-                        .opaque_instances
-                        .instance(&reference)
-                        .get_m()
-                        .model
-                        .get_extremes(),
-                );
+                let id = instances.qtree.insert(QuadTreeElement::new(reference.clone(), x, z, instances
+                    .opaque_instances
+                    .instance(&reference)
+                    .get_m()
+                    .model
+                    .get_extremes()));
+
+                reference.dimension = InstanceType::Opaque3D { id };
 
                 Ok(reference)
             }
@@ -153,21 +151,19 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                         .insert(self.model_name.to_string());
                 }
 
-                let reference = InstanceReference {
+                let mut reference = InstanceReference {
                     name: self.model_name.to_string(),
                     index: 0, // TODO: Should index be 0?
-                    dimension: InstanceType::Opaque3D,
+                    dimension: InstanceType::Opaque3D { id: None },
                 };
 
-                instances.render_matrix.register_instance(
-                    reference.clone(),
-                    position,
-                    instances
-                        .opaque_instances
-                        .instance(&reference)
-                        .get_a()
-                        .get_extremes(),
-                );
+                let id = instances.qtree.insert(QuadTreeElement::new(reference.clone(), position.x, position.z, instances
+                    .opaque_instances
+                    .instance(&reference)
+                    .get_a()
+                    .get_extremes()));
+
+                reference.dimension = InstanceType::Opaque3D { id };
 
                 Ok(reference)
             }
@@ -202,7 +198,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 let mut reference = InstanceReference {
                     name: self.model_name.to_string(),
                     index: 0, // 0 is placeholder
-                    dimension: InstanceType::Opaque3D,
+                    dimension: InstanceType::Opaque3D { id: None },
                 };
 
                 reference.index = instances
@@ -213,16 +209,14 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     .len()
                     - 1;
 
-                instances.render_matrix.register_instance(
-                    reference.clone(),
-                    cgmath::vec3(x, y, z),
-                    instances
-                        .opaque_instances
-                        .instance(&reference)
-                        .get_m()
-                        .model
-                        .get_extremes(),
-                );
+                let id = instances.qtree.insert(QuadTreeElement::new(reference.clone(), x, z, instances
+                    .opaque_instances
+                    .instance(&reference)
+                    .get_m()
+                    .model
+                    .get_extremes()));
+
+                reference.dimension = InstanceType::Opaque3D { id };
 
                 Ok(reference)
             }

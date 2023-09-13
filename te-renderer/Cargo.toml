@@ -12,6 +12,8 @@ wgpu = "0.17.0"
 winit = "0.28.6"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 sorted-vec = "0.8.0"
+aabb-quadtree = "0.2.0"
+euclid = "0.19.9"
 
 # Text
 wgpu_glyph = "0.21"
