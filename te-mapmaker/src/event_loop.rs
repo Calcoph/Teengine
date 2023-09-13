@@ -117,7 +117,10 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     } => mapmaker.resize(**new_inner_size),
                     WindowEvent::ThemeChanged(_theme) => (), //println!("TODO: ThemeChanged ({:?})", theme), // TODO
                     WindowEvent::Ime(_) => (),               // TODO
-                    WindowEvent::Occluded(_) => (),          // TODO
+                    WindowEvent::Occluded(_) => (),
+                    WindowEvent::TouchpadMagnify { device_id, delta, phase } => (),
+                    WindowEvent::SmartMagnify { device_id } => (),
+                    WindowEvent::TouchpadRotate { device_id, delta, phase } => (),          // TODO
                 }
             }
             Event::DeviceEvent {

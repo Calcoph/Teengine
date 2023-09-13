@@ -7,3 +7,4 @@ imgui.ini
 /te-player/examples/test.rs
 Cargo.lock
 /target-win
+/target-lin
