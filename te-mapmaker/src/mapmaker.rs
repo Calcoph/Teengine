@@ -3,7 +3,7 @@ use std::path::Path;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
-use wgpu;
+use wgpu::{self, CommandEncoder, CommandBuffer};
 use winit::{event::WindowEvent, window::Window};
 
 use te_renderer::{
@@ -120,6 +120,7 @@ impl ImguiState {
         window: &Window,
         resource_files_directory: &str,
         map_files_directory: &str,
+        encoders: &mut Vec<CommandBuffer>
     ) {
         self.platform
             .prepare_frame(self.context.io_mut(), window)
@@ -327,7 +328,8 @@ impl ImguiState {
                 )
                 .expect("Rendering failed");
         }
-        self.gpu.queue.submit(std::iter::once(encoder.finish())); // TODO: call submit only once. right now it is called twice
+
+        encoders.push(encoder.finish());
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -356,14 +358,17 @@ impl ImguiState {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoders = Vec::new();
         self.renderer_s.render_state(
             &view,
             tile_size,
             &mut self.state,
             &self.gpu,
             &mut self.mod_instance.modifying_instance,
+            &mut encoders
         );
-        self.render_imgui(&view, window, resource_files_directory, map_files_directory);
+        self.render_imgui(&view, window, resource_files_directory, map_files_directory, &mut encoders);
+        self.gpu.queue.submit(encoders);
         output.present();
 
         Ok(())
@@ -465,6 +470,7 @@ impl RendererState {
         state: &mut TeState,
         gpu: &GpuState,
         modifying_instance: &mut ModifyingInstance,
+        encoders: &mut Vec<CommandBuffer>
     ) {
         let mut encoder = gpu
             .device
@@ -542,7 +548,7 @@ impl RendererState {
             }
         }
 
-        gpu.queue.submit(std::iter::once(encoder.finish()));
+        encoders.push(encoder.finish());
     }
 
     pub fn change_model(
