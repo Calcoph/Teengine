@@ -8,7 +8,7 @@ use te_renderer::{
     camera::SAFE_CAMERA_ANGLE,
     initial_config::InitialConfiguration,
     resources,
-    state::{GpuState, TeState},
+    state::{GpuState, TeState, TeColor},
 };
 
 use crate::modifiying_instance::{self, InstancesState, ModifyingInstance};
@@ -85,6 +85,7 @@ impl ImguiState {
             blinking,
             blink_time,
             blink_freq,
+            background_color: TeColor::new(0.0, 0.0, 0.0)
         };
 
         let mod_instance = InstancesState::new(
@@ -282,6 +283,16 @@ impl ImguiState {
                     let mut blink_freq = self.renderer_s.blink_freq as i32;
                     ui.slider("Blinking frequency", 0, 20, &mut blink_freq);
                     self.renderer_s.blink_freq = blink_freq as u64;
+
+                    let old_color = self.renderer_s.background_color;
+                    //let mut new_color = [(old_color.get_red()*255.0) as f32, (old_color.get_green()*255.0) as f32, (old_color.get_blue()*255.0) as f32];
+                    let mut new_color = [(old_color.get_red()) as f32, (old_color.get_green()) as f32, (old_color.get_blue()) as f32];
+                    ui.color_picker3("Background color", &mut new_color);
+                    //let new_color = TeColor::new((new_color[0]/255.0) as f64, (new_color[1]/255.0) as f64, (new_color[2]/255.0) as f64);
+                    let new_color = TeColor::new((new_color[0]) as f64, (new_color[1]) as f64, (new_color[2]) as f64);
+                    if old_color != new_color {
+                        self.renderer_s.background_color = new_color
+                    }
                 });
             ui.show_demo_window(&mut opened);
         }
@@ -426,7 +437,7 @@ fn show_maps_directory(
                 if name.contains(&window_state.search_str_temap) && name != "" {
                     if ui.button(name) {
                         state.forget_all_instances();
-                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu);
+                        state.load_map(&(dir.directory_name.clone() + "/" + &file_name), &gpu).unwrap();
                         // TODO: don't hardcode "/"
                     };
                 }
@@ -442,6 +453,7 @@ struct RendererState {
     blinking: bool,
     blink_time: std::time::Instant,
     blink_freq: u64,
+    background_color: TeColor
 }
 
 impl RendererState {
@@ -473,9 +485,9 @@ impl RendererState {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
+                                r: self.background_color.get_red(),
+                                g: self.background_color.get_green(),
+                                b: self.background_color.get_blue(),
                                 a: 1.0,
                             }),
                             store: true,

@@ -113,7 +113,7 @@ impl GpuState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TeColor {
     red: f64,
     green: f64,
@@ -139,6 +139,10 @@ impl TeColor {
         self.red
     }
 
+    pub fn get_u8_red(&self) -> u8 {
+        (self.red * u8::MAX as f64) as u8
+    }
+
     pub fn set_red(&mut self, mut red: f64) {
         if red < 0.0 {
             eprintln!(
@@ -158,6 +162,10 @@ impl TeColor {
         self.green
     }
 
+    pub fn get_u8_green(&self) -> u8 {
+        (self.green * u8::MAX as f64) as u8
+    }
+
     pub fn set_green(&mut self, mut green: f64) {
         if green < 0.0 {
             eprintln!(
@@ -175,6 +183,10 @@ impl TeColor {
 
     pub fn get_blue(&self) -> f64 {
         self.blue
+    }
+
+    pub fn get_u8_blue(&self) -> u8 {
+        (self.blue * u8::MAX as f64) as u8
     }
 
     pub fn set_blue(&mut self, mut blue: f64) {
