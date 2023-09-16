@@ -19,6 +19,7 @@ async fn as_main() {
         context,
         platform,
         renderer,
+        gamepad_handler
     } = te_player::imgui::prepare(
         InitialConfiguration {
             screen_width: 1000,
@@ -47,6 +48,7 @@ async fn as_main() {
         renderer,
         PlaceholderTextSender::new(),
         Box::new(|_, _, _| {}),
+        gamepad_handler
     );
 }
 

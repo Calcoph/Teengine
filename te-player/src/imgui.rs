@@ -2,6 +2,7 @@ pub mod event_loop;
 
 use image::io::Reader as ImageReader;
 pub use imgui::*;
+use imgui_gilrs::GamepadHandler;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
 use std::{cell::RefCell, error::Error, rc::Rc};
@@ -26,6 +27,7 @@ pub struct PrepareResult {
     pub context: Context,
     pub platform: WinitPlatform,
     pub renderer: Renderer,
+    pub gamepad_handler: GamepadHandler
 }
 
 /// Get all the structs needed to start the engine, skipping the boilerplate.
@@ -45,7 +47,7 @@ pub async fn prepare(
     }?;
 
     let event_loop = EventLoopBuilder::with_user_event().build();
-    gamepad::listen(event_loop.create_proxy());
+    let gamepad_handler = gamepad::listen(event_loop.create_proxy());
 
     let wb = window::WindowBuilder::new()
         .with_title(&config.window_name)
@@ -94,6 +96,7 @@ pub async fn prepare(
         context,
         platform,
         renderer,
+        gamepad_handler
     })
 }
 

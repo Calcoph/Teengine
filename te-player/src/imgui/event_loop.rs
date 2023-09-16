@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use imgui::{Context, Io};
+use imgui_gilrs::GamepadHandler;
 use imgui_wgpu::Renderer;
 use imgui_winit_support::WinitPlatform;
 use te_gamepad::gamepad::gilrs::Event as GEvent;
@@ -32,6 +33,7 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
     mut renderer: Renderer,
     text: Rc<RefCell<T>>,
     mut event_handler: EventHandler<I>,
+    mut gamepad_handler: GamepadHandler
 ) {
     let mut last_render_time = std::time::Instant::now();
     event_loop.run(move |event, _window_target, control_flow| {
@@ -100,7 +102,7 @@ pub fn run<I: ImguiState + 'static, T: TextSender + 'static>(
             _ => (),
         }
 
-        platform.handle_controller_event(context.io_mut(), &window.borrow(), &event);
+        gamepad_handler.handle_event(context.io_mut(), &window.borrow(), &mut platform, &event);
         #[cfg(feature = "draw_when_told")]
         if event_handler(event, &mut imgui_state, context.io_mut()) {
             window.borrow().request_redraw()

@@ -27,3 +27,4 @@ path = "../te-renderer"
 
 [dependencies.te-gamepad]
 path = "../te-gamepad"
+features = ["imgui"]

@@ -40,7 +40,7 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
     }?;
 
     let event_loop = EventLoopBuilder::with_user_event().build();
-    gamepad::listen(event_loop.create_proxy());
+    let mut gamepad_handler = gamepad::listen(event_loop.create_proxy());
     let wb = WindowBuilder::new()
         .with_title("Tilengine")
         .with_inner_size(dpi::LogicalSize::new(
@@ -173,8 +173,6 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
             _ => (), // ignore windowevents that aren't for current window
         }
 
-        mapmaker
-            .platform
-            .handle_controller_event(mapmaker.context.io_mut(), &window, &event)
+        gamepad_handler.handle_event(mapmaker.context.io_mut(), &window, &mut mapmaker.platform, &event)
     })
 }

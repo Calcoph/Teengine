@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 winit = "0.28.6"
 gilrs = { version = "0.10.2" }
+imgui-gilrs ={ git = "https://github.com/Calcoph/imgui-gilrs", branch = "uptodate-winit", features = ["winit"], optional = true }
+
+[features]
+imgui = ["imgui-gilrs"]
