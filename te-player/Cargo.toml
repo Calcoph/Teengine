@@ -18,7 +18,7 @@ pollster = "0.3"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 cgmath = "0.18"
 
-# imgui-0-8
+# imgui
 imgui = { version = "0.11.0", optional = true }
 imgui-wgpu = { version = "0.24.0", optional = true }
 imgui-winit-support = { version = "0.11.0", default-features = false, optional = true}
@@ -40,5 +40,5 @@ path = "../te-renderer"
 path = "../te-gamepad"
 
 [features]
-imgui-0-8 = ["imgui-winit-support", "imgui", "imgui-wgpu"]
+imgui = ["imgui-winit-support", "dep:imgui", "imgui-wgpu"]
 draw_when_told = []
