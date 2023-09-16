@@ -1,4 +1,4 @@
-#[cfg(feature = "imgui-0-8")]
+#[cfg(feature = "imgui")]
 pub mod imgui;
 mod raw;
 
