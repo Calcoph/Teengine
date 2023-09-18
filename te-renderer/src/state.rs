@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 pub use glyph_brush::{Section, Text};
 use wgpu::{
     util::DeviceExt, BindGroupLayout, CommandBuffer, CommandEncoder, InstanceDescriptor,
@@ -11,7 +13,7 @@ use winit::{
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
 pub use crate::instances::builders::*;
 use crate::{
-    camera,
+    camera::{self, CameraState},
     initial_config::InitialConfiguration,
     instances::{InstanceRaw, InstancesState},
     model, temap, texture,
@@ -205,6 +207,126 @@ impl TeColor {
     }
 }
 
+struct BindGroupLayouts {
+    texture: wgpu::BindGroupLayout,
+    camera: wgpu::BindGroupLayout,
+    projection: wgpu::BindGroupLayout,
+}
+
+impl BindGroupLayouts {
+    fn new(device: &wgpu::Device) -> Self {
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        // This should match the filterable field of the
+                        // corresponding Texture entry above.
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            });
+
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("camera_bind_group_layout"),
+            });
+        
+        let projection_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("projection_bind_group_layout"),
+            });
+        
+        BindGroupLayouts {
+            texture: texture_bind_group_layout,
+            camera: camera_bind_group_layout,
+            projection: projection_bind_group_layout,
+        }
+    }
+}
+
+struct PipeLineLayouts {
+    render_pipeline_layout: wgpu::PipelineLayout,
+    sprite_render_pipeline_layout: wgpu::PipelineLayout,
+    clickable_pipeline_layout: wgpu::PipelineLayout,
+}
+
+impl PipeLineLayouts {
+    fn new(
+        device: &wgpu::Device,
+        bind_group_layouts: &BindGroupLayouts
+    ) -> PipeLineLayouts {
+        let BindGroupLayouts {
+            texture: texture_bind_group_layout,
+            camera: camera_bind_group_layout,
+            projection: projection_bind_group_layout,
+        } = bind_group_layouts;
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let sprite_render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Sprite Render Pipeline Layout"),
+                bind_group_layouts: &[&projection_bind_group_layout, &texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let clickable_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Clickable Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout],
+                push_constant_ranges: &[PushConstantRange {
+                    stages: ShaderStages::VERTEX,
+                    range: 0..4,
+                }],
+            });
+
+        PipeLineLayouts {
+            render_pipeline_layout,
+            sprite_render_pipeline_layout,
+            clickable_pipeline_layout,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct PipeLines {
     render_3d: wgpu::RenderPipeline,
@@ -212,6 +334,109 @@ struct PipeLines {
     sprite: wgpu::RenderPipeline,
     clickable: wgpu::RenderPipeline,
     clickable_color: wgpu::RenderPipeline,
+}
+
+impl PipeLines {
+    fn new(gpu: &GpuState, layouts: PipeLineLayouts) -> Self {
+        let PipeLineLayouts {
+            render_pipeline_layout,
+            sprite_render_pipeline_layout,
+            clickable_pipeline_layout,
+        } = layouts;
+        let shader_3d: Cow<_> = include_str!("shader.wgsl").into();
+        let clickable_shader: Cow<_> = include_str!("clickable_shader.wgsl").into();
+        let shader_2d: Cow<_> = include_str!("2d_shader.wgsl").into();
+
+        let render_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_3D"),
+                source: wgpu::ShaderSource::Wgsl(shader_3d.clone()),
+            };
+            create_render_pipeline(
+                &gpu.device,
+                &render_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Mask,
+                "Render Pipeline",
+            )
+        };
+
+        let transparent_render_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_3D_transparent"),
+                source: wgpu::ShaderSource::Wgsl(shader_3d),
+            };
+            create_render_pipeline(
+                &gpu.device,
+                &render_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Main,
+                "Transparent pipeline",
+            )
+        };
+
+        let clickable_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_clickable"),
+                source: wgpu::ShaderSource::Wgsl(clickable_shader.clone()),
+            };
+            create_r32uint_render_pipeline(
+                &gpu.device,
+                &clickable_pipeline_layout,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Main,
+                "Clickable pipeline",
+            )
+        };
+
+        let clickable_color_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_clickable"),
+                source: wgpu::ShaderSource::Wgsl(clickable_shader),
+            };
+            create_render_pipeline(
+                &gpu.device,
+                &clickable_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Color,
+                "Clickable color pipeline",
+            )
+        };
+
+        let sprite_render_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_sprites"),
+                source: wgpu::ShaderSource::Wgsl(shader_2d),
+            };
+            create_2d_render_pipeline(
+                &gpu.device,
+                &sprite_render_pipeline_layout,
+                gpu.config.format,
+                &[model::SpriteVertex::desc(), InstanceRaw::desc()],
+                shader,
+                true,
+            )
+        };
+
+        PipeLines {
+            render_3d: render_pipeline,
+            transparent: transparent_render_pipeline,
+            sprite: sprite_render_pipeline,
+            clickable: clickable_pipeline,
+            clickable_color: clickable_color_pipeline,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -243,107 +468,20 @@ impl TeState {
         let resources_path = init_config.resource_files_directory.clone();
         let default_texture_path = init_config.default_texture_path.clone();
 
-        let (
-            texture_bind_group_layout,
-            camera_bind_group_layout,
-            render_pipeline_layout,
-            projection_bind_group_layout,
-            sprite_render_pipeline_layout,
-            clickable_pipeline_layout,
-        ) = TeState::get_layouts(&gpu.device);
+        let bindg_layouts = BindGroupLayouts::new(&gpu.device);
 
-        let camera = camera::CameraState::new(
+        let camera = CameraState::new(
             &gpu.config,
             &gpu.device,
-            &camera_bind_group_layout,
-            &projection_bind_group_layout,
+            &bindg_layouts.camera,
+            &bindg_layouts.projection,
             init_config.clone(),
         );
 
-        let render_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader_3D"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-            };
-            create_render_pipeline(
-                &gpu.device,
-                &render_pipeline_layout,
-                gpu.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                shader,
-                EntryPoint::Mask,
-                "Render Pipeline",
-            )
-        };
-
-        let transparent_render_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader_3D_transparent"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
-            };
-            create_render_pipeline(
-                &gpu.device,
-                &render_pipeline_layout,
-                gpu.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                shader,
-                EntryPoint::Main,
-                "Transparent pipeline",
-            )
-        };
-
-        let clickable_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader_clickable"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("clickable_shader.wgsl").into()),
-            };
-            create_r32uint_render_pipeline(
-                &gpu.device,
-                &clickable_pipeline_layout,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                shader,
-                EntryPoint::Main,
-                "Clickable pipeline",
-            )
-        };
-
-        let clickable_color_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader_clickable"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("clickable_shader.wgsl").into()),
-            };
-            create_render_pipeline(
-                &gpu.device,
-                &clickable_pipeline_layout,
-                gpu.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                shader,
-                EntryPoint::Color,
-                "Clickable color pipeline",
-            )
-        };
-
-        let sprite_render_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Shader_sprites"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("2d_shader.wgsl").into()),
-            };
-            create_2d_render_pipeline(
-                &gpu.device,
-                &sprite_render_pipeline_layout,
-                gpu.config.format,
-                &[model::SpriteVertex::desc(), InstanceRaw::desc()],
-                shader,
-                true,
-            )
-        };
+        let pipelines = PipeLines::new(gpu, PipeLineLayouts::new(&gpu.device, &bindg_layouts));
 
         let instances = InstancesState::new(
-            texture_bind_group_layout,
+            bindg_layouts.texture,
             init_config.tile_size,
             init_config.chunk_size,
             resources_path,
@@ -390,13 +528,7 @@ impl TeState {
         TeState {
             camera,
             size,
-            pipelines: PipeLines {
-                render_3d: render_pipeline,
-                transparent: transparent_render_pipeline,
-                sprite: sprite_render_pipeline,
-                clickable: clickable_pipeline,
-                clickable_color: clickable_color_pipeline,
-            },
+            pipelines,
             instances,
             text,
             maps_path,
@@ -425,105 +557,6 @@ impl TeState {
     pub fn load_map(&mut self, file_name: &str, gpu: &GpuState) -> Result<(), TError> {
         let map = temap::TeMap::from_file(file_name, self.maps_path.clone());
         self.instances.fill_from_temap(map, gpu)
-    }
-
-    fn get_layouts(
-        device: &wgpu::Device,
-    ) -> (
-        wgpu::BindGroupLayout,
-        wgpu::BindGroupLayout,
-        wgpu::PipelineLayout,
-        wgpu::BindGroupLayout,
-        wgpu::PipelineLayout,
-        wgpu::PipelineLayout,
-    ) {
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        // This should match the filterable field of the
-                        // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
-
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("camera_bind_group_layout"),
-            });
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, &texture_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let projection_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("projection_bind_group_layout"),
-            });
-
-        let sprite_render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Sprite Render Pipeline Layout"),
-                bind_group_layouts: &[&projection_bind_group_layout, &texture_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let clickable_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Clickable Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
-                push_constant_ranges: &[PushConstantRange {
-                    stages: ShaderStages::VERTEX,
-                    range: 0..4,
-                }],
-            });
-
-        (
-            texture_bind_group_layout,
-            camera_bind_group_layout,
-            render_pipeline_layout,
-            projection_bind_group_layout,
-            sprite_render_pipeline_layout,
-            clickable_pipeline_layout,
-        )
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
