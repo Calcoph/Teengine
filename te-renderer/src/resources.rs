@@ -1,8 +1,9 @@
 use gltf;
 use gltf::buffer;
+use gltf::mesh::Mode as PrimitiveType;
 use gltf::{Accessor, Semantic, Texture};
 
-use crate::error::TError;
+use crate::error::{TError, GLBErr};
 use crate::{model, texture};
 
 pub fn load_texture(
@@ -38,6 +39,11 @@ pub fn load_glb_model(
     for glb_mesh in document.meshes() {
         let name = glb_mesh.name().ok_or(TError::NamelessGLB)?.to_string();
         for glb_primitive in glb_mesh.primitives() {
+            if glb_primitive.mode() != PrimitiveType::Triangles {
+                dbg!("Primitive must be triangles");
+                return Err(Box::new(TError::InvalidGLB(GLBErr::TODO)))
+            }
+
             // TODO: sort out the opaque, transparent and translucent primitives so we can correctly draw them using these steps:
             // 1. Draw all opaque primitives
             // 2. Sort the transparent primitives (from furthest to nearest)
@@ -50,16 +56,16 @@ pub fn load_glb_model(
                 Some(tex) => {
                     let glb_texture = tex.texture();
                     let image_index = glb_texture.source().index();
-                    let texture_name = get_texture_name(glb_texture);
+                    let texture_name = get_texture_name(glb_texture)?;
 
                     match glb_color {
                         [r, g, b, a] if r >= 0.999 && g >= 0.999 && b >= 0.999 && a >= 0.999 => {
                             // base color multiplier is so close to being 1 that it's not worth to process it
-                            let image = images.get(image_index).ok_or(TError::InvalidGLB)?;
+                            let image = images.get(image_index).ok_or(TError::InvalidGLB(GLBErr::TODO))?;
                             load_texture(image, device, queue, texture_name)?
                         }
                         [_, _, _, _] => {
-                            let image = images.get(image_index).ok_or(TError::InvalidGLB)?;
+                            let image = images.get(image_index).ok_or(TError::InvalidGLB(GLBErr::TODO))?;
                             let image = apply_base_color(image, glb_color);
                             load_texture(&image, device, queue, texture_name)?
                         }
@@ -97,9 +103,9 @@ pub fn load_glb_model(
             materials.push(model::Material::new(device, &name, diffuse_texture, layout));
 
             // get the indices of the triangles
-            let indices_accessor = glb_primitive.indices().ok_or(TError::InvalidGLB)?;
+            let indices_accessor = glb_primitive.indices().ok_or(TError::InvalidGLB(GLBErr::TODO))?;
             let indices_buffer_index = get_buffer_index(&indices_accessor);
-            let indices = load_scalar(indices_accessor, &buffers[indices_buffer_index]); // TODO: handle the case of no indices
+            let indices = load_scalar(indices_accessor, &buffers[indices_buffer_index])?; // TODO: handle the case of no indices
 
             // get the rest of mesh info
             let mut positions = None;
@@ -109,14 +115,14 @@ pub fn load_glb_model(
                 match attribute.0 {
                     Semantic::Positions => {
                         let index = get_buffer_index(&accessor);
-                        positions = Some(load_vec3(accessor, &buffers[index]));
+                        positions = Some(load_vec3(accessor, &buffers[index])?);
                     }
                     Semantic::Normals => (), // ignoring since there is no light
                     Semantic::Tangents => (), // ignoring since there is no light
                     Semantic::Colors(_) => (), //println!("this model had colors and you ignored them!"), // TODO: ignore colors, they should be overwritten by textures
                     Semantic::TexCoords(_) => {
                         let index = get_buffer_index(&accessor);
-                        tex_coords = Some(load_vec2(accessor, &buffers[index]));
+                        tex_coords = Some(load_tex_coords(accessor, &buffers[index])?);
                     } //TODO: use the TexCoords parameter
                     Semantic::Joints(_) => (), //println!("this model had joints and you ignored them!"), // TODO: ignore animations for now
                     Semantic::Weights(_) => (), //println!("this model had weights and you ignored them!"), // TODO: ignore animations for now
@@ -126,13 +132,13 @@ pub fn load_glb_model(
                 Some(coords) => coords,
                 None => positions
                     .as_ref()
-                    .ok_or(TError::InvalidGLB)?
+                    .ok_or(TError::InvalidGLB(GLBErr::TODO))?
                     .iter()
                     .map(|[x, y, _z]| [*x, *y])
                     .collect::<Vec<[f32; 2]>>(), // it doesn't matter what tex_coords are since the model doesn't have a texture anyway
             };
             let vertices = positions
-                .ok_or(TError::InvalidGLB)?
+                .ok_or(TError::InvalidGLB(GLBErr::TODO))?
                 .into_iter()
                 .zip(tex_coords)
                 .map(|(position, tex_coords)| model::ModelVertex {
@@ -158,14 +164,20 @@ pub fn load_glb_model(
     })
 }
 
-fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
+fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Result<Vec<[f32; 3]>, TError> {
     match accessor.data_type() {
         gltf::accessor::DataType::F32 => {}
-        _ => panic!("vertex data should be F32!"),
+        _ => {
+            //panic!("vertex data should be F32!")
+            return Err(TError::InvalidGLB(GLBErr::TODO))
+        },
     }
     match accessor.dimensions() {
         gltf::accessor::Dimensions::Vec3 => {}
-        _ => panic!("vertex data should be Vec3!"),
+        _ => {
+            //panic!("vertex data should be Vec3!")
+            return Err(TError::InvalidGLB(GLBErr::TODO))
+        },
     }
     let offset = accessor.offset() + accessor.view().expect("Sparse accessor").offset();
     let readable_size = accessor.count() * accessor.size();
@@ -178,17 +190,27 @@ fn load_vec3(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 3]> {
         vec3.push([x, y, z]);
     }
 
-    vec3
+    Ok(vec3)
 }
 
-fn load_vec2(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 2]> {
+fn load_tex_coords(accessor: Accessor, buffer: &buffer::Data) -> Result<Vec<[f32; 2]>, TError> {
     match accessor.data_type() {
         gltf::accessor::DataType::F32 => {}
-        _ => panic!("tex coords should be F32!"),
+        gltf::accessor::DataType::U8 => {
+            return Err(TError::InvalidGLB(GLBErr::UnsupportedTexCoordDataType));
+        },
+        gltf::accessor::DataType::U16 => {
+            return Err(TError::InvalidGLB(GLBErr::UnsupportedTexCoordDataType));
+        },
+        _ => {
+            return Err(TError::InvalidGLB(GLBErr::InvalidTexCoordDataType));
+        },
     }
     match accessor.dimensions() {
         gltf::accessor::Dimensions::Vec2 => {}
-        _ => panic!("tex coords should be Vec2!"),
+        _ => {
+            return Err(TError::InvalidGLB(GLBErr::InvalidTexCoordAccessorDimension))
+        },
     }
     let offset = accessor.offset() + accessor.view().expect("Sparse accessor").offset();
     let readable_size = accessor.count() * accessor.size();
@@ -200,20 +222,24 @@ fn load_vec2(accessor: Accessor, buffer: &buffer::Data) -> Vec<[f32; 2]> {
         vec2.push([x, y]);
     }
 
-    vec2
+    Ok(vec2)
 }
 
-fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
+fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Result<Vec<u32>, TError> {
     match accessor.data_type() {
         gltf::accessor::DataType::U16 => {}
         _ => {
-            println!("{:?}", accessor.data_type());
-            panic!("scalars should be U16!")
+            //println!("{:?}", accessor.data_type());
+            //panic!("scalars should be U16!")
+            return Err(TError::InvalidGLB(GLBErr::TODO))
         }
     }
     match accessor.dimensions() {
         gltf::accessor::Dimensions::Scalar => {}
-        _ => panic!("scalars should be Scalar!"),
+        _ => {
+            //panic!("scalars should be Scalar!")
+            return Err(TError::InvalidGLB(GLBErr::TODO))
+        },
     }
     let offset = accessor.offset() + accessor.view().expect("Sparse accessor").offset();
     let readable_size = accessor.count() * accessor.size();
@@ -224,17 +250,20 @@ fn load_scalar(accessor: Accessor, buffer: &buffer::Data) -> Vec<u32> {
         scalar.push(x);
     }
 
-    scalar
+    Ok(scalar)
 }
 
 fn get_buffer_index(accessor: &Accessor) -> usize {
     accessor.view().expect("Sparse accessor").buffer().index()
 }
 
-fn get_texture_name(tex: Texture) -> &str {
+fn get_texture_name(tex: Texture) -> Result<&str, TError> {
     match tex.source().source() {
-        gltf::image::Source::View { .. } => panic!("texture should be in a png"),
-        gltf::image::Source::Uri { uri, .. } => uri,
+        gltf::image::Source::View { .. } => {
+            //panic!("texture should be in a png")
+            return Err(TError::InvalidGLB(GLBErr::TODO))
+        },
+        gltf::image::Source::Uri { uri, .. } => Ok(uri),
     }
 }
 

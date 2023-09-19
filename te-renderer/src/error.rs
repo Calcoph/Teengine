@@ -1,6 +1,17 @@
 use std::fmt::Display;
 
 #[derive(Debug)]
+pub enum GLBErr {
+    // tex coords should be F32
+    InvalidTexCoordDataType,
+    // u8 and U16 is in the gltf spec but not supported in teengine
+    UnsupportedTexCoordDataType,
+    // tex coords should be Vec2
+    InvalidTexCoordAccessorDimension,
+    TODO
+}
+
+#[derive(Debug)]
 pub enum TError {
     UninitializedModel,
     GLBModelLoadingFail,
@@ -8,7 +19,7 @@ pub enum TError {
     UninitializedSprite,
     EmptySpriteArray,
     NamelessGLB,
-    InvalidGLB,
+    InvalidGLB(GLBErr),
     SizeRequired,
 }
 
@@ -21,7 +32,7 @@ impl Display for TError {
             TError::UninitializedSprite => write!(f, "UninitializedSprite"),
             TError::EmptySpriteArray => write!(f, "EmptySpriteArray"),
             TError::NamelessGLB => write!(f, "NamelessGLB"),
-            TError::InvalidGLB => write!(f, "InvalidGLB"),
+            TError::InvalidGLB(_) => write!(f, "InvalidGLB"),
             TError::SizeRequired => write!(f, "SizeRequired"),
         }
     }
