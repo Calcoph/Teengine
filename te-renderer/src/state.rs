@@ -581,7 +581,7 @@ impl TeState {
                 }
             }
 
-            for (_name, sprite) in &mut self.instances.sprite_instances {
+            for (_name, sprite) in &mut self.instances.sprite_instances_2.instanced {
                 sprite.animate(queue);
             }
         }
@@ -719,38 +719,44 @@ impl TeState {
         } else {
             render_pass.set_pipeline(&self.pipelines.clickable);
         }
-        let iter = self
-            .instances
-            .opaque_instances
-            .iter()
-            .filter(|(_name, instanced_model)| match instanced_model {
-                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                crate::instances::DrawModel::A(a) => a.unculled_instance,
-            });
-
         let mut renderer = RendererClickable::new(render_pass, &self.camera.camera_bind_group);
 
+        let iter = self
+            .instances
+            .opaque_instances_2
+            .instanced
+            .iter()
+            .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0);
+
+
         for (name, instanced_model) in iter {
-            let instance_buffer = match instanced_model {
-                crate::instances::DrawModel::M(m) => &m.instance_buffer,
-                crate::instances::DrawModel::A(a) => &a.instance_buffer,
-            };
+            let instance_buffer = &instanced_model.instance_buffer;
             renderer
                 .render_pass
                 .set_vertex_buffer(1, instance_buffer.slice(..));
-            match instanced_model {
-                crate::instances::DrawModel::M(m) => {
-                    renderer.draw_model_instanced_mask(
-                        &m.model,
-                        m.get_instances_vec(),
-                        name.to_owned(),
-                    );
-                }
-                crate::instances::DrawModel::A(a) => {
-                    // TODO: pass name
-                    renderer.draw_animated_model_instanced_mask(&a);
-                }
-            }
+            
+            renderer.draw_model_instanced_mask(
+                &instanced_model.model,
+                instanced_model.get_instances_vec(),
+                name.to_owned(),
+            );
+        }
+
+        let iter = self
+            .instances
+            .opaque_instances_2
+            .animated
+            .iter()
+            .filter(|(_name, instanced_model)| instanced_model.unculled_instance);
+
+
+        for (name, instanced_model) in iter {
+            let instance_buffer = &instanced_model.instance_buffer;
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
+            // TODO: pass name
+            renderer.draw_animated_model_instanced_mask(&instanced_model);
         }
 
         // transparent
@@ -760,30 +766,39 @@ impl TeState {
             .iter()
             .map(|name| {
                 self.instances
-                    .opaque_instances
+                    .opaque_instances_2
+                    .instanced
                     .get(name)
                     .expect("Invalid reference")
             })
-            .filter(|instanced_model| match instanced_model {
-                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                crate::instances::DrawModel::A(a) => a.unculled_instance,
-            });
+            .filter(|instanced_model| instanced_model.unculled_instances > 0);
         for instanced_model in iter {
-            let instance_buffer = match instanced_model {
-                crate::instances::DrawModel::M(m) => &m.instance_buffer,
-                crate::instances::DrawModel::A(a) => &a.instance_buffer,
-            };
+            let instance_buffer = &instanced_model.instance_buffer;
             renderer
                 .render_pass
                 .set_vertex_buffer(1, instance_buffer.slice(..));
-            match instanced_model {
-                crate::instances::DrawModel::M(m) => {
-                    renderer.tdraw_model_instanced_mask(&m.model, m.get_instances_vec());
-                }
-                crate::instances::DrawModel::A(a) => {
-                    renderer.tdraw_animated_model_instanced_mask(&a);
-                }
-            }
+            renderer.tdraw_model_instanced_mask(&instanced_model.model, instanced_model.get_instances_vec());
+        }
+
+        // transparent
+        let iter = self
+            .instances
+            .transparent_instances
+            .iter()
+            .map(|name| {
+                self.instances
+                    .opaque_instances_2
+                    .animated
+                    .get(name)
+                    .expect("Invalid reference")
+            })
+            .filter(|instanced_model| instanced_model.unculled_instance);
+        for instanced_model in iter {
+            let instance_buffer = &instanced_model.instance_buffer;
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer.tdraw_animated_model_instanced_mask(instanced_model);
         }
 
         self.instance_finder = renderer.get_instance_finder();
@@ -794,65 +809,76 @@ impl TeState {
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
         let iter = self
             .instances
-            .opaque_instances
+            .opaque_instances_2
+            .instanced
             .iter()
-            .filter(|(_name, instanced_model)| match instanced_model {
-                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                crate::instances::DrawModel::A(a) => a.unculled_instance,
-            });
+            .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0);
         for (_name, instanced_model) in iter {
-            let instance_buffer = match instanced_model {
-                crate::instances::DrawModel::M(m) => &m.instance_buffer,
-                crate::instances::DrawModel::A(a) => &a.instance_buffer,
-            };
+            let instance_buffer = &instanced_model.instance_buffer;
             renderer
                 .render_pass
                 .set_vertex_buffer(1, instance_buffer.slice(..));
-            match instanced_model {
-                crate::instances::DrawModel::M(m) => {
-                    renderer.draw_model_instanced(&m.model, m.get_instances_vec());
-                }
-                crate::instances::DrawModel::A(a) => {
-                    renderer.draw_animated_model_instanced(&a);
-                }
-            }
+            renderer.draw_model_instanced(&instanced_model.model, instanced_model.get_instances_vec());
+        }
+
+        let iter = self
+            .instances
+            .opaque_instances_2
+            .animated
+            .iter()
+            .filter(|(_name, instanced_model)| instanced_model.unculled_instance);
+        for (_name, instanced_model) in iter {
+            let instance_buffer = &instanced_model.instance_buffer;
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer.draw_animated_model_instanced(instanced_model);
         }
     }
 
     pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         render_pass.set_pipeline(&self.pipelines.transparent);
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
+
         let iter = self
             .instances
             .transparent_instances
             .iter()
             .map(|name| {
                 self.instances
-                    .opaque_instances
+                    .opaque_instances_2
+                    .instanced
                     .get(name)
                     .expect("Invalid reference")
             })
-            .filter(|instanced_model| match instanced_model {
-                crate::instances::DrawModel::M(m) => m.unculled_instances > 0,
-                crate::instances::DrawModel::A(a) => a.unculled_instance,
-            });
+            .filter(|instanced_model| instanced_model.unculled_instances > 0);
         for instanced_model in iter {
-            let instance_buffer = match instanced_model {
-                crate::instances::DrawModel::M(m) => &m.instance_buffer,
-                crate::instances::DrawModel::A(a) => &a.instance_buffer,
-            };
+            let instance_buffer = &instanced_model.instance_buffer;
             renderer
                 .render_pass
                 .set_vertex_buffer(1, instance_buffer.slice(..));
-            match instanced_model {
-                crate::instances::DrawModel::M(m) => {
-                    renderer.tdraw_model_instanced(&m.model, m.get_instances_vec());
-                }
-                crate::instances::DrawModel::A(a) => {
-                    renderer.tdraw_animated_model_instanced(&a);
-                }
-            }
-        }
+            renderer.tdraw_model_instanced(&instanced_model.model, instanced_model.get_instances_vec());
+        };
+
+        let iter = self
+            .instances
+            .transparent_instances
+            .iter()
+            .map(|name| {
+                self.instances
+                    .opaque_instances_2
+                    .animated
+                    .get(name)
+                    .expect("Invalid reference")
+            })
+            .filter(|instanced_model| instanced_model.unculled_instance);
+        for instanced_model in iter {
+            let instance_buffer = &instanced_model.instance_buffer;
+            renderer
+                .render_pass
+                .set_vertex_buffer(1, instance_buffer.slice(..));
+            renderer.tdraw_animated_model_instanced(&instanced_model);
+        };
     }
 
     pub fn draw_sprites<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
@@ -873,14 +899,16 @@ impl TeState {
             .collect();
         let sprites: Vec<&dyn Draw2D> = self
             .instances
-            .sprite_instances
+            .sprite_instances_2
+            .instanced
             .iter()
             .map(|(_name, inst)| inst as &dyn Draw2D)
             .collect();
         sorted_2d.extend(sprites.into_iter());
         let anim_sprites: Vec<&dyn Draw2D> = self
             .instances
-            .animated_sprites
+            .sprite_instances_2
+            .animated
             .iter()
             .filter(|(_name, inst)| inst.is_drawable())
             .map(|(_name, inst)| inst as &dyn Draw2D)
@@ -913,11 +941,12 @@ impl TeState {
     }
 
     fn cull_all3d(&mut self) {
-        for (_name, model) in self.instances.opaque_instances.iter_mut() {
-            match model {
-                crate::instances::DrawModel::M(m) => m.cull_all(),
-                crate::instances::DrawModel::A(a) => a.cull_all(),
-            }
+        for (_name, model) in self.instances.opaque_instances_2.instanced.iter_mut() {
+            model.cull_all();
+        }
+
+        for (_name, model) in self.instances.opaque_instances_2.animated.iter_mut() {
+            model.cull_all();
         }
     }
     /*

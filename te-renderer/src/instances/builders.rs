@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    model::InstancedModel, sprite::InstancedSprite, DrawModel, InstanceMap, InstanceReference,
+    model::InstancedModel, sprite::InstancedSprite, InstanceMap, InstanceReference,
     InstanceType, InstancedDraw,
 };
 
@@ -92,18 +92,15 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
             ModelType::Normal(model) => {
                 let instances = &mut self.te_state.instances;
 
-                if let Some(instanced_m) = instances.opaque_instances.get_mut(self.model_name) {
-                    match instanced_m {
-                        DrawModel::M(m) => m.add_instance(x, y, z, &self.gpu.device),
-                        DrawModel::A(_) => unreachable!(),
-                    }
+                if let Some(instanced_m) = instances.opaque_instances_2.instanced.get_mut(self.model_name) {
+                    instanced_m.add_instance(x, y, z, &self.gpu.device)
                 } else {
                     let model = Some(model).ok_or(TError::UninitializedModel)?;
                     let transparent_meshes = model.transparent_meshes.len();
                     let instanced_m = InstancedModel::new(model, &self.gpu.device, x, y, z);
                     instances
-                        .opaque_instances
-                        .insert(self.model_name.to_string(), DrawModel::M(instanced_m));
+                        .opaque_instances_2.instanced
+                        .insert(self.model_name.to_string(), instanced_m);
                     if transparent_meshes > 0 {
                         instances
                             .transparent_instances
@@ -118,9 +115,8 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 };
 
                 reference.index = instances
-                    .opaque_instances
+                    .opaque_instances_2.instanced
                     .instance(&reference)
-                    .get_m()
                     .instances
                     .len()
                     - 1;
@@ -129,9 +125,9 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     reference.clone(),
                     cgmath::vec3(x, y, z),
                     instances
-                        .opaque_instances
+                        .opaque_instances_2
+                        .instanced
                         .instance(&reference)
-                        .get_m()
                         .model
                         .get_extremes(),
                 );
@@ -145,8 +141,9 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 let transparent_meshes = model.transparent_meshes.len();
                 let position = model.instance.position;
                 instances
-                    .opaque_instances
-                    .insert(self.model_name.to_string(), DrawModel::A(model));
+                    .opaque_instances_2
+                    .animated
+                    .insert(self.model_name.to_string(), model);
                 if transparent_meshes > 0 {
                     instances
                         .transparent_instances
@@ -163,9 +160,9 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     reference.clone(),
                     position,
                     instances
-                        .opaque_instances
+                        .opaque_instances_2
+                        .animated
                         .instance(&reference)
-                        .get_a()
                         .get_extremes(),
                 );
 
@@ -174,8 +171,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
             ModelType::None => {
                 let instances = &mut self.te_state.instances;
 
-                if let Some(instanced_m) = instances.opaque_instances.get_mut(self.model_name) {
-                    let instanced_m = instanced_m.get_mut_m();
+                if let Some(instanced_m) = instances.opaque_instances_2.instanced.get_mut(self.model_name) {
                     instanced_m.add_instance(x, y, z, &self.gpu.device);
                 } else {
                     let model = load_glb_model(
@@ -190,8 +186,9 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     let transparent_meshes = model.transparent_meshes.len();
                     let instanced_m = InstancedModel::new(model, &self.gpu.device, x, y, z);
                     instances
-                        .opaque_instances
-                        .insert(self.model_name.to_string(), DrawModel::M(instanced_m));
+                        .opaque_instances_2
+                        .instanced
+                        .insert(self.model_name.to_string(), instanced_m);
                     if transparent_meshes > 0 {
                         instances
                             .transparent_instances
@@ -206,9 +203,9 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 };
 
                 reference.index = instances
-                    .opaque_instances
+                    .opaque_instances_2
+                    .instanced
                     .instance(&reference)
-                    .get_m()
                     .instances
                     .len()
                     - 1;
@@ -217,9 +214,9 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     reference.clone(),
                     cgmath::vec3(x, y, z),
                     instances
-                        .opaque_instances
+                        .opaque_instances_2
+                        .instanced
                         .instance(&reference)
-                        .get_m()
                         .model
                         .get_extremes(),
                 );
@@ -288,7 +285,7 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
 
             let instance_name =
                 self.sprite_name.to_string() + self.force_new_instance_id.unwrap_or_default();
-            if let Some(instanced_s) = instances.sprite_instances.get_mut(&instance_name) {
+            if let Some(instanced_s) = instances.sprite_instances_2.instanced.get_mut(&instance_name) {
                 instanced_s.add_instance(
                     self.position.0,
                     self.position.1,
@@ -314,7 +311,8 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
                     screen_h,
                 );
                 instances
-                    .sprite_instances
+                    .sprite_instances_2
+                    .instanced
                     .insert(instance_name.to_string(), instanced_s);
             }
 
@@ -325,7 +323,8 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
             };
 
             instance_ref.index = instances
-                .sprite_instances
+                .sprite_instances_2
+                .instanced
                 .instance(&instance_ref)
                 .instances
                 .len()
@@ -339,7 +338,7 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
 
             let instance_name =
                 self.sprite_name.to_string() + self.force_new_instance_id.unwrap_or_default();
-            if let Some(instanced_s) = instances.sprite_instances.get_mut(&instance_name) {
+            if let Some(instanced_s) = instances.sprite_instances_2.instanced.get_mut(&instance_name) {
                 instanced_s.add_instance(
                     self.position.0,
                     self.position.1,
@@ -373,7 +372,8 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
                     screen_h,
                 );
                 instances
-                    .sprite_instances
+                    .sprite_instances_2
+                    .instanced
                     .insert(instance_name.clone(), instanced_s);
             }
 
@@ -384,7 +384,8 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
             };
 
             inst_ref.index = instances
-                .sprite_instances
+                .sprite_instances_2
+                .instanced
                 .instance(&inst_ref)
                 .instances
                 .len()
