@@ -153,7 +153,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 let reference = InstanceReference {
                     name: self.model_name.to_string(),
                     index: 0, // TODO: Should index be 0?
-                    dimension: InstanceType::Opaque3D,
+                    dimension: InstanceType::Anim3D,
                 };
 
                 instances.render_matrix.register_instance(
