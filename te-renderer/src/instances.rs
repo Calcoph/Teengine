@@ -517,6 +517,7 @@ pub(crate) enum InstanceType {
     Sprite,
     Anim2D,
     Opaque3D,
+    Anim3D,
 }
 
 /// Handle of a 3D model or 2D sprite. You will need it when changing their properties.
@@ -534,63 +535,6 @@ impl InstanceReference {
 
     pub fn get_id(&self) -> usize {
         self.index
-    }
-}
-
-#[derive(Debug)]
-pub enum DrawModel {
-    M(InstancedModel),
-    A(AnimatedModel),
-}
-
-impl DrawModel {
-    fn get_mut_m(&mut self) -> &mut InstancedModel {
-        match self {
-            DrawModel::M(m) => m,
-            DrawModel::A(_) => panic!("DrawModel unwrap failed"),
-        }
-    }
-
-    fn get_m(&self) -> &InstancedModel {
-        match self {
-            DrawModel::M(m) => m,
-            DrawModel::A(_) => panic!("DrawModel unwrap failed"),
-        }
-    }
-
-    fn get_mut_a(&mut self) -> &mut AnimatedModel {
-        match self {
-            DrawModel::M(_) => panic!("DrawModel unwrap failed"),
-            DrawModel::A(a) => a,
-        }
-    }
-
-    fn get_a(&self) -> &AnimatedModel {
-        match self {
-            DrawModel::M(_) => panic!("DrawModel unwrap failed"),
-            DrawModel::A(a) => a,
-        }
-    }
-
-    fn hide(&mut self, index: usize) {
-        match self {
-            DrawModel::M(dm) => dm.hide(index),
-            DrawModel::A(dm) => dm.hide(),
-        }
-    }
-
-    fn show(&mut self, index: usize) {
-        match self {
-            DrawModel::M(dm) => dm.show(index),
-            DrawModel::A(dm) => dm.show(),
-        }
-    }
-
-    fn is_hidden(&self, index: usize) -> bool {
-        match self {
-            DrawModel::M(dm) => dm.is_hidden(index),
-            DrawModel::A(dm) => dm.is_hidden(),
-        }
     }
 }
 
@@ -629,13 +573,52 @@ impl<T> InstanceVec<T> for Vec<T> {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct Opaque3DInstances {
+    pub(crate) instanced: HashMap<String, InstancedModel>,
+    pub(crate) animated: HashMap<String, AnimatedModel>
+}
+
+impl Opaque3DInstances {
+    fn new() -> Opaque3DInstances {
+        Opaque3DInstances {
+            instanced: HashMap::new(),
+            animated: HashMap::new()
+        }
+    }
+
+    fn forget_all(&mut self) {
+        self.instanced = HashMap::new();
+        self.animated = HashMap::new();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SpriteInstances {
+    pub(crate) instanced: HashMap<String, InstancedSprite>,
+    pub(crate) animated: HashMap<String, AnimatedSprite>,
+}
+
+impl SpriteInstances {
+    fn new() -> SpriteInstances {
+        SpriteInstances {
+            instanced: HashMap::new(),
+            animated: HashMap::new()
+        }
+    }
+
+    fn forget_all(&mut self) {
+        self.instanced = HashMap::new();
+        self.animated = HashMap::new();
+    }
+}
+
 /// Manages the window's 3D models, 2D sprites and 2D texts
 #[derive(Debug)]
 pub struct InstancesState {
-    pub(crate) opaque_instances: HashMap<String, DrawModel>,
+    pub(crate) opaque_instances_2: Opaque3DInstances, // TODO: rename
     pub(crate) transparent_instances: HashSet<String>,
-    pub(crate) sprite_instances: HashMap<String, InstancedSprite>,
-    pub(crate) animated_sprites: HashMap<String, AnimatedSprite>,
+    pub(crate) sprite_instances_2: SpriteInstances, // TODO: Rename
     pub(crate) texts: Vec<Option<InstancedText>>,
     deleted_texts: Vec<usize>,
     pub layout: wgpu::BindGroupLayout,
@@ -655,20 +638,18 @@ impl InstancesState {
         default_texture_path: String,
         font_dir_path: String,
     ) -> Self {
-        let opaque_instances = HashMap::new();
+        let opaque_instances_2 = Opaque3DInstances::new();
         let transparent_instances = HashSet::new();
-        let sprite_instances = HashMap::new();
-        let animated_sprites = HashMap::new();
+        let sprite_instances_2 = SpriteInstances::new();
         let texts = Vec::new();
         let deleted_texts = Vec::new();
         let font = Font::new(font_dir_path);
         let render_matrix = RenderMatrix::new(chunk_size);
 
         InstancesState {
-            opaque_instances,
+            opaque_instances_2,
             transparent_instances,
-            sprite_instances,
-            animated_sprites,
+            sprite_instances_2,
             texts,
             deleted_texts,
             layout,
@@ -719,17 +700,14 @@ impl InstancesState {
         (x, y, z): (f32, f32, f32),
         model: Option<Model>,
     ) -> Result<InstanceReference, TError> {
-        if let Some(instanced_m) = self.opaque_instances.get_mut(model_name) {
-            match instanced_m {
-                DrawModel::M(m) => m.add_instance(x, y, z, &gpu.device),
-                DrawModel::A(_) => unreachable!(),
-            }
+        if let Some(instanced_m) = self.opaque_instances_2.instanced.get_mut(model_name) {
+            instanced_m.add_instance(x, y, z, &gpu.device)
         } else {
             let model = model.ok_or(TError::UninitializedModel)?;
             let transparent_meshes = model.transparent_meshes.len();
             let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
-            self.opaque_instances
-                .insert(model_name.to_string(), DrawModel::M(instanced_m));
+            self.opaque_instances_2.instanced
+                .insert(model_name.to_string(), instanced_m);
             if transparent_meshes > 0 {
                 self.transparent_instances.insert(model_name.to_string());
             }
@@ -742,9 +720,9 @@ impl InstancesState {
         };
 
         reference.index = self
-            .opaque_instances
+            .opaque_instances_2
+            .instanced
             .instance(&reference)
-            .get_m()
             .instances
             .len()
             - 1;
@@ -752,9 +730,9 @@ impl InstancesState {
         self.render_matrix.register_instance(
             reference.clone(),
             cgmath::vec3(x, y, z),
-            self.opaque_instances
+            self.opaque_instances_2
+                .instanced
                 .instance(&reference)
-                .get_m()
                 .model
                 .get_extremes(),
         );
@@ -785,8 +763,8 @@ impl InstancesState {
     ) -> InstanceReference {
         let transparent_meshes = model.transparent_meshes.len();
         let position = model.instance.position;
-        self.opaque_instances
-            .insert(model_name.to_string(), DrawModel::A(model));
+        self.opaque_instances_2.animated
+            .insert(model_name.to_string(), model);
         if transparent_meshes > 0 {
             self.transparent_instances.insert(model_name.to_string());
         }
@@ -800,9 +778,9 @@ impl InstancesState {
         self.render_matrix.register_instance(
             reference.clone(),
             position,
-            self.opaque_instances
+            self.opaque_instances_2
+                .animated
                 .instance(&reference)
-                .get_a()
                 .get_extremes(),
         );
 
@@ -815,8 +793,7 @@ impl InstancesState {
         gpu: &GpuState,
         (x, y, z): (f32, f32, f32),
     ) -> Result<InstanceReference, TError> {
-        if let Some(instanced_m) = self.opaque_instances.get_mut(model_name) {
-            let instanced_m = instanced_m.get_mut_m();
+        if let Some(instanced_m) = self.opaque_instances_2.instanced.get_mut(model_name) {
             instanced_m.add_instance(x, y, z, &gpu.device);
         } else {
             let model = load_glb_model(
@@ -830,8 +807,8 @@ impl InstancesState {
             .map_err(|_| TError::GLBModelLoadingFail)?;
             let transparent_meshes = model.transparent_meshes.len();
             let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
-            self.opaque_instances
-                .insert(model_name.to_string(), DrawModel::M(instanced_m));
+            self.opaque_instances_2.instanced
+                .insert(model_name.to_string(), instanced_m);
             if transparent_meshes > 0 {
                 self.transparent_instances.insert(model_name.to_string());
             }
@@ -844,9 +821,9 @@ impl InstancesState {
         };
 
         reference.index = self
-            .opaque_instances
+            .opaque_instances_2
+            .instanced
             .instance(&reference)
-            .get_m()
             .instances
             .len()
             - 1;
@@ -854,9 +831,9 @@ impl InstancesState {
         self.render_matrix.register_instance(
             reference.clone(),
             cgmath::vec3(x, y, z),
-            self.opaque_instances
+            self.opaque_instances_2
+                .instanced
                 .instance(&reference)
-                .get_m()
                 .model
                 .get_extremes(),
         );
@@ -879,7 +856,7 @@ impl InstancesState {
         force_new_instance_id: Option<&str>,
     ) -> Result<InstanceReference, TError> {
         let instance_name = sprite_name.to_string() + force_new_instance_id.unwrap_or_default();
-        if let Some(instanced_s) = self.sprite_instances.get_mut(&instance_name) {
+        if let Some(instanced_s) = self.sprite_instances_2.instanced.get_mut(&instance_name) {
             instanced_s.add_instance(
                 position.0,
                 position.1,
@@ -912,7 +889,8 @@ impl InstancesState {
                 screen_w,
                 screen_h,
             );
-            self.sprite_instances
+            self.sprite_instances_2
+                .instanced
                 .insert(instance_name.clone(), instanced_s);
         }
 
@@ -922,7 +900,7 @@ impl InstancesState {
             dimension: InstanceType::Sprite,
         };
 
-        inst_ref.index = self.sprite_instances.instance(&inst_ref).instances.len() - 1;
+        inst_ref.index = self.sprite_instances_2.instanced.instance(&inst_ref).instances.len() - 1;
 
         Ok(inst_ref)
     }
@@ -937,7 +915,7 @@ impl InstancesState {
         screen_h: u32,
         sprite: Option<(Material, f32, f32)>,
     ) -> Result<InstanceReference, TError> {
-        if let Some(instanced_s) = self.sprite_instances.get_mut(sprite_name) {
+        if let Some(instanced_s) = self.sprite_instances_2.instanced.get_mut(sprite_name) {
             instanced_s.add_instance(
                 position.0,
                 position.1,
@@ -963,7 +941,8 @@ impl InstancesState {
                 screen_w,
                 screen_h,
             );
-            self.sprite_instances
+            self.sprite_instances_2
+                .instanced
                 .insert(sprite_name.to_string(), instanced_s);
         }
 
@@ -974,7 +953,8 @@ impl InstancesState {
         };
 
         instance_ref.index = self
-            .sprite_instances
+            .sprite_instances_2
+            .instanced
             .instance(&instance_ref)
             .instances
             .len()
@@ -998,7 +978,7 @@ impl InstancesState {
             .get(0)
             .ok_or(TError::EmptySpriteArray)?
             .to_string();
-        while self.animated_sprites.contains_key(&name) {
+        while self.sprite_instances_2.animated.contains_key(&name) {
             name += "A";
         }
 
@@ -1041,7 +1021,7 @@ impl InstancesState {
             screen_w,
             screen_h,
         );
-        self.animated_sprites.insert(name.clone(), instanced_s);
+        self.sprite_instances_2.animated.insert(name.clone(), instanced_s);
 
         Ok(InstanceReference {
             name,
@@ -1120,20 +1100,18 @@ impl InstancesState {
     }
 
     pub(crate) fn forget_all_2d_instances(&mut self) {
-        self.animated_sprites = HashMap::new();
-        self.sprite_instances = HashMap::new();
+        self.sprite_instances_2.forget_all();
     }
 
     pub(crate) fn forget_all_3d_instances(&mut self) {
-        self.opaque_instances = HashMap::new();
+        self.opaque_instances_2.forget_all();
         self.transparent_instances = HashSet::new();
         self.render_matrix.empty();
     }
 
     pub(crate) fn forget_all_instances(&mut self) {
-        self.animated_sprites = HashMap::new();
-        self.sprite_instances = HashMap::new();
-        self.opaque_instances = HashMap::new();
+        self.sprite_instances_2.forget_all();
+        self.opaque_instances_2.forget_all();
         self.transparent_instances = HashSet::new();
         self.render_matrix.empty();
     }
@@ -1142,20 +1120,19 @@ impl InstancesState {
     pub(crate) fn save_temap(&self, file_name: &str, maps_path: String) {
         // TODO: Maybe get maps_path from initial_configuration
         let mut map = temap::TeMap::new();
-        for (name, instance) in &self.opaque_instances {
+        for (name, m) in &self.opaque_instances_2.instanced {
             map.add_model(&name);
-            match instance {
-                DrawModel::M(m) => {
-                    for inst in m.instances.iter() {
-                        map.add_instance(inst.position.x, inst.position.y, inst.position.z)
-                    }
-                }
-                DrawModel::A(a) => map.add_instance(
-                    a.instance.position.x,
-                    a.instance.position.y,
-                    a.instance.position.z,
-                ),
+            for inst in m.instances.iter() {
+                map.add_instance(inst.position.x, inst.position.y, inst.position.z)
             }
+        }
+        for (name, a) in &self.opaque_instances_2.animated {
+            map.add_model(&name);
+            map.add_instance(
+                a.instance.position.x,
+                a.instance.position.y,
+                a.instance.position.z,
+            )
         }
 
         map.save(&file_name, maps_path);
@@ -1188,47 +1165,44 @@ impl InstancesState {
     ) {
         match instance_ref.dimension {
             InstanceType::Sprite => {
-                let model = self.sprite_instances.mut_instance(instance_ref);
+                let model = self.sprite_instances_2.instanced.mut_instance(instance_ref);
                 model.move_instance(instance_ref.index, direction, queue, screen_w, screen_h);
-            }
-            InstanceType::Opaque3D => {
-                let model = self.opaque_instances.mut_instance(instance_ref);
-                match model {
-                    DrawModel::M(m) => {
-                        {
-                            let instance = m.instances.instance(instance_ref);
-                            self.render_matrix.unregister_instance(
-                                instance_ref,
-                                instance.position,
-                                m.model.get_extremes(),
-                            );
-                        }
-                        m.move_instance(instance_ref.index, direction, queue);
-                        let instance = m.instances.instance(instance_ref);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            instance.position,
-                            m.model.get_extremes(),
-                        );
-                    }
-                    DrawModel::A(a) => {
-                        self.render_matrix.unregister_instance(
-                            instance_ref,
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
-                        a.move_instance(instance_ref.index, direction, queue);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
-                    }
-                };
-            }
+            },
             InstanceType::Anim2D => {
-                let model = self.animated_sprites.mut_instance(instance_ref);
+                let model = self.sprite_instances_2.animated.mut_instance(instance_ref);
                 model.move_instance(instance_ref.index, direction, queue, screen_w, screen_h);
+            },
+            InstanceType::Opaque3D => {
+                let m = self.opaque_instances_2.instanced.mut_instance(instance_ref);
+                {
+                    let instance = m.instances.instance(instance_ref);
+                    self.render_matrix.unregister_instance(
+                        instance_ref,
+                        instance.position,
+                        m.model.get_extremes(),
+                    );
+                }
+                m.move_instance(instance_ref.index, direction, queue);
+                let instance = m.instances.instance(instance_ref);
+                self.render_matrix.register_instance(
+                    instance_ref.clone(),
+                    instance.position,
+                    m.model.get_extremes(),
+                );
+            },
+            InstanceType::Anim3D => {
+                let a = self.opaque_instances_2.animated.mut_instance(instance_ref);
+                self.render_matrix.unregister_instance(
+                    instance_ref,
+                    a.instance.position,
+                    a.get_extremes(),
+                );
+                a.move_instance(instance_ref.index, direction, queue);
+                self.render_matrix.register_instance(
+                    instance_ref.clone(),
+                    a.instance.position,
+                    a.get_extremes(),
+                );
             }
         };
     }
@@ -1245,7 +1219,7 @@ impl InstancesState {
     ) {
         match instance_ref.dimension {
             InstanceType::Sprite => {
-                let model = self.sprite_instances.mut_instance(instance_ref);
+                let model = self.sprite_instances_2.instanced.mut_instance(instance_ref);
                 model.set_instance_position(
                     instance_ref.index,
                     position,
@@ -1255,44 +1229,41 @@ impl InstancesState {
                 );
             }
             InstanceType::Opaque3D => {
-                let model = self.opaque_instances.mut_instance(instance_ref);
-                match model {
-                    DrawModel::M(m) => {
-                        {
-                            let instance = m.instances.instance(instance_ref);
-                            self.render_matrix.unregister_instance(
-                                instance_ref,
-                                instance.position,
-                                m.model.get_extremes(),
-                            );
-                        }
-                        m.set_instance_position(instance_ref.index, position, queue);
-                        let instance = m.instances.instance(instance_ref);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            instance.position,
-                            m.model.get_extremes(),
-                        );
-                    }
-                    DrawModel::A(a) => {
-                        self.render_matrix.unregister_instance(
-                            instance_ref,
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
-                        a.set_instance_position(instance_ref.index, position, queue);
-                        self.render_matrix.register_instance(
-                            instance_ref.clone(),
-                            a.instance.position,
-                            a.get_extremes(),
-                        );
-                    }
-                };
+                let m = self.opaque_instances_2.instanced.mut_instance(instance_ref);
+                {
+                    let instance = m.instances.instance(instance_ref);
+                    self.render_matrix.unregister_instance(
+                        instance_ref,
+                        instance.position,
+                        m.model.get_extremes(),
+                    );
+                }
+                m.set_instance_position(instance_ref.index, position, queue);
+                let instance = m.instances.instance(instance_ref);
+                self.render_matrix.register_instance(
+                    instance_ref.clone(),
+                    instance.position,
+                    m.model.get_extremes(),
+                );
             }
             InstanceType::Anim2D => {
-                let model = self.animated_sprites.mut_instance(instance_ref);
+                let model = self.sprite_instances_2.animated.mut_instance(instance_ref);
                 model.set_instance_position(instance_ref.index, position, queue, screen_w, screen_h)
             }
+            InstanceType::Anim3D => {
+                let a = self.opaque_instances_2.animated.mut_instance(instance_ref);
+                self.render_matrix.unregister_instance(
+                    instance_ref,
+                    a.instance.position,
+                    a.get_extremes(),
+                );
+                a.set_instance_position(instance_ref.index, position, queue);
+                self.render_matrix.register_instance(
+                    instance_ref.clone(),
+                    a.instance.position,
+                    a.get_extremes(),
+                );
+            },
         };
     }
 
@@ -1300,22 +1271,23 @@ impl InstancesState {
     pub(crate) fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
         match instance.dimension {
             InstanceType::Sprite => {
-                let sprite = self.sprite_instances.instance(instance);
+                let sprite = self.sprite_instances_2.instanced.instance(instance);
                 let position = sprite.instances.instance(instance).position;
                 (position.x, position.y, sprite.depth)
             }
             InstanceType::Opaque3D => {
-                let model = self.opaque_instances.instance(instance);
-                match model {
-                    DrawModel::M(m) => m.instances.instance(instance).position.into(),
-                    DrawModel::A(a) => a.instance.position.into(),
-                }
+                let m = self.opaque_instances_2.instanced.instance(instance);
+                m.instances.instance(instance).position.into()
             }
             InstanceType::Anim2D => {
-                let sprite = self.animated_sprites.instance(instance);
+                let sprite = self.sprite_instances_2.animated.instance(instance);
                 let position = sprite.instance.position;
                 (position.x, position.y, sprite.depth)
             }
+            InstanceType::Anim3D => {
+                let a = self.opaque_instances_2.animated.instance(instance);
+                a.instance.position.into()
+            },
         }
     }
 
@@ -1330,14 +1302,15 @@ impl InstancesState {
     ) {
         match instance.dimension {
             InstanceType::Sprite => {
-                let sprite = self.sprite_instances.mut_instance(instance);
+                let sprite = self.sprite_instances_2.instanced.mut_instance(instance);
                 sprite.resize(instance.index, new_size, queue);
             }
             InstanceType::Opaque3D => panic!("That is not a sprite"),
             InstanceType::Anim2D => {
-                let sprite = self.animated_sprites.mut_instance(instance);
+                let sprite = self.sprite_instances_2.animated.mut_instance(instance);
                 sprite.resize(instance.index, new_size, queue);
             }
+            InstanceType::Anim3D => panic!("That is not a sprite"),
         };
     }
 
@@ -1355,6 +1328,7 @@ impl InstancesState {
                 let sprite = self.get_anim_sprite(instance);
                 sprite.size.into()
             }
+            InstanceType::Anim3D => panic!("That is not a sprite"),
         }
     }
 
@@ -1474,6 +1448,7 @@ impl InstancesState {
             InstanceType::Sprite => self.get_mut_sprite(instance).animation = Some(animation),
             InstanceType::Opaque3D => self.get_mut_model(instance).animation = Some(animation),
             InstanceType::Anim2D => todo!(),
+            InstanceType::Anim3D => todo!(),
         }
     }
 
@@ -1484,15 +1459,21 @@ impl InstancesState {
     }
 
     fn get_sprite(&self, instance: &InstanceReference) -> &Instance2D {
-        let sprite = self.sprite_instances.instance(instance);
+        let sprite = self.sprite_instances_2.instanced.instance(instance);
         sprite.instances.instance(instance)
     }
 
     fn _get_model(&self, instance: &InstanceReference) -> &Instance3D {
-        let model = self.opaque_instances.instance(instance);
-        match model {
-            DrawModel::M(m) => m.instances.instance(instance),
-            DrawModel::A(a) => &a.instance,
+        match instance.dimension {
+            InstanceType::Opaque3D => {
+                let m = self.opaque_instances_2.instanced.instance(instance);
+                m.instances.instance(instance)
+            },
+            InstanceType::Anim3D => {
+                let a = self.opaque_instances_2.animated.instance(instance);
+                &a.instance
+            },
+            _ => panic!("That is not a 3D model")
         }
     }
 
@@ -1509,15 +1490,30 @@ impl InstancesState {
     }
 
     fn get_mut_sprite(&mut self, instance: &InstanceReference) -> &mut Instance2D {
-        let sprite = self.sprite_instances.mut_instance(instance);
-        sprite.instances.mut_instance(instance)
+        match instance.dimension {
+            InstanceType::Sprite => {
+                let sprite = self.sprite_instances_2.instanced.mut_instance(instance);
+                sprite.instances.mut_instance(instance)
+            },
+            InstanceType::Anim2D => {
+                let sprite = self.sprite_instances_2.animated.mut_instance(instance);
+                &mut sprite.instance
+            },
+            _ => todo!()
+        }
     }
 
     pub(crate) fn get_mut_model(&mut self, instance: &InstanceReference) -> &mut Instance3D {
-        let model = self.opaque_instances.mut_instance(instance);
-        match model {
-            DrawModel::M(m) => m.instances.mut_instance(instance),
-            DrawModel::A(a) => &mut a.instance,
+        match instance.dimension {
+            InstanceType::Opaque3D => {
+                let model = self.opaque_instances_2.instanced.mut_instance(instance);
+                model.instances.mut_instance(instance)
+            },
+            InstanceType::Anim3D => {
+                let model = self.opaque_instances_2.animated.mut_instance(instance);
+                &mut model.instance
+            },
+            _ => todo!()
         }
     }
 
@@ -1535,16 +1531,22 @@ impl InstancesState {
 
     pub(crate) fn update_rendered3d(&mut self, frustum: &crate::camera::Frustum) {
         for instance in self.render_matrix.update_rendered(frustum) {
-            let model = self.opaque_instances.mut_instance(instance);
-            match model {
-                DrawModel::M(m) => m.uncull_instance(instance.index),
-                DrawModel::A(a) => a.uncull_instance(),
+            match instance.dimension {
+                InstanceType::Opaque3D => {
+                    let model = self.opaque_instances_2.instanced.mut_instance(instance);
+                    model.uncull_instance(instance.index)
+                },
+                InstanceType::Anim3D => {
+                    let model = self.opaque_instances_2.animated.mut_instance(instance);
+                    model.uncull_instance()
+                },
+                _ => todo!()
             }
         }
     }
 
     fn get_anim_sprite(&self, instance: &InstanceReference) -> &Instance2D {
-        let sprite = self.animated_sprites.instance(instance);
+        let sprite = self.sprite_instances_2.animated.instance(instance);
         &sprite.instance
     }
 
@@ -1557,32 +1559,31 @@ impl InstancesState {
         match instance.dimension {
             InstanceType::Sprite => (),
             InstanceType::Anim2D => (),
-            InstanceType::Opaque3D => {
-                let model = self.opaque_instances.get_mut(instance.get_name());
-                match model {
-                    Some(mo) => match mo {
-                        DrawModel::M(_) => (),
-                        DrawModel::A(a) => a.animate(mesh_index, material_index),
-                    },
-                    None => (),
-                }
-            }
+            InstanceType::Opaque3D => (),
+            InstanceType::Anim3D => {
+                let a = self.opaque_instances_2.animated.mut_instance(instance);
+                a.animate(mesh_index, material_index)
+            },
         }
     }
 
     pub(crate) fn hide_instance(&mut self, instance: &InstanceReference) {
         match instance.dimension {
             InstanceType::Sprite => {
-                let sprite = self.sprite_instances.mut_instance(instance);
+                let sprite = self.sprite_instances_2.instanced.mut_instance(instance);
                 sprite.hide(instance.get_id());
             }
             InstanceType::Anim2D => {
-                let anim = self.animated_sprites.mut_instance(instance);
+                let anim = self.sprite_instances_2.animated.mut_instance(instance);
                 anim.hide();
             }
             InstanceType::Opaque3D => {
-                let model = self.opaque_instances.mut_instance(instance);
+                let model = self.opaque_instances_2.instanced.mut_instance(instance);
                 model.hide(instance.get_id());
+            }
+            InstanceType::Anim3D => {
+                let model = self.opaque_instances_2.animated.mut_instance(instance);
+                model.hide();
             }
         }
     }
@@ -1599,17 +1600,21 @@ impl InstancesState {
     pub(crate) fn show_instance(&mut self, instance: &InstanceReference) {
         match instance.dimension {
             InstanceType::Sprite => {
-                let sprite = self.sprite_instances.mut_instance(instance);
+                let sprite = self.sprite_instances_2.instanced.mut_instance(instance);
                 sprite.show(instance.get_id());
             }
             InstanceType::Anim2D => {
-                let anim = self.animated_sprites.mut_instance(instance);
+                let anim = self.sprite_instances_2.animated.mut_instance(instance);
                 anim.show();
             }
             InstanceType::Opaque3D => {
-                let model = self.opaque_instances.mut_instance(instance);
+                let model = self.opaque_instances_2.instanced.mut_instance(instance);
                 model.show(instance.get_id());
             }
+            InstanceType::Anim3D => {
+                let model = self.opaque_instances_2.animated.mut_instance(instance);
+                model.show();
+            },
         }
     }
 
@@ -1625,17 +1630,21 @@ impl InstancesState {
     pub(crate) fn is_instance_hidden(&self, instance: &InstanceReference) -> bool {
         match instance.dimension {
             InstanceType::Sprite => {
-                let sprite = self.sprite_instances.instance(instance);
+                let sprite = self.sprite_instances_2.instanced.instance(instance);
                 sprite.is_hidden(instance.get_id())
             }
             InstanceType::Anim2D => {
-                let anim = self.animated_sprites.instance(instance);
+                let anim = self.sprite_instances_2.animated.instance(instance);
                 anim.is_hidden()
             }
             InstanceType::Opaque3D => {
-                let model = self.opaque_instances.instance(instance);
+                let model = self.opaque_instances_2.instanced.instance(instance);
                 model.is_hidden(instance.get_id())
             }
+            InstanceType::Anim3D => {
+                let model = self.opaque_instances_2.animated.instance(instance);
+                model.is_hidden()
+            },
         }
     }
 
