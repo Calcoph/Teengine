@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.28.6"
+winit = "0.29"
 gilrs = { version = "0.10.2" }
 imgui-gilrs ={ git = "https://github.com/Calcoph/imgui-gilrs", branch = "uptodate-winit", features = ["winit"], optional = true }
 

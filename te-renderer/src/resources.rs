@@ -41,7 +41,7 @@ pub fn load_glb_model(
         for glb_primitive in glb_mesh.primitives() {
             if glb_primitive.mode() != PrimitiveType::Triangles {
                 dbg!("Primitive must be triangles");
-                return Err(Box::new(TError::InvalidGLB(GLBErr::TODO)))
+                return Err(Box::new(TError::InvalidGLB(GLBErr::UnsupportedPrimitiveType)))
             }
 
             // TODO: sort out the opaque, transparent and translucent primitives so we can correctly draw them using these steps:

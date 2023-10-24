@@ -8,6 +8,8 @@ pub enum GLBErr {
     UnsupportedTexCoordDataType,
     // tex coords should be Vec2
     InvalidTexCoordAccessorDimension,
+    // Only triangle primitives are supported
+    UnsupportedPrimitiveType,
     TODO
 }
 

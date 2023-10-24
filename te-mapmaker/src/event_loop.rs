@@ -39,7 +39,7 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
         Err(_) => Err(InitError::Unkown),
     }?;
 
-    let event_loop = EventLoopBuilder::with_user_event().build();
+    let event_loop = EventLoopBuilder::with_user_event().build().expect("Couldn't create event loop");
     let mut gamepad_handler = gamepad::listen(event_loop.create_proxy());
     let wb = WindowBuilder::new()
         .with_title("Tilengine")
@@ -56,8 +56,8 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
 
     let mut mapmaker = mapmaker::ImguiState::new(&window, config.clone(), default_model).await;
     let mut last_render_time = std::time::Instant::now();
-    event_loop.run(move |event, _window_target, control_flow| {
-        *control_flow = ControlFlow::Poll;
+    event_loop.run(move |event, window_target| {
+        window_target.set_control_flow(ControlFlow::Poll);
         match &event {
             Event::NewEvents(_cause) => (), // TODO
             Event::WindowEvent { window_id, event } if *window_id == window.id() => {
@@ -66,17 +66,14 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                         mapmaker.resize(size.clone());
                     }
                     WindowEvent::Moved(_) => (), // ignore
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a poionter to the next action we wanna do. In this case, exit the program
+                    WindowEvent::CloseRequested => window_target.exit(),
                     WindowEvent::Destroyed => (), //println!("TODO: Destroyed window {:?}", window_id), // TODO
                     WindowEvent::DroppedFile(_) => (), // ignore
                     WindowEvent::HoveredFile(_) => (), // ignore
                     WindowEvent::HoveredFileCancelled => (), // ignore
-                    WindowEvent::ReceivedCharacter(_character) => (), //println!("TODO: ReceivedCharacter{:?}", character),
                     WindowEvent::Focused(_is_focused) => (), //println!("TODO: Focused {:?}", is_focused), // TODO
                     WindowEvent::KeyboardInput {
-                        device_id: _,
-                        input: _,
-                        is_synthetic: _,
+                        ..
                     } => {
                         mapmaker.input(&event);
                     } // TODO
@@ -111,16 +108,35 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                         value: _value,
                     } => (), //println!("Ignoring AxisMotion ({:?}, {:?}, {:?})", device_id, axis, value), // ignore until I know if it's useful
                     WindowEvent::Touch(_touch) => (), //println!("TODO: Touch ({:?})", touch), // TODO: do the same as mouse click event
-                    WindowEvent::ScaleFactorChanged {
-                        scale_factor: _,
-                        new_inner_size,
-                    } => mapmaker.resize(**new_inner_size),
                     WindowEvent::ThemeChanged(_theme) => (), //println!("TODO: ThemeChanged ({:?})", theme), // TODO
                     WindowEvent::Ime(_) => (),               // TODO
                     WindowEvent::Occluded(_) => (),
                     WindowEvent::TouchpadMagnify { device_id, delta, phase } => (),
                     WindowEvent::SmartMagnify { device_id } => (),
                     WindowEvent::TouchpadRotate { device_id, delta, phase } => (),          // TODO
+                    WindowEvent::RedrawRequested => {
+                        if *window_id == window.id() {
+                            let now = std::time::Instant::now();
+                            let dt = now - last_render_time;
+                            last_render_time = now;
+                            mapmaker.update(dt);
+                            match mapmaker.render(
+                                &window,
+                                config.tile_size,
+                                &config.resource_files_directory,
+                                &config.map_files_directory,
+                            ) {
+                                Ok(_) => {}
+                                // Reconfigure the surface if lost
+                                Err(wgpu::SurfaceError::Lost) => mapmaker.resize(mapmaker.state.size),
+                                // The system is out of memory, we should quit
+                                Err(wgpu::SurfaceError::OutOfMemory) => window_target.exit(),
+                                // All other errors (Outdated, Timeout) should be resolved by the next frame
+                                Err(e) => eprintln!("{:?}", e),
+                            }
+                        }
+                    }
+                    _ => ()
                 }
             }
             Event::DeviceEvent {
@@ -141,38 +157,15 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                         state: _state,
                     } => (), //println!("TODO: Device Button ({:?}, {:?}, {:?})", device_id, button, state), // TODO
                     winit::event::DeviceEvent::Key(_input) => (), //println!("TODO: Device Key ({:?}, {:?})", device_id, input), // TODO
-                    winit::event::DeviceEvent::Text {
-                        codepoint: _codepoint,
-                    } => (), //println!("TODO: Device Text ({:?}, {:?})", device_id, codepoint), // TODO
                 }
             }
-            Event::Suspended => *control_flow = ControlFlow::Wait,
-            Event::MainEventsCleared => window.request_redraw(),
-            Event::RedrawRequested(window_id) => {
-                if *window_id == window.id() {
-                    let now = std::time::Instant::now();
-                    let dt = now - last_render_time;
-                    last_render_time = now;
-                    mapmaker.update(dt);
-                    match mapmaker.render(
-                        &window,
-                        config.tile_size,
-                        &config.resource_files_directory,
-                        &config.map_files_directory,
-                    ) {
-                        Ok(_) => {}
-                        // Reconfigure the surface if lost
-                        Err(wgpu::SurfaceError::Lost) => mapmaker.resize(mapmaker.state.size),
-                        // The system is out of memory, we should quit
-                        Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                        // All other errors (Outdated, Timeout) should be resolved by the next frame
-                        Err(e) => eprintln!("{:?}", e),
-                    }
-                }
-            }
+            Event::Suspended => window_target.set_control_flow(ControlFlow::Wait),
+            Event::AboutToWait => window.request_redraw(),
             _ => (), // ignore windowevents that aren't for current window
         }
 
         gamepad_handler.handle_event(mapmaker.context.io_mut(), &window, &mut mapmaker.platform, &event)
-    })
+    }).unwrap();
+
+    Ok(())
 }

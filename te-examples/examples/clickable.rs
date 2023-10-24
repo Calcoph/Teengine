@@ -4,8 +4,8 @@ use te_player::{
     event_loop::{Event, TextSender},
     te_winit::{
         dpi::PhysicalSize,
-        event::{ElementState, WindowEvent},
-        event_loop::ControlFlow,
+        event::{ElementState, WindowEvent, KeyEvent},
+        event_loop::ControlFlow, keyboard::{PhysicalKey, KeyCode},
     },
 };
 use te_renderer::{
@@ -130,7 +130,7 @@ pub(crate) fn main() {
     let mut see_clickable = false;
     let mut unpadded_width = WIN_WIDTH;
     let mut padded_width = pad(unpadded_width);
-    te_window.set_inner_size(PhysicalSize {
+    change_size(&te_window, PhysicalSize {
         width: WIN_WIDTH,
         height: WIN_HEIGHT,
     }); // Because we are dealing always with PhysicalSize but te_player::prepare() uses LogicalSize
@@ -143,34 +143,29 @@ pub(crate) fn main() {
         );
 
     let mut last_render_time = std::time::Instant::now();
-    event_loop.run(move |event, _window_target, control_flow| {
-        *control_flow = ControlFlow::Poll;
+    event_loop.run(move |event, window_target| {
+        window_target.set_control_flow(ControlFlow::Poll);
         match &event {
             Event::WindowEvent { window_id, event } if *window_id == te_window.id() => {
                 match event {
                     WindowEvent::Resized(size) => {
-                        let size = if see_clickable {
+                        if see_clickable {
                             let old_width = padded_width;
                             unpadded_width = size.width;
                             padded_width = pad(unpadded_width);
                             if old_width != padded_width {
                                 // adjust the window to the padded size
-                                te_window.set_inner_size(PhysicalSize {
+                                change_size(&te_window, PhysicalSize {
                                     width: padded_width,
                                     height: te_state.size.height,
                                 });
                             };
-                            PhysicalSize {
-                                width: padded_width,
-                                height: size.height,
-                            }
                         } else {
                             unpadded_width = size.width;
                             padded_width = pad(unpadded_width);
-                            *size
                         };
-                        te_gpu.resize(size);
-                        te_state.resize(size);
+                        te_gpu.resize(*size);
+                        te_state.resize(*size);
                         te_state
                             .camera
                             .resize_2d_space(size.width, size.height, &te_gpu.queue);
@@ -182,45 +177,38 @@ pub(crate) fn main() {
                                 "clickable_depth_texture",
                             );
                     }
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a pointer to the next action we wanna do. In this case, exit the program
-                    WindowEvent::ScaleFactorChanged {
-                        scale_factor: _,
-                        new_inner_size,
-                    } => {
-                        te_gpu.resize(**new_inner_size);
-                        te_state.resize(**new_inner_size)
-                    }
+                    WindowEvent::CloseRequested => window_target.exit(),
                     WindowEvent::CursorMoved {
                         device_id: _,
                         position,
                         ..
                     } => mouse_pos = (position.x.floor() as u32, position.y.floor() as u32),
                     WindowEvent::KeyboardInput {
-                        device_id: _,
-                        input,
-                        is_synthetic: _,
+                        event: KeyEvent {
+                            physical_key,
+                            state,
+                            ..
+                        },
+                        ..
                     } => {
-                        if let ElementState::Pressed = input.state {
-                            match input.virtual_keycode {
-                                Some(key) => match key {
-                                    te_player::te_winit::event::VirtualKeyCode::M => {
-                                        see_clickable = !see_clickable;
-                                        let size = if see_clickable {
-                                            PhysicalSize {
-                                                width: padded_width,
-                                                height: te_state.size.height,
-                                            }
-                                        } else {
-                                            PhysicalSize {
-                                                width: unpadded_width,
-                                                height: te_state.size.height,
-                                            }
-                                        };
-                                        te_window.set_inner_size(size);
-                                    }
-                                    _ => (),
-                                },
-                                None => (),
+                        if let ElementState::Pressed = state {
+                            match physical_key {
+                                PhysicalKey::Code(KeyCode::KeyM) => {
+                                    see_clickable = !see_clickable;
+                                    let size = if see_clickable {
+                                        PhysicalSize {
+                                            width: padded_width,
+                                            height: te_state.size.height,
+                                        }
+                                    } else {
+                                        PhysicalSize {
+                                            width: unpadded_width,
+                                            height: te_state.size.height,
+                                        }
+                                    };
+                                    change_size(&te_window, size);
+                                }
+                                _ => ()
                             }
                         }
                     }
@@ -236,31 +224,39 @@ pub(crate) fn main() {
                         ) => click = Some(mouse_pos),
                         _ => (),
                     },
+                    WindowEvent::RedrawRequested => {
+                        if *window_id == te_window.id() {
+                            pollster::block_on(render(
+                                &mut last_render,
+                                &mut last_render_time,
+                                &mut te_state,
+                                &te_gpu,
+                                click,
+                                &mut my_text,
+                                see_clickable,
+                                padded_width,
+                                &clickable_depth_texture,
+                            ));
+                            click = None;
+                        }
+                    }
                     _ => (),
                 }
             }
-            Event::Suspended => *control_flow = ControlFlow::Wait,
+            Event::Suspended => window_target.set_control_flow(ControlFlow::Wait),
             Event::Resumed => (),
-            Event::MainEventsCleared => te_window.request_redraw(),
-            Event::RedrawRequested(window_id) => {
-                if *window_id == te_window.id() {
-                    pollster::block_on(render(
-                        &mut last_render,
-                        &mut last_render_time,
-                        &mut te_state,
-                        &te_gpu,
-                        click,
-                        &mut my_text,
-                        see_clickable,
-                        padded_width,
-                        &clickable_depth_texture,
-                    ));
-                    click = None;
-                }
-            }
+            Event::AboutToWait => te_window.request_redraw(),
             _ => (),
         }
-    });
+    }).unwrap();
+}
+
+fn change_size(te_window: &te_player::te_winit::window::Window, new_size: PhysicalSize<u32>) {
+    if let Some(returned_size) = te_window.request_inner_size(new_size) {
+        if returned_size != new_size {
+            dbg!("Warning! non_standard resize");
+        }
+    }
 }
 
 async fn render(

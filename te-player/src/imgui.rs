@@ -46,7 +46,7 @@ pub async fn prepare(
         Err(_) => Err(InitError::Unkown),
     }?;
 
-    let event_loop = EventLoopBuilder::with_user_event().build();
+    let event_loop = EventLoopBuilder::with_user_event().build().expect("Couldn't create event loop");
     let gamepad_handler = gamepad::listen(event_loop.create_proxy());
 
     let wb = window::WindowBuilder::new()

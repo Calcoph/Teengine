@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 # window creator
-winit = "0.28.6"
+winit = "0.29"
 gilrs = { version = "0.10.2" }
 
 # renderer
@@ -43,3 +43,4 @@ path = "../te-gamepad"
 [features]
 imgui = ["imgui-winit-support", "dep:imgui", "imgui-wgpu", "te-gamepad/imgui"]
 draw_when_told = []
+default = ["imgui"]

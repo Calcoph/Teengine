@@ -26,11 +26,11 @@ pub fn run<T: TextSender + 'static>(
     mut event_handler: EventHandler,
 ) {
     let mut last_render_time = std::time::Instant::now();
-    event_loop.run(move |event, _window_target, control_flow| {
+    event_loop.run(move |event, window_target| {
         if cfg!(feature = "draw_when_told") {
-            *control_flow = ControlFlow::Wait;
+            window_target.set_control_flow(ControlFlow::Wait)
         } else {
-            *control_flow = ControlFlow::Poll;
+            window_target.set_control_flow(ControlFlow::Poll)
         }
         match &event {
             Event::WindowEvent { window_id, event } if *window_id == window.borrow().id() => {
@@ -39,46 +39,39 @@ pub fn run<T: TextSender + 'static>(
                         gpu.borrow_mut().resize(*size);
                         state.borrow_mut().resize(*size);
                     }
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a pointer to the next action we wanna do. In this case, exit the program
-                    WindowEvent::ScaleFactorChanged {
-                        scale_factor: _,
-                        new_inner_size,
-                    } => {
-                        gpu.borrow_mut().resize(**new_inner_size);
-                        state.borrow_mut().resize(**new_inner_size)
+                    WindowEvent::CloseRequested => window_target.exit(),
+                    WindowEvent::RedrawRequested => {
+                        if *window_id == window.borrow().id() {
+                            let now = std::time::Instant::now();
+                            let dt = now - last_render_time;
+                            last_render_time = now;
+                            state.borrow_mut().update(dt, &gpu.borrow());
+                            if let Ok(output) = gpu.borrow().surface.get_current_texture() {
+                                let view = output
+                                    .texture
+                                    .create_view(&wgpu::TextureViewDescriptor::default());
+                                let mut encoder =
+                                    te_renderer::state::TeState::prepare_render(&gpu.borrow());
+                                text.borrow_mut().draw_text(|text| {
+                                    state
+                                        .borrow_mut()
+                                        .render(&view, &gpu.borrow(), &mut encoder, text);
+                                });
+                                state.borrow_mut().end_render(&gpu.borrow(), encoder);
+                                output.present();
+                                state.borrow_mut().text.after_present()
+                            }
+                        }
                     }
                     _ => (),
                 }
             }
-            Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
+            Event::Suspended => window_target.set_control_flow(ControlFlow::Wait), // TODO: confirm that it pauses the game
             Event::Resumed => (), // TODO: confirm that it unpauses the game
-            Event::MainEventsCleared =>
+            Event::AboutToWait =>
             {
                 #[cfg(not(feature = "draw_when_told"))]
                 window.borrow().request_redraw()
-            }
-            Event::RedrawRequested(window_id) => {
-                if *window_id == window.borrow().id() {
-                    let now = std::time::Instant::now();
-                    let dt = now - last_render_time;
-                    last_render_time = now;
-                    state.borrow_mut().update(dt, &gpu.borrow());
-                    if let Ok(output) = gpu.borrow().surface.get_current_texture() {
-                        let view = output
-                            .texture
-                            .create_view(&wgpu::TextureViewDescriptor::default());
-                        let mut encoder =
-                            te_renderer::state::TeState::prepare_render(&gpu.borrow());
-                        text.borrow_mut().draw_text(|text| {
-                            state
-                                .borrow_mut()
-                                .render(&view, &gpu.borrow(), &mut encoder, text);
-                        });
-                        state.borrow_mut().end_render(&gpu.borrow(), encoder);
-                        output.present();
-                        state.borrow_mut().text.after_present()
-                    }
-                }
             }
             _ => (),
         }
@@ -89,7 +82,7 @@ pub fn run<T: TextSender + 'static>(
         }
         #[cfg(not(feature = "draw_when_told"))]
         event_handler(event);
-    })
+    }).unwrap()
 }
 
 pub trait TextSender {

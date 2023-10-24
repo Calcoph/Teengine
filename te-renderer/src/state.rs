@@ -7,7 +7,7 @@ use wgpu::{
 };
 use winit::{
     dpi,
-    event::{KeyboardInput, WindowEvent},
+    event::{WindowEvent, KeyEvent},
     window::Window,
 };
 // TODO: Tell everyone when screen is resized, so instances' in_viewport can be updated
@@ -46,7 +46,7 @@ impl GpuState {
         });
         let surface = unsafe {
             instance
-                .create_surface(window)
+                .create_surface(&window)
                 .expect("Unable to create surface")
         };
         // TODO: instance.enumerate_adapters to list all GPUs (tutorial 2 beginner)
@@ -254,7 +254,7 @@ impl BindGroupLayouts {
                 }],
                 label: Some("camera_bind_group_layout"),
             });
-        
+
         let projection_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
@@ -269,7 +269,7 @@ impl BindGroupLayouts {
                 }],
                 label: Some("projection_bind_group_layout"),
             });
-        
+
         BindGroupLayouts {
             texture: texture_bind_group_layout,
             camera: camera_bind_group_layout,
@@ -568,14 +568,14 @@ impl TeState {
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(key),
+                event:
+                    KeyEvent {
                         state,
+                        physical_key,
                         ..
                     },
                 ..
-            } => self.camera.camera_controller.process_keyboard(*key, *state),
+            } => self.camera.camera_controller.process_keyboard(*physical_key, *state),
             _ => false,
         }
     }

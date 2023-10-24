@@ -2,7 +2,7 @@ use cgmath::*;
 use std::f32::consts::FRAC_PI_2;
 use std::time::Duration;
 use wgpu::util::DeviceExt;
-use winit::{dpi, event::*};
+use winit::{dpi, event::*, keyboard::{PhysicalKey, KeyCode}};
 
 use crate::{
     initial_config::InitialConfiguration,
@@ -572,62 +572,66 @@ impl CameraController {
         }
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
+    pub fn process_keyboard(&mut self, key: PhysicalKey, state: ElementState) -> bool {
         let amount = if state == ElementState::Pressed {
             1.0
         } else {
             0.0
         };
-        match key {
-            VirtualKeyCode::W | VirtualKeyCode::Up => {
-                self.amount_forward = amount;
-                true
+        if let PhysicalKey::Code(key) = key {
+            match key {
+                KeyCode::KeyW | KeyCode::ArrowUp => {
+                    self.amount_forward = amount;
+                    true
+                }
+                KeyCode::KeyS | KeyCode::ArrowDown => {
+                    self.amount_backward = amount;
+                    true
+                }
+                KeyCode::KeyA | KeyCode::ArrowLeft => {
+                    self.amount_left = amount;
+                    true
+                }
+                KeyCode::KeyD | KeyCode::ArrowRight => {
+                    self.amount_right = amount;
+                    true
+                }
+                KeyCode::KeyQ => {
+                    self.rotate_horizontal -= amount / 2.0;
+                    true
+                }
+                KeyCode::KeyE => {
+                    self.rotate_horizontal += amount / 2.0;
+                    true
+                }
+                KeyCode::KeyX => {
+                    self.rotate_vertical -= amount / 2.0;
+                    true
+                }
+                KeyCode::KeyZ => {
+                    self.rotate_vertical += amount / 2.0;
+                    true
+                }
+                KeyCode::KeyR => {
+                    self.scroll += amount / 2.0;
+                    true
+                }
+                KeyCode::KeyF => {
+                    self.scroll -= amount / 2.0;
+                    true
+                }
+                KeyCode::Space => {
+                    self.amount_up = amount;
+                    true
+                }
+                KeyCode::ShiftLeft => {
+                    self.amount_down = amount;
+                    true
+                }
+                _ => false,
             }
-            VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.amount_backward = amount;
-                true
-            }
-            VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.amount_left = amount;
-                true
-            }
-            VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.amount_right = amount;
-                true
-            }
-            VirtualKeyCode::Q => {
-                self.rotate_horizontal -= amount / 2.0;
-                true
-            }
-            VirtualKeyCode::E => {
-                self.rotate_horizontal += amount / 2.0;
-                true
-            }
-            VirtualKeyCode::X => {
-                self.rotate_vertical -= amount / 2.0;
-                true
-            }
-            VirtualKeyCode::Z => {
-                self.rotate_vertical += amount / 2.0;
-                true
-            }
-            VirtualKeyCode::R => {
-                self.scroll += amount / 2.0;
-                true
-            }
-            VirtualKeyCode::F => {
-                self.scroll -= amount / 2.0;
-                true
-            }
-            VirtualKeyCode::Space => {
-                self.amount_up = amount;
-                true
-            }
-            VirtualKeyCode::LShift => {
-                self.amount_down = amount;
-                true
-            }
-            _ => false,
+        } else {
+            false
         }
     }
 

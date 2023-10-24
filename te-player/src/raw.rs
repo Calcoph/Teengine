@@ -38,7 +38,7 @@ pub async fn prepare(
         Err(_) => panic!("Icon has wrong format"),
     };
 
-    let event_loop = EventLoopBuilder::with_user_event().build();
+    let event_loop = EventLoopBuilder::with_user_event().build().expect("Couldn't create event loop");
     gamepad::listen(event_loop.create_proxy());
 
     let wb = WindowBuilder::new()

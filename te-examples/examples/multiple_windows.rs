@@ -45,8 +45,8 @@ async fn as_main() {
     let mut last_render_time1 = std::time::Instant::now();
     let mut last_render_time2 = std::time::Instant::now();
     let mut last_render_time3 = std::time::Instant::now();
-    event_loop.run(move |event, _window_target, control_flow| {
-        *control_flow = ControlFlow::Poll;
+    event_loop.run(move |event, window_target| {
+        window_target.set_control_flow(ControlFlow::Poll);
         match &event {
             Event::WindowEvent { window_id, event } => {
                 let res = if *window_id == window1.borrow().id() {
@@ -65,59 +65,52 @@ async fn as_main() {
                             gpu.borrow_mut().resize(*size);
                             state.borrow_mut().resize(*size);
                         }
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit, //control_flow is a pointer to the next action we wanna do. In this case, exit the program
-                        WindowEvent::ScaleFactorChanged {
-                            scale_factor: _,
-                            new_inner_size,
-                        } => {
-                            gpu.borrow_mut().resize(**new_inner_size);
-                            state.borrow_mut().resize(**new_inner_size)
+                        WindowEvent::CloseRequested => window_target.exit(),
+                        WindowEvent::RedrawRequested => {
+                            let res = if *window_id == window1.borrow().id() {
+                                Some((&te_state1, &gpu1, &mut last_render_time1))
+                            } else if *window_id == window2.borrow().id() {
+                                Some((&te_state2, &gpu2, &mut last_render_time2))
+                            } else if *window_id == window3.borrow().id() {
+                                Some((&te_state3, &gpu3, &mut last_render_time3))
+                            } else {
+                                None
+                            };
+
+                            if let Some((state, gpu, last_render_time)) = res {
+                                let now = std::time::Instant::now();
+                                let dt = now - *last_render_time;
+                                *last_render_time = now;
+                                state.borrow_mut().update(dt, &gpu.borrow());
+                                let output = gpu
+                                    .borrow()
+                                    .surface
+                                    .get_current_texture()
+                                    .expect("Couldn't get surface texture");
+                                let view = output
+                                    .texture
+                                    .create_view(&wgpu::TextureViewDescriptor::default());
+                                let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
+                                state
+                                    .borrow_mut()
+                                    .render(&view, &gpu.borrow(), &mut encoder, &vec![]);
+                                state.borrow_mut().end_render(&gpu.borrow(), encoder);
+                                output.present();
+                                state.borrow_mut().text.after_present()
+                            }
                         }
                         _ => (),
                     }
                 }
             }
-            Event::Suspended => *control_flow = ControlFlow::Wait, // TODO: confirm that it pauses the game
+            Event::Suspended => window_target.set_control_flow(ControlFlow::Wait), // TODO: confirm that it pauses the game
             Event::Resumed => (), // TODO: confirm that it unpauses the game
-            Event::MainEventsCleared => {
+            Event::AboutToWait => {
                 window1.borrow().request_redraw();
                 window2.borrow().request_redraw();
                 window3.borrow().request_redraw();
             }
-            Event::RedrawRequested(window_id) => {
-                let res = if *window_id == window1.borrow().id() {
-                    Some((&te_state1, &gpu1, &mut last_render_time1))
-                } else if *window_id == window2.borrow().id() {
-                    Some((&te_state2, &gpu2, &mut last_render_time2))
-                } else if *window_id == window3.borrow().id() {
-                    Some((&te_state3, &gpu3, &mut last_render_time3))
-                } else {
-                    None
-                };
-
-                if let Some((state, gpu, last_render_time)) = res {
-                    let now = std::time::Instant::now();
-                    let dt = now - *last_render_time;
-                    *last_render_time = now;
-                    state.borrow_mut().update(dt, &gpu.borrow());
-                    let output = gpu
-                        .borrow()
-                        .surface
-                        .get_current_texture()
-                        .expect("Couldn't get surface texture");
-                    let view = output
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-                    let mut encoder = te_renderer::state::TeState::prepare_render(&gpu.borrow());
-                    state
-                        .borrow_mut()
-                        .render(&view, &gpu.borrow(), &mut encoder, &vec![]);
-                    state.borrow_mut().end_render(&gpu.borrow(), encoder);
-                    output.present();
-                    state.borrow_mut().text.after_present()
-                }
-            }
             _ => (),
         }
-    })
+    }).unwrap()
 }
