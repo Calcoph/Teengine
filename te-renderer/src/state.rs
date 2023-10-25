@@ -15,7 +15,7 @@ pub use crate::instances::builders::*;
 use crate::{
     camera::{self, CameraState},
     initial_config::InitialConfiguration,
-    instances::{InstanceRaw, InstancesState},
+    instances::{InstanceRaw, InstancesState, Opaque3DInstance},
     model, temap, texture,
 };
 #[allow(deprecated)]
@@ -767,7 +767,7 @@ impl TeState {
             renderer
                 .render_pass
                 .set_vertex_buffer(1, instance_buffer.slice(..));
-            
+
             renderer.draw_model_instanced_mask(
                 &instanced_model.model,
                 instanced_model.get_instances_vec(),
@@ -878,39 +878,26 @@ impl TeState {
             .transparent_instances
             .iter()
             .map(|name| {
-                self.instances
-                    .opaque_instances_2
-                    .instanced
-                    .get(name)
-                    .expect("Invalid reference")
+                self.instances.opaque_instances_2.get(name).unwrap()
             })
-            .filter(|instanced_model| instanced_model.unculled_instances > 0);
+            .filter(|instanced_model| instanced_model.is_unculled());
         for instanced_model in iter {
-            let instance_buffer = &instanced_model.instance_buffer;
-            renderer
-                .render_pass
-                .set_vertex_buffer(1, instance_buffer.slice(..));
-            renderer.tdraw_model_instanced(&instanced_model.model, instanced_model.get_instances_vec());
-        };
-
-        let iter = self
-            .instances
-            .transparent_instances
-            .iter()
-            .map(|name| {
-                self.instances
-                    .opaque_instances_2
-                    .animated
-                    .get(name)
-                    .expect("Invalid reference")
-            })
-            .filter(|instanced_model| instanced_model.unculled_instance);
-        for instanced_model in iter {
-            let instance_buffer = &instanced_model.instance_buffer;
-            renderer
-                .render_pass
-                .set_vertex_buffer(1, instance_buffer.slice(..));
-            renderer.tdraw_animated_model_instanced(&instanced_model);
+            match instanced_model {
+                Opaque3DInstance::Normal(instanced_model) => {
+                    let instance_buffer = &instanced_model.instance_buffer;
+                    renderer
+                        .render_pass
+                        .set_vertex_buffer(1, instance_buffer.slice(..));
+                    renderer.tdraw_model_instanced(&instanced_model.model, instanced_model.get_instances_vec());
+                },
+                Opaque3DInstance::Animated(instanced_model) => {
+                    let instance_buffer = &instanced_model.instance_buffer;
+                    renderer
+                        .render_pass
+                        .set_vertex_buffer(1, instance_buffer.slice(..));
+                    renderer.tdraw_animated_model_instanced(&instanced_model);
+                }
+            }
         };
     }
 

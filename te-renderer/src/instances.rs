@@ -573,6 +573,20 @@ impl<T> InstanceVec<T> for Vec<T> {
     }
 }
 
+pub(crate) enum Opaque3DInstance<'a> {
+    Normal(&'a InstancedModel),
+    Animated(&'a AnimatedModel)
+}
+
+impl<'a> Opaque3DInstance<'a> {
+    pub(crate) fn is_unculled(&self) -> bool {
+        match self {
+            Opaque3DInstance::Normal(n) => n.unculled_instances > 0,
+            Opaque3DInstance::Animated(a) => a.unculled_instance,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Opaque3DInstances {
     pub(crate) instanced: HashMap<String, InstancedModel>,
@@ -590,6 +604,16 @@ impl Opaque3DInstances {
     fn forget_all(&mut self) {
         self.instanced = HashMap::new();
         self.animated = HashMap::new();
+    }
+
+    pub(crate) fn get(&self, name: &str) -> Option<Opaque3DInstance> {
+        if let Some(instance) = self.instanced.get(name) {
+            Some(Opaque3DInstance::Normal(instance))
+        } else if let Some(instance) = self.animated.get(name) {
+            Some(Opaque3DInstance::Animated(instance))
+        } else {
+            None
+        }
     }
 }
 
