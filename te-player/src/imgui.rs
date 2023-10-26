@@ -172,10 +172,12 @@ pub trait ImguiState {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None
             });
             renderer
                 .render(context.render(), &gpu.queue, &gpu.device, &mut render_pass)

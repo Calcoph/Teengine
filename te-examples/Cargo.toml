@@ -9,7 +9,7 @@ edition = "2021"
 pollster = "0.3.0"
 te-player = { path = "../te-player", features = ["imgui"] }
 te-renderer = { path = "../te-renderer" }
-wgpu = "0.17.0"
+wgpu = "0.18"
 futures-intrusive = "0.5.0"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 pub use glyph_brush::{Section, Text};
 use wgpu::{
     util::DeviceExt, BindGroupLayout, CommandBuffer, CommandEncoder, InstanceDescriptor,
-    PushConstantRange, ShaderStages,
+    PushConstantRange, ShaderStages, InstanceFlags,
 };
 use winit::{
     dpi,
@@ -43,6 +43,8 @@ impl GpuState {
         let instance = wgpu::Instance::new(InstanceDescriptor {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+            flags: InstanceFlags::default(),
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic
         });
         let surface = unsafe {
             instance
@@ -645,7 +647,7 @@ impl TeState {
                                     b: self.bgcolor.blue,
                                     a: 1.0,
                                 }),
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             },
                         }),
                     ],
@@ -653,10 +655,12 @@ impl TeState {
                         view: &gpu.depth_texture.view,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
+                            store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
                     }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
                 });
             self.draw_opaque(&mut render_pass);
             self.draw_transparent(&mut render_pass);
@@ -675,11 +679,13 @@ impl TeState {
                             resolve_target: None,
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Load,
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             },
                         }),
                     ],
                     depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
                 });
             self.draw_sprites(&mut render_pass);
         }
@@ -730,7 +736,7 @@ impl TeState {
                             b: 0.0,
                             a: 0.0,
                         }),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 }),
             ],
@@ -738,10 +744,12 @@ impl TeState {
                 view: depth_texture,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 }),
                 stencil_ops: None,
             }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
         self.draw_clickable(&mut render_pass, drawable);
     }
