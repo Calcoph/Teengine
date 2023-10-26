@@ -77,13 +77,12 @@ pub(crate) fn main() {
     let y_pos = 200.0;
     let mut click = None;
     let mut mouse_pos = (0, 0);
-    te_state
-        .place_custom_model(
-            "model_name",
-            &te_gpu,
-            ((x_pos / 1000.0) - 0.5, 0.0, (y_pos / 1000.0) - 0.5),
-            Some(square_model),
-        )
+    te_state.add_model(
+        "model_name",
+        &te_gpu,
+        ((x_pos / 1000.0) - 0.5, 0.0, (y_pos / 1000.0) - 0.5)
+    ).with_model(square_model)
+        .build()
         .expect("Unreachable");
     for j in 0..5 {
         for i in 0..5 {
@@ -98,13 +97,12 @@ pub(crate) fn main() {
             );
 
             // This is bad practice. Since model_name{i}_{j} is the same model as model_name, they both should be model_name. and the last argument should be None instead of Some(square_model)
-            te_state
-                .place_custom_model(
-                    &format!("model_name{i}_{j}"),
-                    &te_gpu,
-                    (posx, -((i + j) as f32) / 100.0, posy),
-                    Some(square_model),
-                )
+            te_state.add_model(
+                &format!("model_name{i}_{j}"),
+                &te_gpu,
+                (posx, -((i + j) as f32) / 100.0, posy)
+            ).with_model(square_model)
+                .build()
                 .expect("Unreachable");
         }
     }

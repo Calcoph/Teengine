@@ -1,10 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 use te_player::{
     event_loop::PlaceholderTextSender,
     imgui::{ImguiState, PrepareResult},
 };
-use te_renderer::{initial_config::InitialConfiguration, state::TeState};
+use te_renderer::initial_config::InitialConfiguration;
 
 fn main() {
     pollster::block_on(as_main());
@@ -34,8 +32,7 @@ async fn as_main() {
     .expect("Failed init");
 
     let my_imgui = MyImgui {
-        te_state: te_state.clone(),
-        opened: true
+
     };
     te_player::imgui::event_loop::run(
         event_loop,
@@ -53,8 +50,7 @@ async fn as_main() {
 }
 
 struct MyImgui {
-    te_state: Rc<RefCell<TeState>>,
-    opened: bool
+
 }
 
 impl ImguiState for MyImgui {
@@ -75,7 +71,7 @@ impl ImguiState for MyImgui {
                     mouse_pos[0], mouse_pos[1]
                 ));
             });
-        
+
         ui.window("Hello world2")
             .size([300.0, 110.0], te_player::imgui::Condition::FirstUseEver)
             .build(|| {

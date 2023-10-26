@@ -219,9 +219,6 @@ where
             self.draw_mesh_instanced_mask(mesh, instances.clone(), model_name.clone());
         }
     }
-    fn draw_mesh_mask(&mut self, mesh: &'c Mesh, model_name: String) {
-        self.draw_mesh_instanced_mask(mesh, vec![0..1], model_name);
-    }
     fn draw_animated_mesh_instanced_mask(&mut self, mesh: &'c AnimatedMesh) {
         self.render_pass
             .set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
@@ -275,9 +272,6 @@ where
             self.tdraw_animated_mesh_instanced_mask(mesh);
         }
     }
-    fn tdraw_mesh_mask(&mut self, mesh: &'c Mesh) {
-        self.tdraw_mesh_instanced_mask(mesh, &vec![0..1]);
-    }
     fn tdraw_animated_mesh_instanced_mask(&mut self, mesh: &'c AnimatedMesh) {
         self.render_pass
             .set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
@@ -285,7 +279,6 @@ where
             .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.render_pass
             .set_bind_group(0, self.camera_bind_group, &[]);
-        todo!(); // update counter
         self.render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
     }
 
@@ -296,7 +289,6 @@ where
             .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.render_pass
             .set_bind_group(0, self.camera_bind_group, &[]);
-        todo!(); // update counter
         for inst_range in instances {
             self.render_pass
                 .draw_indexed(0..mesh.num_elements, 0, inst_range.clone());
@@ -333,10 +325,6 @@ impl<'a, 'b> Renderer<'a, 'b> {
             let material = &model.materials[material];
             self.draw_animated_mesh_instanced(mesh, material);
         }
-    }
-
-    fn draw_mesh(&mut self, mesh: &'a Mesh, material: &'a Material) {
-        self.draw_mesh_instanced(mesh, material, vec![0..1]);
     }
 
     fn draw_animated_mesh_instanced(&mut self, mesh: &'a AnimatedMesh, material: &'a Material) {
@@ -384,10 +372,6 @@ impl<'a, 'b> Renderer<'a, 'b> {
             let material = &model.materials[material];
             self.tdraw_animated_mesh_instanced(mesh, material);
         }
-    }
-
-    fn tdraw_mesh(&mut self, mesh: &'a Mesh, material: &'a Material) {
-        self.tdraw_mesh_instanced(mesh, material, &vec![0..1]);
     }
 
     fn tdraw_animated_mesh_instanced(&mut self, mesh: &'a AnimatedMesh, material: &'a Material) {

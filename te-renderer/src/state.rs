@@ -616,7 +616,7 @@ impl TeState {
                 }
             }
 
-            for (_name, sprite) in &mut self.instances.sprite_instances_2.instanced {
+            for (_name, sprite) in &mut self.instances.sprite_instances.instanced {
                 sprite.animate(queue);
             }
         }
@@ -764,7 +764,7 @@ impl TeState {
 
         let iter = self
             .instances
-            .opaque_instances_2
+            .opaque_instances
             .instanced
             .iter()
             .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0);
@@ -785,13 +785,13 @@ impl TeState {
 
         let iter = self
             .instances
-            .opaque_instances_2
+            .opaque_instances
             .animated
             .iter()
             .filter(|(_name, instanced_model)| instanced_model.unculled_instance);
 
 
-        for (name, instanced_model) in iter {
+        for (_name, instanced_model) in iter {
             let instance_buffer = &instanced_model.instance_buffer;
             renderer
                 .render_pass
@@ -807,7 +807,7 @@ impl TeState {
             .iter()
             .map(|name| {
                 self.instances
-                    .opaque_instances_2
+                    .opaque_instances
                     .instanced
                     .get(name)
                     .expect("Invalid reference")
@@ -828,7 +828,7 @@ impl TeState {
             .iter()
             .map(|name| {
                 self.instances
-                    .opaque_instances_2
+                    .opaque_instances
                     .animated
                     .get(name)
                     .expect("Invalid reference")
@@ -850,7 +850,7 @@ impl TeState {
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
         let iter = self
             .instances
-            .opaque_instances_2
+            .opaque_instances
             .instanced
             .iter()
             .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0);
@@ -864,7 +864,7 @@ impl TeState {
 
         let iter = self
             .instances
-            .opaque_instances_2
+            .opaque_instances
             .animated
             .iter()
             .filter(|(_name, instanced_model)| instanced_model.unculled_instance);
@@ -886,7 +886,7 @@ impl TeState {
             .transparent_instances
             .iter()
             .map(|name| {
-                self.instances.opaque_instances_2.get(name).unwrap()
+                self.instances.opaque_instances.get(name).unwrap()
             })
             .filter(|instanced_model| instanced_model.is_unculled());
         for instanced_model in iter {
@@ -927,7 +927,7 @@ impl TeState {
             .collect();
         let sprites: Vec<&dyn Draw2D> = self
             .instances
-            .sprite_instances_2
+            .sprite_instances
             .instanced
             .iter()
             .map(|(_name, inst)| inst as &dyn Draw2D)
@@ -935,7 +935,7 @@ impl TeState {
         sorted_2d.extend(sprites.into_iter());
         let anim_sprites: Vec<&dyn Draw2D> = self
             .instances
-            .sprite_instances_2
+            .sprite_instances
             .animated
             .iter()
             .filter(|(_name, inst)| inst.is_drawable())
@@ -969,11 +969,11 @@ impl TeState {
     }
 
     fn cull_all3d(&mut self) {
-        for (_name, model) in self.instances.opaque_instances_2.instanced.iter_mut() {
+        for (_name, model) in self.instances.opaque_instances.instanced.iter_mut() {
             model.cull_all();
         }
 
-        for (_name, model) in self.instances.opaque_instances_2.animated.iter_mut() {
+        for (_name, model) in self.instances.opaque_instances.animated.iter_mut() {
             model.cull_all();
         }
     }

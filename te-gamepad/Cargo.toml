@@ -12,3 +12,4 @@ imgui-gilrs ={ git = "https://github.com/Calcoph/imgui-gilrs", branch = "uptodat
 
 [features]
 imgui = ["imgui-gilrs"]
+#default = ["imgui"]

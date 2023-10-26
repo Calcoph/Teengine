@@ -9,13 +9,11 @@ pub use crate::raw::*;
 #[derive(Debug)]
 enum InitError {
     Unkown,
-    Opaque,
 }
 
 impl Display for InitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
-            InitError::Opaque => "InitError: icon.png must be a transparent png",
             InitError::Unkown => "InitError: Unkown error",
         };
 

@@ -148,6 +148,7 @@ impl Frustum {
         )
     }
 
+    #[allow(unused)] // Unused because it's only needed for debugging
     pub(crate) fn get_model(
         camera: &Camera,
         projection: &Projection,
@@ -353,6 +354,7 @@ impl CameraState {
         }
     }
 
+    #[allow(unused)] // Unused because it's only used for debugging
     pub(crate) fn get_frustum_model(
         &self,
         gpu: &GpuState,

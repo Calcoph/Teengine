@@ -323,16 +323,6 @@ impl AnimatedSprite {
         );
     }
 
-    pub(crate) fn animate(&mut self, queue: &wgpu::Queue) {
-        if self.instance.animation.is_some() {
-            queue.write_buffer(
-                &self.instance_buffer,
-                (0).try_into().expect("Too many instances"), // rare case when usize > u64
-                bytemuck::cast_slice(&[self.instance.to_raw()]),
-            );
-        }
-    }
-
     pub(crate) fn hide(&mut self) {
         self.instance.hide();
     }

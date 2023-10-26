@@ -3,7 +3,7 @@ use std::path::Path;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
-use wgpu::{self, CommandEncoder, CommandBuffer};
+use wgpu::{self, CommandBuffer};
 use winit::{event::WindowEvent, window::Window};
 
 use te_renderer::{
@@ -277,8 +277,11 @@ impl ImguiState {
                         let x = self.mod_instance.modifying_instance.x;
                         let y = self.mod_instance.modifying_instance.y;
                         let z = self.mod_instance.modifying_instance.z;
-                        self.state
-                            .place_model(&self.mod_instance.modifying_name, &self.gpu, (x, y, z))
+                        self.state.add_model(
+                            &self.mod_instance.modifying_name,
+                            &self.gpu,
+                            (x, y, z)
+                        ).build()
                             .expect("Model not found");
                     }
                     ui.separator();

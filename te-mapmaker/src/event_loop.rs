@@ -111,9 +111,9 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
                     WindowEvent::ThemeChanged(_theme) => (), //println!("TODO: ThemeChanged ({:?})", theme), // TODO
                     WindowEvent::Ime(_) => (),               // TODO
                     WindowEvent::Occluded(_) => (),
-                    WindowEvent::TouchpadMagnify { device_id, delta, phase } => (),
-                    WindowEvent::SmartMagnify { device_id } => (),
-                    WindowEvent::TouchpadRotate { device_id, delta, phase } => (),          // TODO
+                    WindowEvent::TouchpadMagnify { .. } => (),
+                    WindowEvent::SmartMagnify { .. } => (),
+                    WindowEvent::TouchpadRotate { .. } => (),          // TODO
                     WindowEvent::RedrawRequested => {
                         if *window_id == window.id() {
                             let now = std::time::Instant::now();
