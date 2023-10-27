@@ -1412,6 +1412,7 @@ impl InstancesState {
     }
 
     pub(crate) fn update_rendered3d(&mut self, frustum: &crate::camera::Frustum) {
+        self.qtree.query(bounding_box);
         for instance in self.render_matrix.update_rendered(frustum) {
             let model = self.opaque_instances.mut_instance(instance);
             match model {

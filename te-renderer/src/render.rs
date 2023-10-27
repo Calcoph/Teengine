@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use aabb_quadtree::ItemId;
 use wgpu::{RenderPass, ShaderStages};
 
 use crate::{
@@ -94,7 +95,9 @@ impl InstanceFinder {
         }
 
         let mut search_range = 0..self.markers.len();
+        // index = mid point
         let mut index = search_range.start + ((search_range.end - search_range.start) / 2);
+        // Binary search
         loop {
             let marker = match self.markers.get(index) {
                 Some(m) => m,
@@ -140,7 +143,7 @@ impl InstanceFinder {
                     std::cmp::Ordering::Equal => Some(InstanceReference {
                         name: marker.model_name.clone(),
                         index: marker.start_instance_count as usize,
-                        dimension: InstanceType::Opaque3D,
+                        dimension: InstanceType::Opaque3D { id: marker.id.clone() },
                     }),
                     std::cmp::Ordering::Greater => match instance_count
                         .cmp(&(marker.start_instance_count + marker.inst_range.len() as u32))
@@ -153,7 +156,7 @@ impl InstanceFinder {
                             Some(InstanceReference {
                                 name: marker.model_name.clone(),
                                 index,
-                                dimension: InstanceType::Opaque3D,
+                                dimension: InstanceType::Opaque3D { id: marker.id.clone() },
                             })
                         }
                         std::cmp::Ordering::Equal => None, // instance out of range,
@@ -171,6 +174,7 @@ struct InstanceMarker {
     start_instance_count: u32,
     inst_range: Range<u32>,
     model_name: String,
+    id: Option<ItemId>
 }
 
 pub struct RendererClickable<'a, 'b> {
@@ -246,12 +250,14 @@ where
             .set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         self.render_pass
             .set_bind_group(0, self.camera_bind_group, &[]);
+        self.instance_finder = InstanceFinder::new();
         for inst_range in instances {
             self.update_counter_constant();
             self.instance_finder.markers.push(InstanceMarker {
                 start_instance_count: self.instance_count,
                 inst_range: inst_range.clone(),
                 model_name: model_name.clone(),
+                id: todo!(),
             });
             self.instance_count += inst_range.len() as u32;
             self.render_pass
