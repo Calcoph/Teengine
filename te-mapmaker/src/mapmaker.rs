@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use cgmath::{Vector3, Point3};
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
@@ -183,7 +184,7 @@ impl ImguiState {
                     if ui.button("Go to origin") {
                         camera.move_absolute((0.0, 0.0, 0.0))
                     }
-                    let (x, y, z) = camera.get_position();
+                    let Point3{x, y, z} = camera.get_position();
                     ui.text(format!("position: {}x, {}y, {}z", x, y, z));
                     camera.set_zoom(zoom);
                     ui.checkbox("Show camera hotkeys", &mut state.show_hotkeys);
@@ -261,26 +262,23 @@ impl ImguiState {
                     let _state = &mut self.object_control_win;
                     let mod_inst = &mut self.mod_instance.modifying_instance;
                     ui.text("position");
-                    ui.input_float("x", &mut mod_inst.x)
+                    ui.input_float("x", &mut mod_inst.position.x)
                         .step(1.0)
                         .step_fast(5.0)
                         .build();
-                    ui.input_float("y", &mut mod_inst.y)
+                    ui.input_float("y", &mut mod_inst.position.y)
                         .step(1.0)
                         .step_fast(5.0)
                         .build();
-                    ui.input_float("z", &mut mod_inst.z)
+                    ui.input_float("z", &mut mod_inst.position.z)
                         .step(1.0)
                         .step_fast(5.0)
                         .build();
                     if ui.button("place") {
-                        let x = self.mod_instance.modifying_instance.x;
-                        let y = self.mod_instance.modifying_instance.y;
-                        let z = self.mod_instance.modifying_instance.z;
                         self.state.add_model(
                             &self.mod_instance.modifying_name,
                             &self.gpu,
-                            (x, y, z)
+                            self.mod_instance.modifying_instance.position
                         ).build()
                             .expect("Model not found");
                     }
@@ -355,7 +353,7 @@ impl ImguiState {
     pub fn render(
         &mut self,
         window: &Window,
-        tile_size: (f32, f32, f32),
+        tile_size: Vector3<f32>,
         resource_files_directory: &str,
         map_files_directory: &str,
     ) -> Result<(), wgpu::SurfaceError> {
@@ -471,7 +469,7 @@ impl RendererState {
     fn render_state(
         &mut self,
         view: &wgpu::TextureView,
-        tile_size: (f32, f32, f32),
+        tile_size: Vector3<f32>,
         state: &mut TeState,
         gpu: &GpuState,
         modifying_instance: &mut ModifyingInstance,

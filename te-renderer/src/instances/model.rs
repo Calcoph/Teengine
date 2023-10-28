@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use cgmath::{Vector3, Point3};
 use wgpu::util::DeviceExt;
 
 use super::{rangetree::RangeTree, Instance, Instance3D, InstanceRaw, InstancedDraw};
@@ -15,9 +16,9 @@ pub struct InstancedModel {
 }
 
 impl InstancedModel {
-    pub fn new(model: model::Model, device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
+    pub fn new(model: model::Model, device: &wgpu::Device, position: Point3<f32>) -> Self {
         let instances = vec![Instance3D {
-            position: cgmath::Vector3 { x, y, z },
+            position,
             animation: None,
             hidden: false,
         }];
@@ -49,9 +50,9 @@ impl InstancedModel {
         }
     }
 
-    pub fn add_instance(&mut self, x: f32, y: f32, z: f32, device: &wgpu::Device) {
+    pub fn add_instance(&mut self, position: Point3<f32>, device: &wgpu::Device) {
         let new_instance = Instance3D {
-            position: cgmath::Vector3 { x, y, z },
+            position,
             animation: None,
             hidden: false,
         };
@@ -106,10 +107,10 @@ impl InstancedModel {
 }
 
 impl InstancedDraw for InstancedModel {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    fn move_instance(
         &mut self,
         index: usize,
-        direction: V,
+        direction: Vector3<f32>,
         queue: &wgpu::Queue,
     ) {
         let instance = self.instances.get_mut(index).expect("Unreachable");
@@ -124,10 +125,10 @@ impl InstancedDraw for InstancedModel {
         );
     }
 
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    fn set_instance_position(
         &mut self,
         index: usize,
-        position: P,
+        position: Point3<f32>,
         queue: &wgpu::Queue,
     ) {
         let instance = self.instances.get_mut(index).expect("Unreachable");

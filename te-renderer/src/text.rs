@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use cgmath::Vector2;
 use glyph_brush::{ab_glyph::FontArc, Section};
 use image::{ImageBuffer, Rgba};
 use wgpu::util::StagingBelt;
@@ -161,7 +162,7 @@ impl TextState {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
-        window_size: (u32, u32),
+        window_size: Vector2<u32>,
         sections: &[(FontReference, Vec<Section>)],
     ) {
         for (font, texts) in sections {
@@ -178,8 +179,8 @@ impl TextState {
                     &mut self.buffer,
                     encoder,
                     view,
-                    window_size.0,
-                    window_size.1,
+                    window_size.x,
+                    window_size.y,
                 )
                 .expect("Error drawing old text");
         }

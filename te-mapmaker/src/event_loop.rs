@@ -44,8 +44,8 @@ pub async fn run(config: InitialConfiguration, default_model: &str) -> Result<()
     let wb = WindowBuilder::new()
         .with_title("Tilengine")
         .with_inner_size(dpi::LogicalSize::new(
-            config.screen_width,
-            config.screen_height,
+            config.screen_size.x,
+            config.screen_size.y,
         ))
         .with_window_icon(Some(match Icon::from_rgba(img.into_raw(), 64, 64) {
             Ok(icon) => Ok(icon),

@@ -1,6 +1,6 @@
-use cgmath::*;
 use std::f32::consts::FRAC_PI_2;
 use std::time::Duration;
+use cgmath::{Point3, EuclideanSpace, InnerSpace, Vector3, SquareMatrix, Matrix4, Rad, perspective, ortho, point3, vec3, Deg};
 use wgpu::util::DeviceExt;
 use winit::{dpi, event::*, keyboard::{PhysicalKey, KeyCode}};
 
@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
     0.0, 0.0, 0.5, 0.0,
@@ -23,12 +23,12 @@ pub const SAFE_CAMERA_ANGLE: f32 = FRAC_PI_2 - 0.0001;
 
 #[derive(Debug)]
 struct Plan {
-    normal: cgmath::Vector3<f32>,
+    normal: Vector3<f32>,
     distance: f32,
 }
 
 impl Plan {
-    fn new(p1: cgmath::Point3<f32>, norm: cgmath::Vector3<f32>) -> Self {
+    fn new(p1: Point3<f32>, norm: Vector3<f32>) -> Self {
         let normal = norm.normalize();
         Plan {
             normal,
@@ -49,7 +49,7 @@ pub struct Frustum {
     left_face: Plan,
     far_face: Plan,
     near_face: Plan,
-    chunk_size: (f32, f32, f32),
+    chunk_size: Vector3<f32>,
 }
 
 impl Frustum {
@@ -71,24 +71,24 @@ impl Frustum {
     }
 
     pub fn is_inside(&self, row: usize, col: usize) -> bool {
-        let max_x = (col + 1) as f32 * self.chunk_size.0;
-        let min_x = col as f32 * self.chunk_size.0;
-        let max_z = (row + 1) as f32 * self.chunk_size.2;
-        let min_z = row as f32 * self.chunk_size.2;
+        let max_x = (col + 1) as f32 * self.chunk_size.x;
+        let min_x = col as f32 * self.chunk_size.x;
+        let max_z = (row + 1) as f32 * self.chunk_size.z;
+        let min_z = row as f32 * self.chunk_size.z;
         let corners = vec![
-            cgmath::point3(max_x, 0.0, max_z),
-            cgmath::point3(max_x, 0.0, min_z),
-            cgmath::point3(min_x, 0.0, max_z),
-            cgmath::point3(min_x, 0.0, min_z),
+            point3(max_x, 0.0, max_z),
+            point3(max_x, 0.0, min_z),
+            point3(min_x, 0.0, max_z),
+            point3(min_x, 0.0, min_z),
         ];
 
         corners.iter().any(|corner| {
-            self.top_face.is_in_or_forward(corner, self.chunk_size.0)
-                && self.bottom_face.is_in_or_forward(corner, self.chunk_size.0)
-                && self.right_face.is_in_or_forward(corner, self.chunk_size.0)
-                && self.left_face.is_in_or_forward(corner, self.chunk_size.0)
-                && self.near_face.is_in_or_forward(corner, self.chunk_size.0)
-                && self.far_face.is_in_or_forward(corner, self.chunk_size.0)
+            self.top_face.is_in_or_forward(corner, self.chunk_size.x)
+                && self.bottom_face.is_in_or_forward(corner, self.chunk_size.x)
+                && self.right_face.is_in_or_forward(corner, self.chunk_size.x)
+                && self.left_face.is_in_or_forward(corner, self.chunk_size.x)
+                && self.near_face.is_in_or_forward(corner, self.chunk_size.x)
+                && self.far_face.is_in_or_forward(corner, self.chunk_size.x)
         })
     }
 
@@ -110,7 +110,7 @@ impl Frustum {
         let x = camera.yaw.cos() * camera.pitch.cos();
         let y = camera.pitch.sin();
         let z = camera.yaw.sin() * camera.pitch.cos();
-        let front = cgmath::vec3(x, y, z).normalize();
+        let front = vec3(x, y, z).normalize();
         let up = Vector3::unit_y();
         let right = front.cross(up).normalize();
         let up = right.cross(front).normalize();
@@ -159,7 +159,7 @@ impl Frustum {
         let x = camera.yaw.cos() * camera.pitch.cos();
         let y = camera.pitch.sin();
         let z = camera.yaw.sin() * camera.pitch.cos();
-        let front = cgmath::vec3(x, y, z).normalize();
+        let front = vec3(x, y, z).normalize();
         let up = Vector3::unit_y();
         let right = front.cross(up).normalize();
         let up = right.cross(front).normalize();
@@ -245,7 +245,7 @@ impl CameraUniform {
     fn new() -> Self {
         Self {
             view_position: [0.0; 4],
-            view_proj: cgmath::Matrix4::identity().into(),
+            view_proj: Matrix4::identity().into(),
         }
     }
 
@@ -296,8 +296,8 @@ impl CameraState {
     ) -> Self {
         let camera = Camera::new(
             init_config.camera_position,
-            cgmath::Deg(init_config.camera_yaw),
-            cgmath::Deg(init_config.camera_pitch),
+            Deg(init_config.camera_yaw).into(),
+            Deg(init_config.camera_pitch).into(),
         );
         let projection = Projection::new(
             config.width,
@@ -447,7 +447,7 @@ impl CameraState {
         self.camera.position = position.into();
     }
 
-    pub fn get_position(&self) -> (f32, f32, f32) {
+    pub fn get_position(&self) -> Point3<f32> {
         return self.camera.position.into();
     }
 
@@ -470,11 +470,11 @@ pub(crate) struct Camera {
 }
 
 impl Camera {
-    pub fn new<P: Into<Point3<f32>>, Y: Into<Rad<f32>>>(position: P, yaw: Y, pitch: Y) -> Self {
+    pub fn new(position: Point3<f32>, yaw: Rad<f32>, pitch: Rad<f32>) -> Self {
         Camera {
             position: position.into(),
-            yaw: yaw.into().0,
-            pitch: pitch.into().0,
+            yaw: yaw.0,
+            pitch: pitch.0,
         }
     }
 
@@ -529,7 +529,7 @@ impl Projection {
 
     pub fn calc_matrix(&self) -> Matrix4<f32> {
         OPENGL_TO_WGPU_MATRIX
-            * perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar)
+            * perspective(Deg(self.fovy), self.aspect, self.znear, self.zfar)
     }
 
     pub fn calc_2d_matrix(&self) -> Matrix4<f32> {
@@ -537,7 +537,7 @@ impl Projection {
     }
 
     pub fn get_fovy(&self) -> f32 {
-        let a: cgmath::Rad<f32> = cgmath::Deg(self.fovy).into();
+        let a: Rad<f32> = Deg(self.fovy).into();
         a.0
     }
 }

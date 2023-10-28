@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use cgmath::{vec2, point3, Vector2};
 use te_player::{
     event_loop::{Event, TextSender},
     te_winit::{
@@ -40,10 +41,9 @@ const WIN_WIDTH: u32 = 512;
 const WIN_HEIGHT: u32 = 512;
 pub(crate) fn main() {
     let config = te_renderer::initial_config::InitialConfiguration {
-        screen_width: WIN_WIDTH,
-        screen_height: WIN_HEIGHT,
+        screen_size: vec2(WIN_WIDTH, WIN_HEIGHT),
         camera_pitch: -90.0,
-        camera_position: (0.0, 1.1, 0.0),
+        camera_position: point3(0.0, 1.1, 0.0),
         camera_sensitivity: 10.0,
         camera_speed: 2.0,
         ..Default::default()
@@ -80,7 +80,7 @@ pub(crate) fn main() {
     te_state.add_model(
         "model_name",
         &te_gpu,
-        ((x_pos / 1000.0) - 0.5, 0.0, (y_pos / 1000.0) - 0.5)
+        point3((x_pos / 1000.0) - 0.5, 0.0, (y_pos / 1000.0) - 0.5)
     ).with_model(square_model)
         .build()
         .expect("Unreachable");
@@ -100,7 +100,7 @@ pub(crate) fn main() {
             te_state.add_model(
                 &format!("model_name{i}_{j}"),
                 &te_gpu,
-                (posx, -((i + j) as f32) / 100.0, posy)
+                point3(posx, -((i + j) as f32) / 100.0, posy)
             ).with_model(square_model)
                 .build()
                 .expect("Unreachable");
@@ -219,7 +219,7 @@ pub(crate) fn main() {
                         (
                             te_player::te_winit::event::ElementState::Pressed,
                             te_player::te_winit::event::MouseButton::Left,
-                        ) => click = Some(mouse_pos),
+                        ) => click = Some(mouse_pos.into()),
                         _ => (),
                     },
                     WindowEvent::RedrawRequested => {
@@ -262,7 +262,7 @@ async fn render(
     last_render_time: &mut std::time::Instant,
     te_state: &mut TeState,
     te_gpu: &GpuState,
-    click: Option<(u32, u32)>,
+    click: Option<Vector2<u32>>,
     texts: &mut MyText,
     see_clickable: bool,
     padded_width: u32,
@@ -381,8 +381,8 @@ async fn render(
         _ => panic!("AAA"),
     };
 
-    if let Some((x, y)) = click {
-        let num = result[(y * te_state.size.width + x) as usize];
+    if let Some(click) = click {
+        let num = result[(click.y * te_state.size.width + click.x) as usize];
         println!("Clicked on square {num}!");
         match te_state.find_clicked_instance(num) {
             Some(instance) => {

@@ -1,3 +1,4 @@
+use cgmath::vec2;
 use te_player::event_loop::PlaceholderTextSender;
 use te_renderer::initial_config::InitialConfiguration;
 
@@ -8,8 +9,7 @@ fn main() {
 async fn as_main() {
     let (event_loop, gpu, window, te_state) = te_player::prepare(
         InitialConfiguration {
-            screen_width: 1000,
-            screen_height: 500,
+            screen_size: vec2(1000, 500),
             ..InitialConfiguration::default()
         },
         true,

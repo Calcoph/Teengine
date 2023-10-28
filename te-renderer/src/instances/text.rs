@@ -1,9 +1,11 @@
+use cgmath::{vec2, point2};
 use wgpu::util::DeviceExt;
 
 use crate::model;
 
 use super::{Instance2D, InstanceRaw};
 
+#[deprecated]
 #[derive(Debug)]
 pub struct InstancedText {
     pub image: model::Material,
@@ -12,6 +14,7 @@ pub struct InstancedText {
     pub depth: f32,
 }
 
+#[allow(deprecated)]
 impl InstancedText {
     pub fn new(
         image: model::Material,
@@ -25,11 +28,10 @@ impl InstancedText {
         screen_h: u32,
     ) -> Self {
         let mut instance = Instance2D::new(
-            cgmath::Vector2 { x, y },
-            cgmath::Vector2 { x: w, y: h },
+            point2(x, y),
+            vec2(w, h),
             None,
-            screen_w,
-            screen_h,
+            vec2(screen_w, screen_h)
         );
 
         let instance_data = [instance.to_raw()];
@@ -53,7 +55,7 @@ impl InstancedText {
         new_size: V,
         queue: &wgpu::Queue,
     ) {
-        self.instance.resize(new_size);
+        self.instance.resize(new_size.into());
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -82,7 +84,7 @@ impl InstancedText {
         screen_w: u32,
         screen_h: u32,
     ) {
-        let _ = self.instance.move_direction(direction, screen_w, screen_h);
+        let _ = self.instance.move_direction(direction.into(), vec2(screen_w, screen_h));
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,
@@ -101,7 +103,8 @@ impl InstancedText {
         screen_w: u32,
         screen_h: u32,
     ) {
-        let _ = self.instance.move_to(position, screen_w, screen_h);
+        let position = position.into();
+        let _ = self.instance.move_to(point2(position.x, position.y), vec2(screen_w, screen_h));
         let raw = self.instance.to_raw();
         queue.write_buffer(
             &self.instance_buffer,

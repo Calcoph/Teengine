@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use cgmath::{Vector2, Point3, Point2, vec2, Vector3};
 pub use glyph_brush::{Section, Text};
 use wgpu::{
     util::DeviceExt, BindGroupLayout, CommandBuffer, CommandEncoder, InstanceDescriptor,
@@ -965,7 +966,7 @@ impl TeState {
         sections: &[(FontReference, Vec<Section>)],
     ) {
         self.text
-            .draw(device, encoder, view, self.size.into(), sections)
+            .draw(device, encoder, view, vec2(self.size.width, self.size.height), sections)
     }
 
     fn cull_all3d(&mut self) {
@@ -977,15 +978,6 @@ impl TeState {
             model.cull_all();
         }
     }
-    /*
-    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
-        &mut self,
-        instance: &InstanceReference,
-        direction: V,
-        queue: &wgpu::Queue,
-    ) {
-        self.instances.move_instance(instance, direction.into(), queue, self.size.width, self.size.height)
-    } */
 
     pub fn find_clicked_instance(&mut self, num: u32) -> Option<InstanceReference> {
         self.instance_finder.find_instance(num)
@@ -1002,7 +994,7 @@ impl TeState {
         &'state mut self,
         model_name: &'a str,
         gpu: &'gpu GpuState,
-        position: (f32, f32, f32),
+        position: Point3<f32>,
     ) -> ModelBuilder<'state, 'gpu, 'a> {
         ModelBuilder::new(self, model_name, gpu, position)
     }
@@ -1017,7 +1009,7 @@ impl TeState {
         gpu: &GpuState,
         tile_position: (f32, f32, f32),
     ) -> Result<InstanceReference, TError> {
-        self.instances.place_model(model_name, gpu, tile_position)
+        self.instances.place_model(model_name, gpu, tile_position.into())
     }
 
     /// Places an already created model at the specific position.
@@ -1033,7 +1025,7 @@ impl TeState {
         model: Option<model::Model>,
     ) -> Result<InstanceReference, TError> {
         self.instances
-            .place_custom_model(model_name, gpu, tile_position, model)
+            .place_custom_model(model_name, gpu, tile_position.into(), model)
     }
 
     #[deprecated]
@@ -1045,7 +1037,7 @@ impl TeState {
         model: Option<model::Model>,
     ) -> Result<InstanceReference, TError> {
         self.instances
-            .place_custom_model_absolute(model_name, gpu, tile_position, model)
+            .place_custom_model_absolute(model_name, gpu, tile_position.into(), model)
     }
 
     /// Places an already created animated model at the specific position.
@@ -1058,16 +1050,17 @@ impl TeState {
         model: model::AnimatedModel,
     ) -> InstanceReference {
         self.instances
-            .place_custom_animated_model(model_name, gpu, tile_position, model)
+            .place_custom_animated_model(model_name, gpu, tile_position.into(), model)
     }
 
     pub fn add_sprite<'a, 'b, 'c, 'd>(
         &'a mut self,
         sprite_name: &'b str,
         gpu: &'c GpuState,
-        position: (f32, f32, f32),
+        position: Point2<f32>,
+        depth: f32
     ) -> SpriteBuilder<'a, 'c, 'b, 'd> {
-        SpriteBuilder::new(self, sprite_name, gpu, position)
+        SpriteBuilder::new(self, sprite_name, gpu, position, depth)
     }
 
     /// Creates a new 2D sprite at the specified position.
@@ -1079,17 +1072,19 @@ impl TeState {
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
-        size: Option<(f32, f32)>,
-        position: (f32, f32, f32),
+        size: Option<Vector2<f32>>,
+        position: Point2<f32>,
+        depth: f32,
         force_new_instance_id: Option<&str>,
     ) -> Result<InstanceReference, TError> {
+        let screen_size = vec2(self.size.width, self.size.height);
         self.instances.place_sprite(
             sprite_name,
             gpu,
             size,
             position,
-            self.size.width,
-            self.size.height,
+            depth,
+            screen_size,
             force_new_instance_id,
         )
     }
@@ -1099,17 +1094,19 @@ impl TeState {
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
-        size: Option<(f32, f32)>,
-        position: (f32, f32, f32),
-        sprite: Option<(Material, f32, f32)>,
+        size: Option<Vector2<f32>>,
+        position: Point2<f32>,
+        depth: f32,
+        sprite: Option<(Material, Vector2<f32>)>,
     ) -> Result<InstanceReference, TError> {
+        let screen_size = vec2(self.size.width, self.size.height);
         self.instances.place_custom_sprite(
             sprite_name,
             gpu,
             size,
             position,
-            self.size.width,
-            self.size.height,
+            depth,
+            screen_size,
             sprite,
         )
     }
@@ -1119,20 +1116,22 @@ impl TeState {
         &mut self,
         sprite_names: Vec<&str>,
         gpu: &GpuState,
-        size: Option<(f32, f32)>,
-        position: (f32, f32, f32),
+        size: Option<Vector2<f32>>,
+        position: Point2<f32>,
+        depth: f32,
         frame_delay: std::time::Duration,
         looping: bool,
     ) -> Result<InstanceReference, TError> {
+        let screen_size = vec2(self.size.width, self.size.height);
         self.instances.place_animated_sprite(
             sprite_names,
             gpu,
             size,
             position,
+            depth,
             frame_delay,
             looping,
-            self.size.width,
-            self.size.height,
+            screen_size
         )
     }
 
@@ -1184,50 +1183,50 @@ impl TeState {
 
     /// Move a 3D model or a 2D sprite relative to its current position.
     /// Ignores z value on 2D sprites.
-    pub fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    pub fn move_instance(
         &mut self,
         instance: &InstanceReference,
-        direction: V,
+        direction: Vector3<f32>,
         queue: &wgpu::Queue,
     ) {
+        let screen_size = vec2(self.size.width, self.size.height);
         self.instances.move_instance(
             instance,
             direction.into(),
             queue,
-            self.size.width,
-            self.size.height,
+            screen_size
         )
     }
 
     /// Move a 3D model or a 2D sprite to an absolute position.
     /// Ignores z value on 2D sprites.
-    pub fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    pub fn set_instance_position(
         &mut self,
         instance: &InstanceReference,
-        position: P,
+        position: Point3<f32>,
         queue: &wgpu::Queue,
     ) {
+        let screen_size = vec2(self.size.width, self.size.height);
         self.instances.set_instance_position(
             instance,
             position.into(),
             queue,
-            self.size.width,
-            self.size.height,
+            screen_size
         )
     }
 
     /// Get a 3D model's or 2D sprite's position.
-    pub fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
+    pub fn get_instance_position(&self, instance: &InstanceReference) -> Point3<f32> {
         self.instances.get_instance_position(instance)
     }
 
     /// Changes the sprite's size. Using TODO algorithm
     /// ### PANICS
     /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
-    pub fn resize_sprite<V: Into<cgmath::Vector2<f32>>>(
+    pub fn resize_sprite(
         &mut self,
         instance: &InstanceReference,
-        new_size: V,
+        new_size: Vector2<f32>,
         queue: &wgpu::Queue,
     ) {
         self.instances
@@ -1237,7 +1236,7 @@ impl TeState {
     /// Get the sprite's size
     /// ### PANICS
     /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
-    pub fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
+    pub fn get_sprite_size(&self, instance: &InstanceReference) -> Vector2<f32> {
         self.instances.get_sprite_size(instance)
     }
 

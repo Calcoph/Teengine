@@ -1,3 +1,4 @@
+use cgmath::{point3, Point3, Vector3};
 use te_renderer::{instances::Instance3D, model, resources, state::GpuState};
 use wgpu::util::DeviceExt;
 pub struct InstancesState {
@@ -25,9 +26,7 @@ impl InstancesState {
         .expect("Make sure the default texture and default models are valid");
         let modifying_instance = ModifyingInstance {
             model,
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
+            position: point3(0.0, 0.0, 0.0),
             buffer: None,
         };
         InstancesState {
@@ -44,20 +43,18 @@ impl InstancesState {
 
 pub struct ModifyingInstance {
     pub model: model::Model,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    pub position: Point3<f32>,
     pub buffer: Option<wgpu::Buffer>,
 }
 
 impl ModifyingInstance {
-    pub fn into_renderable(&mut self, device: &wgpu::Device, tile_size: (f32, f32, f32)) -> usize {
+    pub fn into_renderable(&mut self, device: &wgpu::Device, tile_size: Vector3<f32>) -> usize {
         let mut instances = vec![Instance3D {
-            position: cgmath::Vector3 {
-                x: self.x * tile_size.0,
-                y: self.y * tile_size.1,
-                z: self.z * tile_size.2,
-            },
+            position: point3(
+                self.position.x * tile_size.x,
+                self.position.y * tile_size.y,
+                self.position.z * tile_size.z,
+            ),
             animation: None,
             hidden: false,
         }];

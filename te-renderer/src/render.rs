@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use wgpu::{RenderPass, ShaderStages};
 
+#[allow(deprecated)]
 use crate::{
     instances::{
         sprite::{AnimatedSprite, InstancedSprite},
@@ -21,6 +22,7 @@ pub(crate) trait Draw2D {
     fn get_depth(&self) -> f32;
 }
 
+#[allow(deprecated)]
 impl Draw2D for InstancedText {
     fn draw<'a>(
         &'a self,

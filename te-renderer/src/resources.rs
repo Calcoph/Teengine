@@ -1,3 +1,4 @@
+use cgmath::{Vector2, vec2};
 use gltf;
 use gltf::buffer;
 use gltf::mesh::Mode as PrimitiveType;
@@ -298,7 +299,7 @@ pub fn load_sprite(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
     resources_path: String,
-) -> std::result::Result<(model::Material, f32, f32), Box<dyn std::error::Error>> {
+) -> std::result::Result<(model::Material, Vector2<f32>), Box<dyn std::error::Error>> {
     let full_path = resources_path + "/" + file_name;
     let img = image::open(&full_path)?;
     let img = img.as_rgba8().expect(&format!(
@@ -307,7 +308,9 @@ pub fn load_sprite(
     let diffuse_texture = texture::Texture::from_dyn_image(device, queue, &img, Some(file_name));
     Ok((
         model::Material::new(device, file_name, diffuse_texture, layout),
-        img.width() as f32,
-        img.height() as f32,
+        vec2(
+            img.width() as f32,
+            img.height() as f32
+        )
     ))
 }

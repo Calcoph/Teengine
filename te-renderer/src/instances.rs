@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use cgmath::Vector3;
+use cgmath::{Vector3, Vector2, Point3, Point2, point3, point2, vec2, EuclideanSpace, Matrix4};
 
 pub mod animation;
 pub(crate) mod builders;
@@ -31,11 +31,11 @@ use self::{
 struct RenderMatrix {
     cells: Vec<Vec<Vec<InstanceReference>>>,
     cols: usize,
-    chunk_size: (f32, f32, f32),
+    chunk_size: Vector3<f32>,
 }
 
 impl RenderMatrix {
-    fn new(chunk_size: (f32, f32, f32)) -> Self {
+    fn new(chunk_size: Vector3<f32>) -> Self {
         RenderMatrix {
             cells: Vec::new(),
             cols: 0,
@@ -46,7 +46,7 @@ impl RenderMatrix {
     fn register_instance(
         &mut self,
         reference: InstanceReference,
-        position: cgmath::Vector3<f32>,
+        position: Point3<f32>,
         (max_x, min_x, max_z, min_z): (f32, f32, f32, f32),
     ) {
         let max_x = max_x + position.x;
@@ -64,8 +64,8 @@ impl RenderMatrix {
             .map(|(x, z)| {
                 // TODO: take into account that f32 can be negative, but row and col can never be negative
                 // Right now this is "patched" by doing .abs(), but this means that no instances placed in a negative coordinate will be rendered correctly
-                let row = ((z / self.chunk_size.2).floor()).abs() as usize;
-                let col = ((x / self.chunk_size.0).floor()).abs() as usize;
+                let row = ((z / self.chunk_size.z).floor()).abs() as usize;
+                let col = ((x / self.chunk_size.x).floor()).abs() as usize;
                 (row, col)
             })
             .collect::<HashSet<(usize, usize)>>();
@@ -90,7 +90,7 @@ impl RenderMatrix {
     fn unregister_instance(
         &mut self,
         reference: &InstanceReference,
-        position: cgmath::Vector3<f32>,
+        position: Point3<f32>,
         (max_x, min_x, max_z, min_z): (f32, f32, f32, f32),
     ) {
         let max_x = max_x + position.x;
@@ -107,8 +107,8 @@ impl RenderMatrix {
             .into_iter()
             .map(|(x, z)| {
                 // TODO: take into account that f32 can be negative, but row and col can never be negative
-                let row = ((z / self.chunk_size.2).floor()) as usize;
-                let col = ((x / self.chunk_size.0).floor()) as usize;
+                let row = ((z / self.chunk_size.z).floor()) as usize;
+                let col = ((x / self.chunk_size.x).floor()) as usize;
                 (row, col)
             })
             .collect::<HashSet<(usize, usize)>>();
@@ -191,15 +191,15 @@ impl crate::model::Vertex for InstanceRaw {
 pub trait Instance {
     fn to_raw(&mut self) -> InstanceRaw;
 
-    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V);
+    fn move_direction(&mut self, direction: Vector3<f32>);
 
-    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P);
+    fn move_to(&mut self, position: Point3<f32>);
 }
 
 #[derive(Debug)]
 pub struct Instance2D {
-    pub position: cgmath::Vector2<f32>,
-    pub size: cgmath::Vector2<f32>,
+    pub position: Point2<f32>,
+    pub size: Vector2<f32>,
     animation: Option<Animation>,
     hidden: bool,
     in_viewport: bool,
@@ -207,13 +207,12 @@ pub struct Instance2D {
 
 impl Instance2D {
     fn new(
-        position: cgmath::Vector2<f32>,
-        size: cgmath::Vector2<f32>,
+        position: Point2<f32>,
+        size: Vector2<f32>,
         animation: Option<Animation>,
-        screen_w: u32,
-        screen_h: u32,
+        screen_size: Vector2<u32>,
     ) -> Self {
-        let in_viewport = inside_viewport(position.into(), size.into(), (screen_w, screen_h));
+        let in_viewport = inside_viewport(position.into(), size.into(), screen_size);
         Instance2D {
             position,
             size,
@@ -223,7 +222,7 @@ impl Instance2D {
         }
     }
 
-    fn resize<V: Into<cgmath::Vector2<f32>>>(&mut self, new_size: V) {
+    fn resize(&mut self, new_size: Vector2<f32>) {
         let size = new_size.into();
         self.size = size;
     }
@@ -240,8 +239,8 @@ impl Instance2D {
         let y = self.position.y + translation.y;
         let w = self.size.x + scale.x;
         let h = self.size.y + scale.y;
-        let position = cgmath::Vector2 { x, y };
-        let size = cgmath::Vector2 { x: w, y: h };
+        let position = point2(x, y);
+        let size = vec2(w, h);
         Instance2D {
             position,
             size,
@@ -272,11 +271,11 @@ impl Instance2D {
             self
         };
         let sprite =
-            cgmath::Matrix4::from_translation(Vector3 {
+            Matrix4::from_translation(Vector3 {
                 x: instance.position.x,
                 y: instance.position.y,
                 z: 0.0,
-            }) * cgmath::Matrix4::from_nonuniform_scale(instance.size.x, instance.size.y, 1.0);
+            }) * Matrix4::from_nonuniform_scale(instance.size.x, instance.size.y, 1.0);
 
         InstanceRaw {
             model: sprite.into(),
@@ -284,17 +283,15 @@ impl Instance2D {
     }
 
     #[must_use]
-    fn move_direction<V: Into<cgmath::Vector3<f32>>>(
+    fn move_direction(
         &mut self,
-        direction: V,
-        screen_w: u32,
-        screen_h: u32,
+        direction: Vector3<f32>,
+        screen_size: Vector2<u32>
     ) -> Option<bool> {
-        let direction = direction.into();
-        self.position = self.position + cgmath::Vector2::new(direction.x, direction.y);
+        self.position = self.position + vec2(direction.x, direction.y);
         let was_viewport = self.in_viewport;
         self.in_viewport =
-            inside_viewport(self.position.into(), self.size.into(), (screen_w, screen_h));
+            inside_viewport(self.position.into(), self.size.into(), screen_size);
         if was_viewport && !self.in_viewport && !self.hidden {
             Some(false)
         } else if !was_viewport && self.in_viewport && !self.hidden {
@@ -305,17 +302,15 @@ impl Instance2D {
     }
 
     #[must_use]
-    fn move_to<P: Into<cgmath::Vector3<f32>>>(
+    fn move_to(
         &mut self,
-        position: P,
-        screen_w: u32,
-        screen_h: u32,
+        position: Point2<f32>,
+        screen_size: Vector2<u32>
     ) -> Option<bool> {
-        let position = position.into();
-        self.position = cgmath::Vector2::new(position.x, position.y);
+        self.position = position;
         let was_viewport = self.in_viewport;
         self.in_viewport =
-            inside_viewport(self.position.into(), self.size.into(), (screen_w, screen_h));
+            inside_viewport(self.position.into(), self.size.into(), screen_size);
         if was_viewport && !self.in_viewport && !self.hidden {
             Some(false)
         } else if !was_viewport && self.in_viewport && !self.hidden {
@@ -327,9 +322,9 @@ impl Instance2D {
 }
 
 fn inside_viewport(
-    (pos_x, pos_y): (f32, f32),
-    (width, height): (f32, f32),
-    (screen_w, screen_h): (u32, u32),
+    Point2 { x: pos_x, y: pos_y }: Point2<f32>,
+    Vector2 { x: width, y: height }: Vector2<f32>,
+    Vector2 { x: screen_w, y: screen_h }: Vector2<u32>,
 ) -> bool {
     let pos_x = pos_x as i32;
     let pos_y = pos_y as i32;
@@ -433,7 +428,7 @@ fn inside_viewport(
 
 #[derive(Debug)]
 pub struct Instance3D {
-    pub position: cgmath::Vector3<f32>,
+    pub position: Point3<f32>,
     pub animation: Option<Animation>,
     pub hidden: bool,
 }
@@ -449,7 +444,7 @@ impl Instance3D {
         let x = self.position.x + translation.x;
         let y = self.position.y + translation.y;
         let z = self.position.z + translation.z;
-        let position = cgmath::Vector3 { x, y, z };
+        let position = Point3 { x, y, z };
         Instance3D {
             position,
             animation: None,
@@ -479,33 +474,33 @@ impl Instance for Instance3D {
         } else {
             self
         };
-        let model = cgmath::Matrix4::from_translation(instance.position);
+        let model = Matrix4::from_translation(instance.position.to_vec());
         InstanceRaw {
             model: model.into(),
         }
     }
 
-    fn move_direction<V: Into<cgmath::Vector3<f32>>>(&mut self, direction: V) {
-        self.position = self.position + direction.into();
+    fn move_direction(&mut self, direction: Vector3<f32>) {
+        self.position = self.position + direction;
     }
 
-    fn move_to<P: Into<cgmath::Vector3<f32>>>(&mut self, position: P) {
-        self.position = position.into();
+    fn move_to(&mut self, position: Point3<f32>) {
+        self.position = position;
     }
 }
 
 pub trait InstancedDraw {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    fn move_instance(
         &mut self,
         index: usize,
-        direction: V,
+        direction: Vector3<f32>,
         queue: &wgpu::Queue,
     );
 
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    fn set_instance_position(
         &mut self,
         index: usize,
-        position: P,
+        position: Point3<f32>,
         queue: &wgpu::Queue,
     );
 }
@@ -641,10 +636,11 @@ pub struct InstancesState {
     pub(crate) opaque_instances: Opaque3DInstances,
     pub(crate) transparent_instances: HashSet<String>,
     pub(crate) sprite_instances: SpriteInstances,
+    #[allow(deprecated)]
     pub(crate) texts: Vec<Option<InstancedText>>,
     deleted_texts: Vec<usize>,
     pub layout: wgpu::BindGroupLayout,
-    tile_size: (f32, f32, f32),
+    tile_size: Vector3<f32>,
     pub resources_path: String,
     pub default_texture_path: String,
     font: Font,
@@ -654,8 +650,8 @@ pub struct InstancesState {
 impl InstancesState {
     pub(crate) fn new(
         layout: wgpu::BindGroupLayout,
-        tile_size: (f32, f32, f32),
-        chunk_size: (f32, f32, f32),
+        tile_size: Vector3<f32>,
+        chunk_size: Vector3<f32>,
         resources_path: String,
         default_texture_path: String,
         font_dir_path: String,
@@ -690,12 +686,12 @@ impl InstancesState {
         &mut self,
         model_name: &str,
         gpu: &GpuState,
-        tile_position: (f32, f32, f32),
+        tile_position: Point3<f32>,
     ) -> Result<InstanceReference, TError> {
-        let x = tile_position.0 * self.tile_size.0;
-        let y = tile_position.1 * self.tile_size.1;
-        let z = tile_position.2 * self.tile_size.2;
-        self.place_model_absolute(model_name, gpu, (x, y, z))
+        let x = tile_position.x * self.tile_size.x;
+        let y = tile_position.y * self.tile_size.y;
+        let z = tile_position.z * self.tile_size.z;
+        self.place_model_absolute(model_name, gpu, point3(x, y, z))
     }
 
     /// Places an already created model at the specific position.
@@ -706,28 +702,28 @@ impl InstancesState {
         &mut self,
         model_name: &str,
         gpu: &GpuState,
-        tile_position: (f32, f32, f32),
+        tile_position: Point3<f32>,
         model: Option<Model>,
     ) -> Result<InstanceReference, TError> {
-        let x = tile_position.0 * self.tile_size.0;
-        let y = tile_position.1 * self.tile_size.1;
-        let z = tile_position.2 * self.tile_size.2;
-        self.place_custom_model_absolute(model_name, gpu, (x, y, z), model)
+        let x = tile_position.x * self.tile_size.x;
+        let y = tile_position.y * self.tile_size.y;
+        let z = tile_position.z * self.tile_size.z;
+        self.place_custom_model_absolute(model_name, gpu, point3(x, y, z), model)
     }
 
     pub(crate) fn place_custom_model_absolute(
         &mut self,
         model_name: &str,
         gpu: &GpuState,
-        (x, y, z): (f32, f32, f32),
+        position: Point3<f32>,
         model: Option<Model>,
     ) -> Result<InstanceReference, TError> {
         if let Some(instanced_m) = self.opaque_instances.instanced.get_mut(model_name) {
-            instanced_m.add_instance(x, y, z, &gpu.device)
+            instanced_m.add_instance(position, &gpu.device)
         } else {
             let model = model.ok_or(TError::UninitializedModel)?;
             let transparent_meshes = model.transparent_meshes.len();
-            let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
+            let instanced_m = InstancedModel::new(model, &gpu.device, position);
             self.opaque_instances.instanced
                 .insert(model_name.to_string(), instanced_m);
             if transparent_meshes > 0 {
@@ -751,7 +747,7 @@ impl InstancesState {
 
         self.render_matrix.register_instance(
             reference.clone(),
-            cgmath::vec3(x, y, z),
+            position,
             self.opaque_instances
                 .instanced
                 .instance(&reference)
@@ -767,13 +763,13 @@ impl InstancesState {
         &mut self,
         model_name: &str,
         gpu: &GpuState,
-        tile_position: (f32, f32, f32),
+        tile_position: Point3<f32>,
         mut model: AnimatedModel,
     ) -> InstanceReference {
-        let x = tile_position.0 * self.tile_size.0;
-        let y = tile_position.1 * self.tile_size.1;
-        let z = tile_position.2 * self.tile_size.2;
-        model.set_instance_position(0, Vector3::new(x, y, z), &gpu.queue);
+        let x = tile_position.x * self.tile_size.x;
+        let y = tile_position.y * self.tile_size.y;
+        let z = tile_position.z * self.tile_size.z;
+        model.set_instance_position(0, point3(x, y, z), &gpu.queue);
         self.place_custom_animated_model_absolute(model_name, model)
     }
 
@@ -813,10 +809,10 @@ impl InstancesState {
         &mut self,
         model_name: &str,
         gpu: &GpuState,
-        (x, y, z): (f32, f32, f32),
+        position: Point3<f32>,
     ) -> Result<InstanceReference, TError> {
         if let Some(instanced_m) = self.opaque_instances.instanced.get_mut(model_name) {
-            instanced_m.add_instance(x, y, z, &gpu.device);
+            instanced_m.add_instance(position, &gpu.device);
         } else {
             let model = load_glb_model(
                 model_name,
@@ -828,7 +824,7 @@ impl InstancesState {
             )
             .map_err(|_| TError::GLBModelLoadingFail)?;
             let transparent_meshes = model.transparent_meshes.len();
-            let instanced_m = InstancedModel::new(model, &gpu.device, x, y, z);
+            let instanced_m = InstancedModel::new(model, &gpu.device, position);
             self.opaque_instances.instanced
                 .insert(model_name.to_string(), instanced_m);
             if transparent_meshes > 0 {
@@ -852,7 +848,7 @@ impl InstancesState {
 
         self.render_matrix.register_instance(
             reference.clone(),
-            cgmath::vec3(x, y, z),
+            position,
             self.opaque_instances
                 .instanced
                 .instance(&reference)
@@ -871,24 +867,22 @@ impl InstancesState {
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
-        size: Option<(f32, f32)>,
-        position: (f32, f32, f32),
-        screen_w: u32,
-        screen_h: u32,
+        size: Option<Vector2<f32>>,
+        position: Point2<f32>,
+        depth: f32,
+        screen_size: Vector2<u32>,
         force_new_instance_id: Option<&str>,
     ) -> Result<InstanceReference, TError> {
         let instance_name = sprite_name.to_string() + force_new_instance_id.unwrap_or_default();
         if let Some(instanced_s) = self.sprite_instances.instanced.get_mut(&instance_name) {
             instanced_s.add_instance(
-                position.0,
-                position.1,
+                position,
                 size,
                 &gpu.device,
-                screen_w,
-                screen_h,
+                screen_size
             );
         } else {
-            let (sprite, width, height) = load_sprite(
+            let (sprite, sprite_size) = load_sprite(
                 sprite_name,
                 &gpu.device,
                 &gpu.queue,
@@ -896,20 +890,17 @@ impl InstancesState {
                 self.resources_path.clone(),
             )
             .map_err(|_| TError::SpriteLoadingFail)?;
-            let (width, height) = match size {
-                Some((w, h)) => (w, h),
-                None => (width, height),
+            let size = match size {
+                Some(size) => size,
+                None => sprite_size,
             };
             let instanced_s = InstancedSprite::new(
                 sprite,
                 &gpu.device,
-                position.0,
-                position.1,
-                position.2,
-                width,
-                height,
-                screen_w,
-                screen_h,
+                position,
+                depth,
+                size,
+                screen_size
             );
             self.sprite_instances
                 .instanced
@@ -931,37 +922,32 @@ impl InstancesState {
         &mut self,
         sprite_name: &str,
         gpu: &GpuState,
-        size: Option<(f32, f32)>,
-        position: (f32, f32, f32),
-        screen_w: u32,
-        screen_h: u32,
-        sprite: Option<(Material, f32, f32)>,
+        size: Option<Vector2<f32>>,
+        position: Point2<f32>,
+        depth: f32,
+        screen_size: Vector2<u32>,
+        sprite: Option<(Material, Vector2<f32>)>,
     ) -> Result<InstanceReference, TError> {
         if let Some(instanced_s) = self.sprite_instances.instanced.get_mut(sprite_name) {
             instanced_s.add_instance(
-                position.0,
-                position.1,
+                position,
                 size,
                 &gpu.device,
-                screen_w,
-                screen_h,
+                screen_size
             );
         } else {
-            let (sprite, width, height) = sprite.ok_or(TError::UninitializedSprite)?;
-            let (width, height) = match size {
-                Some((w, h)) => (w, h),
-                None => (width, height),
+            let (sprite, sprite_size) = sprite.ok_or(TError::UninitializedSprite)?;
+            let size = match size {
+                Some(size) => size,
+                None => sprite_size,
             };
             let instanced_s = InstancedSprite::new(
                 sprite,
                 &gpu.device,
-                position.0,
-                position.1,
-                position.2,
-                width,
-                height,
-                screen_w,
-                screen_h,
+                position,
+                depth,
+                size,
+                screen_size
             );
             self.sprite_instances
                 .instanced
@@ -989,12 +975,12 @@ impl InstancesState {
         &mut self,
         sprite_names: Vec<&str>,
         gpu: &GpuState,
-        size: Option<(f32, f32)>,
-        position: (f32, f32, f32),
+        size: Option<Vector2<f32>>,
+        position: Point2<f32>,
+        depth: f32,
         frame_delay: std::time::Duration,
         looping: bool,
-        screen_w: u32,
-        screen_h: u32,
+        screen_size: Vector2<u32>
     ) -> Result<InstanceReference, TError> {
         let mut name = sprite_names
             .get(0)
@@ -1024,24 +1010,21 @@ impl InstancesState {
             return Err(TError::SpriteLoadingFail);
         }
 
-        let (width, height) = (sprites[0].1, sprites[0].2);
-        let sprites = sprites.into_iter().map(|(sprite, _, _)| sprite).collect();
-        let (width, height) = match size {
-            Some((w, h)) => (w, h),
-            None => (width, height),
+        let sprite_size = sprites[0].1;
+        let sprites = sprites.into_iter().map(|(sprite, _)| sprite).collect();
+        let size = match size {
+            Some(size) => size,
+            None => sprite_size,
         };
         let instanced_s = AnimatedSprite::new(
             sprites,
             &gpu.device,
-            position.0,
-            position.1,
-            position.2,
-            width,
-            height,
+            position,
+            depth,
+            size,
             frame_delay,
             looping,
-            screen_w,
-            screen_h,
+            screen_size
         );
         self.sprite_instances.animated.insert(name.clone(), instanced_s);
 
@@ -1168,7 +1151,7 @@ impl InstancesState {
     ) -> Result<(), TError> {
         for (name, te_model) in map.models {
             for offset in te_model.offsets {
-                self.place_model_absolute(&name, gpu, (offset.x, offset.y, offset.z))?;
+                self.place_model_absolute(&name, gpu, point3(offset.x, offset.y, offset.z))?;
             }
         }
 
@@ -1180,19 +1163,18 @@ impl InstancesState {
     pub(crate) fn move_instance(
         &mut self,
         instance_ref: &InstanceReference,
-        direction: cgmath::Vector3<f32>,
+        direction: Vector3<f32>,
         queue: &wgpu::Queue,
-        screen_w: u32,
-        screen_h: u32,
+        screen_size: Vector2<u32>
     ) {
         match instance_ref.dimension {
             InstanceType::Sprite => {
                 let model = self.sprite_instances.instanced.mut_instance(instance_ref);
-                model.move_instance(instance_ref.index, direction, queue, screen_w, screen_h);
+                model.move_instance(instance_ref.index, direction, queue, screen_size);
             },
             InstanceType::Anim2D => {
                 let model = self.sprite_instances.animated.mut_instance(instance_ref);
-                model.move_instance(instance_ref.index, direction, queue, screen_w, screen_h);
+                model.move_instance(instance_ref.index, direction, queue, screen_size);
             },
             InstanceType::Opaque3D => {
                 let m = self.opaque_instances.instanced.mut_instance(instance_ref);
@@ -1234,20 +1216,18 @@ impl InstancesState {
     pub(crate) fn set_instance_position(
         &mut self,
         instance_ref: &InstanceReference,
-        position: cgmath::Vector3<f32>,
+        position: Point3<f32>,
         queue: &wgpu::Queue,
-        screen_w: u32,
-        screen_h: u32,
+        screen_size: Vector2<u32>
     ) {
         match instance_ref.dimension {
             InstanceType::Sprite => {
                 let model = self.sprite_instances.instanced.mut_instance(instance_ref);
                 model.set_instance_position(
                     instance_ref.index,
-                    position,
+                    point2(position.x, position.y),
                     queue,
-                    screen_w,
-                    screen_h,
+                    screen_size
                 );
             }
             InstanceType::Opaque3D => {
@@ -1270,7 +1250,7 @@ impl InstancesState {
             }
             InstanceType::Anim2D => {
                 let model = self.sprite_instances.animated.mut_instance(instance_ref);
-                model.set_instance_position(instance_ref.index, position, queue, screen_w, screen_h)
+                model.set_instance_position(instance_ref.index, point2(position.x, position.y), queue, screen_size)
             }
             InstanceType::Anim3D => {
                 let a = self.opaque_instances.animated.mut_instance(instance_ref);
@@ -1290,12 +1270,12 @@ impl InstancesState {
     }
 
     /// Get a 3D model's or 2D sprite's position.
-    pub(crate) fn get_instance_position(&self, instance: &InstanceReference) -> (f32, f32, f32) {
+    pub(crate) fn get_instance_position(&self, instance: &InstanceReference) -> Point3<f32> {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.sprite_instances.instanced.instance(instance);
                 let position = sprite.instances.instance(instance).position;
-                (position.x, position.y, sprite.depth)
+                point3(position.x, position.y, sprite.depth)
             }
             InstanceType::Opaque3D => {
                 let m = self.opaque_instances.instanced.instance(instance);
@@ -1304,7 +1284,7 @@ impl InstancesState {
             InstanceType::Anim2D => {
                 let sprite = self.sprite_instances.animated.instance(instance);
                 let position = sprite.instance.position;
-                (position.x, position.y, sprite.depth)
+                point3(position.x, position.y, sprite.depth)
             }
             InstanceType::Anim3D => {
                 let a = self.opaque_instances.animated.instance(instance);
@@ -1319,7 +1299,7 @@ impl InstancesState {
     pub(crate) fn resize_sprite(
         &mut self,
         instance: &InstanceReference,
-        new_size: cgmath::Vector2<f32>,
+        new_size: Vector2<f32>,
         queue: &wgpu::Queue,
     ) {
         match instance.dimension {
@@ -1339,7 +1319,7 @@ impl InstancesState {
     /// Get the sprite's size
     /// ### PANICS
     /// Will panic if a 3D model's reference is passed instead of a 2D sprite's.
-    pub(crate) fn get_sprite_size(&self, instance: &InstanceReference) -> (f32, f32) {
+    pub(crate) fn get_sprite_size(&self, instance: &InstanceReference) -> Vector2<f32> {
         match instance.dimension {
             InstanceType::Sprite => {
                 let sprite = self.get_sprite(instance);
@@ -1361,7 +1341,7 @@ impl InstancesState {
     pub(crate) fn move_text(
         &mut self,
         instance: &OldTextReference,
-        direction: cgmath::Vector3<f32>,
+        direction: Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
         screen_h: u32,
@@ -1413,7 +1393,7 @@ impl InstancesState {
     pub(crate) fn set_text_position(
         &mut self,
         instance: &OldTextReference,
-        position: cgmath::Vector3<f32>,
+        position: Vector3<f32>,
         queue: &wgpu::Queue,
         screen_w: u32,
         screen_h: u32,
@@ -1441,7 +1421,7 @@ impl InstancesState {
     pub(crate) fn resize_text(
         &mut self,
         instance: &OldTextReference,
-        new_size: cgmath::Vector2<f32>,
+        new_size: Vector2<f32>,
         queue: &wgpu::Queue,
     ) {
         let text = self

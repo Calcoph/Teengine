@@ -1,3 +1,4 @@
+use cgmath::vec2;
 use te_player::{
     event_loop::PlaceholderTextSender,
     imgui::{ImguiState, PrepareResult},
@@ -20,8 +21,7 @@ async fn as_main() {
         gamepad_handler
     } = te_player::imgui::prepare(
         InitialConfiguration {
-            screen_width: 1000,
-            screen_height: 500,
+            screen_size: vec2(1000, 500),
             ..InitialConfiguration::default()
         },
         true,

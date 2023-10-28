@@ -1,3 +1,4 @@
+use cgmath::{point3, Vector3, Point3};
 use image::{ImageBuffer, Rgba};
 
 use crate::state::GpuState;
@@ -329,11 +330,7 @@ impl AnimatedModel {
         device: &wgpu::Device,
     ) -> AnimatedModel {
         let mut instance = instances::Instance3D {
-            position: cgmath::Vector3 {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
+            position: point3(0.0, 0.0, 0.0),
             animation: None,
             hidden: false,
         };
@@ -413,10 +410,10 @@ impl AnimatedModel {
 use crate::instances::Instance;
 use crate::instances::{InstanceRaw, InstancedDraw};
 impl InstancedDraw for AnimatedModel {
-    fn move_instance<V: Into<cgmath::Vector3<f32>>>(
+    fn move_instance(
         &mut self,
         index: usize,
-        direction: V,
+        direction: Vector3<f32>,
         queue: &wgpu::Queue,
     ) {
         self.instance.move_direction(direction);
@@ -430,10 +427,10 @@ impl InstancedDraw for AnimatedModel {
         );
     }
 
-    fn set_instance_position<P: Into<cgmath::Vector3<f32>>>(
+    fn set_instance_position(
         &mut self,
         index: usize,
-        position: P,
+        position: Point3<f32>,
         queue: &wgpu::Queue,
     ) {
         self.instance.move_to(position);

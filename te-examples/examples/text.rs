@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
+use cgmath::vec2;
 use te_player::{
     event_loop::{Event, TextSender},
     te_winit::event::{StartCause, WindowEvent},
@@ -20,8 +21,7 @@ const WIN_HEIGHT: u32 = 500;
 async fn as_main() {
     let (event_loop, gpu, window, te_state) = te_player::prepare(
         InitialConfiguration {
-            screen_width: WIN_WIDTH,
-            screen_height: WIN_HEIGHT,
+            screen_size: vec2(WIN_WIDTH, WIN_HEIGHT),
             ..InitialConfiguration::default()
         },
         true,

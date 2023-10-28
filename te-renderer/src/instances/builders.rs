@@ -1,4 +1,4 @@
-use cgmath::Vector3;
+use cgmath::{Vector2, Point3, Point2, point3};
 
 use crate::{
     error::TError,
@@ -22,7 +22,7 @@ pub struct ModelBuilder<'state, 'gpu, 'a> {
     te_state: &'state mut TeState,
     model_name: &'a str,
     gpu: &'gpu GpuState,
-    position: (f32, f32, f32),
+    position: Point3<f32>,
     absolute_position: bool,
     model: ModelType,
 }
@@ -32,7 +32,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
         te_state: &'state mut TeState,
         model_name: &'a str,
         gpu: &'gpu GpuState,
-        position: (f32, f32, f32),
+        position: Point3<f32>,
     ) -> ModelBuilder<'state, 'gpu, 'a> {
         ModelBuilder {
             te_state,
@@ -76,13 +76,13 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
     }
 
     pub fn build(self) -> Result<InstanceReference, TError> {
-        let (x, y, z) = if !self.absolute_position {
+        let position = if !self.absolute_position {
             let tile_size = self.te_state.instances.tile_size;
-            let x = self.position.0 * tile_size.0;
-            let y = self.position.1 * tile_size.1;
-            let z = self.position.2 * tile_size.2;
+            let x = self.position.x * tile_size.x;
+            let y = self.position.y * tile_size.y;
+            let z = self.position.z * tile_size.z;
 
-            (x, y, z)
+            point3(x, y, z)
         } else {
             self.position
         };
@@ -93,11 +93,11 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 let instances = &mut self.te_state.instances;
 
                 if let Some(instanced_m) = instances.opaque_instances.instanced.get_mut(self.model_name) {
-                    instanced_m.add_instance(x, y, z, &self.gpu.device)
+                    instanced_m.add_instance(position, &self.gpu.device)
                 } else {
                     let model = Some(model).ok_or(TError::UninitializedModel)?;
                     let transparent_meshes = model.transparent_meshes.len();
-                    let instanced_m = InstancedModel::new(model, &self.gpu.device, x, y, z);
+                    let instanced_m = InstancedModel::new(model, &self.gpu.device, position);
                     instances
                         .opaque_instances.instanced
                         .insert(self.model_name.to_string(), instanced_m);
@@ -123,7 +123,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
 
                 instances.render_matrix.register_instance(
                     reference.clone(),
-                    cgmath::vec3(x, y, z),
+                    position,
                     instances
                         .opaque_instances
                         .instanced
@@ -137,7 +137,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
             ModelType::Animated(mut model) => {
                 let instances = &mut self.te_state.instances;
 
-                model.set_instance_position(0, Vector3::new(x, y, z), &self.gpu.queue); // TODO: Investigate why this is needed
+                model.set_instance_position(0, position, &self.gpu.queue); // TODO: Investigate why this is needed
                 let transparent_meshes = model.transparent_meshes.len();
                 let position = model.instance.position;
                 instances
@@ -172,7 +172,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                 let instances = &mut self.te_state.instances;
 
                 if let Some(instanced_m) = instances.opaque_instances.instanced.get_mut(self.model_name) {
-                    instanced_m.add_instance(x, y, z, &self.gpu.device);
+                    instanced_m.add_instance(position, &self.gpu.device);
                 } else {
                     let model = load_glb_model(
                         self.model_name,
@@ -184,7 +184,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
                     )
                     .map_err(|_| TError::GLBModelLoadingFail)?;
                     let transparent_meshes = model.transparent_meshes.len();
-                    let instanced_m = InstancedModel::new(model, &self.gpu.device, x, y, z);
+                    let instanced_m = InstancedModel::new(model, &self.gpu.device, position);
                     instances
                         .opaque_instances
                         .instanced
@@ -212,7 +212,7 @@ impl<'state, 'gpu, 'a> ModelBuilder<'state, 'gpu, 'a> {
 
                 instances.render_matrix.register_instance(
                     reference.clone(),
-                    cgmath::vec3(x, y, z),
+                    position,
                     instances
                         .opaque_instances
                         .instanced
@@ -231,9 +231,10 @@ pub struct SpriteBuilder<'state, 'gpu, 'a, 'b> {
     te_state: &'state mut TeState,
     sprite_name: &'a str,
     gpu: &'gpu GpuState,
-    position: (f32, f32, f32),
+    position: Point2<f32>,
+    depth: f32,
     force_new_instance_id: Option<&'b str>,
-    size: Option<(f32, f32)>,
+    size: Option<Vector2<f32>>,
     material: Option<model::Material>,
 }
 
@@ -242,13 +243,15 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
         te_state: &'state mut TeState,
         sprite_name: &'a str,
         gpu: &'gpu GpuState,
-        position: (f32, f32, f32),
+        position: Point2<f32>,
+        depth: f32
     ) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
         SpriteBuilder {
             te_state,
             sprite_name,
             gpu,
             position,
+            depth,
             force_new_instance_id: None,
             size: None,
             material: None,
@@ -262,7 +265,7 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
         }
     }
 
-    pub fn with_size(self, size: (f32, f32)) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
+    pub fn with_size(self, size: Vector2<f32>) -> SpriteBuilder<'state, 'gpu, 'a, 'b> {
         SpriteBuilder {
             size: Some(size),
             ..self
@@ -280,35 +283,28 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
         // TODO: refractor
         if let Some(material) = self.material {
             let instances = &mut self.te_state.instances;
-            let screen_w = self.te_state.size.width;
-            let screen_h = self.te_state.size.height;
+            let screen_size = Vector2::new(
+                self.te_state.size.width,
+                self.te_state.size.height
+            );
 
             let instance_name =
                 self.sprite_name.to_string() + self.force_new_instance_id.unwrap_or_default();
             if let Some(instanced_s) = instances.sprite_instances.instanced.get_mut(&instance_name) {
                 instanced_s.add_instance(
-                    self.position.0,
-                    self.position.1,
+                    self.position,
                     self.size,
                     &self.gpu.device,
-                    screen_w,
-                    screen_h,
+                    screen_size
                 );
             } else {
-                let (width, height) = match self.size {
-                    Some((w, h)) => (w, h),
-                    None => return Err(TError::SizeRequired),
-                };
                 let instanced_s = InstancedSprite::new(
                     material,
                     &self.gpu.device,
-                    self.position.0,
-                    self.position.1,
-                    self.position.2,
-                    width,
-                    height,
-                    screen_w,
-                    screen_h,
+                    self.position,
+                    self.depth,
+                    self.size.ok_or(TError::SizeRequired)?,
+                    screen_size
                 );
                 instances
                     .sprite_instances
@@ -333,22 +329,22 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
             Ok(instance_ref)
         } else {
             let instances = &mut self.te_state.instances;
-            let screen_w = self.te_state.size.width;
-            let screen_h = self.te_state.size.height;
+            let screen_size = Vector2::new(
+                self.te_state.size.width,
+                self.te_state.size.height
+            );
 
             let instance_name =
                 self.sprite_name.to_string() + self.force_new_instance_id.unwrap_or_default();
             if let Some(instanced_s) = instances.sprite_instances.instanced.get_mut(&instance_name) {
                 instanced_s.add_instance(
-                    self.position.0,
-                    self.position.1,
+                    self.position,
                     self.size,
                     &self.gpu.device,
-                    screen_w,
-                    screen_h,
+                    screen_size
                 );
             } else {
-                let (sprite, width, height) = load_sprite(
+                let (sprite, sprite_size) = load_sprite(
                     self.sprite_name,
                     &self.gpu.device,
                     &self.gpu.queue,
@@ -356,20 +352,17 @@ impl<'state, 'gpu, 'a, 'b> SpriteBuilder<'state, 'gpu, 'a, 'b> {
                     instances.resources_path.clone(),
                 )
                 .map_err(|_| TError::SpriteLoadingFail)?;
-                let (width, height) = match self.size {
-                    Some((w, h)) => (w, h),
-                    None => (width, height),
+                let size = match self.size {
+                    Some(size) => size,
+                    None => sprite_size,
                 };
                 let instanced_s = InstancedSprite::new(
                     sprite,
                     &self.gpu.device,
-                    self.position.0,
-                    self.position.1,
-                    self.position.2,
-                    width,
-                    height,
-                    screen_w,
-                    screen_h,
+                    self.position,
+                    self.depth,
+                    size,
+                    screen_size
                 );
                 instances
                     .sprite_instances

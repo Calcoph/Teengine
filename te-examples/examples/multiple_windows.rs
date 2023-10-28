@@ -1,3 +1,4 @@
+use cgmath::vec2;
 use te_player::{
     event_loop::Event,
     te_winit::{event::WindowEvent, event_loop::ControlFlow},
@@ -11,8 +12,7 @@ fn main() {
 async fn as_main() {
     let (event_loop, gpu1, window1, te_state1) = te_player::prepare(
         InitialConfiguration {
-            screen_width: 1000,
-            screen_height: 500,
+            screen_size: vec2(1000, 500),
             ..InitialConfiguration::default()
         },
         true,
@@ -22,8 +22,7 @@ async fn as_main() {
 
     let (gpu2, window2, te_state2) = te_player::new_window(
         InitialConfiguration {
-            screen_width: 200,
-            screen_height: 500,
+            screen_size: vec2(200, 500),
             ..InitialConfiguration::default()
         },
         &event_loop,
@@ -33,8 +32,7 @@ async fn as_main() {
 
     let (gpu3, window3, te_state3) = te_player::new_window(
         InitialConfiguration {
-            screen_width: 300,
-            screen_height: 300,
+            screen_size: vec2(300, 300),
             ..InitialConfiguration::default()
         },
         &event_loop,
