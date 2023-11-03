@@ -104,6 +104,10 @@ impl InstancedModel {
         let instance = self.instances.get(index).expect("Unreachable");
         instance.is_hidden()
     }
+
+    pub(crate) fn is_frustum_culled(&self, index: usize) -> bool {
+        !self.unculled_indices.contains(&(index as u32))
+    }
 }
 
 impl InstancedDraw for InstancedModel {

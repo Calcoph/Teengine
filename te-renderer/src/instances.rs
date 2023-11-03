@@ -1660,4 +1660,21 @@ impl InstancesState {
             true
         }
     }
+
+    pub(crate) fn is_instance_frsustum_culled(&self, instance: &InstanceReference) -> bool {
+        match instance.dimension {
+            InstanceType::Sprite => false,
+            InstanceType::Anim2D => false,
+            InstanceType::Opaque3D => {
+                self.opaque_instances.instanced
+                    .instance(instance)
+                    .is_frustum_culled(instance.index)
+            },
+            InstanceType::Anim3D => {
+                self.opaque_instances.animated
+                    .instance(instance)
+                    .is_culled()
+            },
+        }
+    }
 }

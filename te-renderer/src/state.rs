@@ -1385,6 +1385,10 @@ impl TeState {
     pub fn is_old_text_hidden(&self, instance: &OldTextReference) -> bool {
         self.instances.is_text_hidden(instance)
     }
+
+    pub fn is_instance_frsustum_culled(&self, instance: &InstanceReference) -> bool {
+        self.instances.is_instance_frsustum_culled(instance)
+    }
 }
 
 enum EntryPoint {

@@ -405,6 +405,10 @@ impl AnimatedModel {
     pub(crate) fn is_hidden(&self) -> bool {
         self.instance.is_hidden()
     }
+
+    pub(crate) fn is_culled(&self) -> bool {
+        !self.unculled_instance
+    }
 }
 
 use crate::instances::Instance;
