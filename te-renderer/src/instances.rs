@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use cgmath::{Vector3, Vector2, Point3, Point2, point3, point2, vec2, EuclideanSpace, Matrix4};
+use cgmath::{Vector3, Vector2, Point3, Point2, point3, point2, vec2, EuclideanSpace, Matrix4, ElementWise};
 
 pub mod animation;
 pub(crate) mod builders;
@@ -1231,6 +1231,11 @@ impl InstancesState {
                 );
             }
             InstanceType::Opaque3D => {
+                let position = point3(
+                    position.x * self.tile_size.x,
+                    position.y * self.tile_size.y,
+                    position.z * self.tile_size.z,
+                );
                 let m = self.opaque_instances.instanced.mut_instance(instance_ref);
                 {
                     let instance = m.instances.instance(instance_ref);
@@ -1253,6 +1258,11 @@ impl InstancesState {
                 model.set_instance_position(instance_ref.index, point2(position.x, position.y), queue, screen_size)
             }
             InstanceType::Anim3D => {
+                let position = point3(
+                    position.x * self.tile_size.x,
+                    position.y * self.tile_size.y,
+                    position.z * self.tile_size.z,
+                );
                 let a = self.opaque_instances.animated.mut_instance(instance_ref);
                 self.render_matrix.unregister_instance(
                     instance_ref,
@@ -1661,7 +1671,7 @@ impl InstancesState {
         }
     }
 
-    pub(crate) fn is_instance_frsustum_culled(&self, instance: &InstanceReference) -> bool {
+    pub(crate) fn is_frustum_culled(&self, instance: &InstanceReference) -> bool {
         match instance.dimension {
             InstanceType::Sprite => false,
             InstanceType::Anim2D => false,

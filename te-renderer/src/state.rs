@@ -1386,8 +1386,8 @@ impl TeState {
         self.instances.is_text_hidden(instance)
     }
 
-    pub fn is_instance_frsustum_culled(&self, instance: &InstanceReference) -> bool {
-        self.instances.is_instance_frsustum_culled(instance)
+    pub fn is_frustum_culled(&self, instance: &InstanceReference) -> bool {
+        self.instances.is_frustum_culled(instance)
     }
 }
 
