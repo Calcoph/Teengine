@@ -4,7 +4,7 @@ use cgmath::{Vector2, Point3, Point2, vec2, Vector3};
 pub use glyph_brush::{Section, Text};
 use wgpu::{
     util::DeviceExt, BindGroupLayout, CommandBuffer, CommandEncoder, InstanceDescriptor,
-    PushConstantRange, ShaderStages, InstanceFlags,
+    PushConstantRange, ShaderStages, InstanceFlags, RenderPipeline,
 };
 use winit::{
     dpi,
@@ -65,7 +65,7 @@ impl GpuState {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::PUSH_CONSTANTS, // TODO: Make this optional
+                    features: wgpu::Features::PUSH_CONSTANTS.union(wgpu::Features::POLYGON_MODE_LINE), // TODO: Make this optional
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
@@ -331,13 +331,13 @@ impl PipeLineLayouts {
 }
 
 #[derive(Debug)]
-struct PipeLines {
-    render_3d: wgpu::RenderPipeline,
-    render_wireframe: wgpu::RenderPipeline,
-    transparent: wgpu::RenderPipeline,
-    sprite: wgpu::RenderPipeline,
-    clickable: wgpu::RenderPipeline,
-    clickable_color: wgpu::RenderPipeline,
+pub struct PipeLines {
+    pub render_3d: wgpu::RenderPipeline,
+    pub wireframe: wgpu::RenderPipeline,
+    pub transparent: wgpu::RenderPipeline,
+    pub sprite: wgpu::RenderPipeline,
+    pub clickable: wgpu::RenderPipeline,
+    pub clickable_color: wgpu::RenderPipeline,
 }
 
 impl PipeLines {
@@ -452,7 +452,7 @@ impl PipeLines {
 
         PipeLines {
             render_3d: render_pipeline,
-            render_wireframe: wireframe_pipeline,
+            wireframe: wireframe_pipeline,
             transparent: transparent_render_pipeline,
             sprite: sprite_render_pipeline,
             clickable: clickable_pipeline,
@@ -467,7 +467,7 @@ pub struct TeState {
     pub camera: camera::CameraState,
     /// The window's size
     pub size: winit::dpi::PhysicalSize<u32>,
-    pipelines: PipeLines,
+    pub pipelines: PipeLines,
     /// Manages 3D models, 2D sprites and 2D texts
     pub instances: InstancesState,
     pub text: TextState,
@@ -682,8 +682,8 @@ impl TeState {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-            self.draw_opaque(&mut render_pass);
-            self.draw_transparent(&mut render_pass);
+            self.draw_opaque(&mut render_pass, &self.pipelines.render_3d);
+            self.draw_transparent(&mut render_pass, &self.pipelines.transparent);
         }
 
         if self.render_2d {
@@ -758,7 +758,7 @@ impl TeState {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-            self.draw_wireframe(&mut render_pass);
+            self.draw_opaque(&mut render_pass, &self.pipelines.wireframe);
         }
     }
 
@@ -907,40 +907,8 @@ impl TeState {
         self.instance_finder = renderer.get_instance_finder();
     }
 
-    pub fn draw_wireframe<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipelines.render_wireframe);
-        let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
-        let iter = self
-            .instances
-            .opaque_instances
-            .instanced
-            .iter()
-            .filter(|(_name, instanced_model)| instanced_model.unculled_instances > 0);
-        for (_name, instanced_model) in iter {
-            let instance_buffer = &instanced_model.instance_buffer;
-            renderer
-                .render_pass
-                .set_vertex_buffer(1, instance_buffer.slice(..));
-            renderer.draw_model_instanced(&instanced_model.model, instanced_model.get_instances_vec());
-        }
-
-        let iter = self
-            .instances
-            .opaque_instances
-            .animated
-            .iter()
-            .filter(|(_name, instanced_model)| instanced_model.unculled_instance);
-        for (_name, instanced_model) in iter {
-            let instance_buffer = &instanced_model.instance_buffer;
-            renderer
-                .render_pass
-                .set_vertex_buffer(1, instance_buffer.slice(..));
-            renderer.draw_animated_model_instanced(instanced_model);
-        }   
-    }
-
-    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipelines.render_3d);
+    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, pipeline: &'a RenderPipeline) {
+        render_pass.set_pipeline(pipeline);
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
         let iter = self
             .instances
@@ -971,8 +939,8 @@ impl TeState {
         }
     }
 
-    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipelines.transparent);
+    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, pipeline: &'a RenderPipeline) {
+        render_pass.set_pipeline(pipeline);
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
 
         let iter = self
@@ -1583,12 +1551,11 @@ fn create_wireframe_pipeline(
             })],
         }),
         primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::LineList,
+            topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
-            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-            polygon_mode: wgpu::PolygonMode::Fill,
+            cull_mode: None,            
+            polygon_mode: wgpu::PolygonMode::Line,
             // Requires Features::DEPTH_CLIP_CONTROL
             unclipped_depth: false,
             // Requires Features::CONSERVATIVE_RASTERIZATION
