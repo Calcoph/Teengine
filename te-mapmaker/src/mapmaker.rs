@@ -518,7 +518,7 @@ impl RendererState {
                     &mut render_pass,
                     &state.camera.camera_bind_group,
                 );
-                state.draw_opaque(&mut renderer.render_pass);
+                state.draw_opaque(&mut renderer.render_pass, &state.pipelines.render_3d);
                 if model_visible {
                     instances = modifying_instance.into_renderable(&gpu.device, tile_size);
                     buffer = modifying_instance.buffer.as_ref();
@@ -538,7 +538,7 @@ impl RendererState {
                 {
                     self.blink_time = std::time::Instant::now();
                 }
-                state.draw_transparent(&mut renderer.render_pass);
+                state.draw_transparent(&mut renderer.render_pass, &state.pipelines.transparent);
                 if model_visible {
                     if model.expect("Unreachable").transparent_meshes.len() > 0 {
                         renderer
