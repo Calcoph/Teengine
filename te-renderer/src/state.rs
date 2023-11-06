@@ -759,6 +759,7 @@ impl TeState {
                     occlusion_query_set: None,
                 });
             self.draw_opaque(&mut render_pass, &self.pipelines.wireframe);
+            self.draw_transparent(&mut render_pass, &self.pipelines.wireframe)
         }
     }
 
@@ -1547,7 +1548,7 @@ fn create_wireframe_pipeline(
             targets: &[Some(wgpu::ColorTargetState {
                 format: color_format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
+                write_mask: wgpu::ColorWrites::COLOR,
             })],
         }),
         primitive: wgpu::PrimitiveState {
