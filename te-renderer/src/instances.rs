@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use cgmath::{Vector3, Vector2, Point3, Point2, point3, point2, vec2, EuclideanSpace, Matrix4, ElementWise};
+use cgmath::{Vector3, Vector2, Point3, Point2, point3, point2, vec2, EuclideanSpace, Matrix4};
 
 pub mod animation;
 pub(crate) mod builders;

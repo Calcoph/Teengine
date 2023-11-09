@@ -9,6 +9,7 @@ pub mod state;
 pub mod temap;
 pub mod text;
 pub mod texture;
+pub mod gpu_vec;
 
 #[cfg(test)]
 mod tests;
