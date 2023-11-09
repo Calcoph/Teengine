@@ -4,7 +4,7 @@ use cgmath::{Vector2, Point3, Point2, vec2, Vector3};
 pub use glyph_brush::{Section, Text};
 use wgpu::{
     util::DeviceExt, BindGroupLayout, CommandBuffer, CommandEncoder, InstanceDescriptor,
-    PushConstantRange, ShaderStages, InstanceFlags,
+    PushConstantRange, ShaderStages, InstanceFlags, RenderPipeline,
 };
 use winit::{
     dpi,
@@ -65,7 +65,7 @@ impl GpuState {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::PUSH_CONSTANTS, // TODO: Make this optional
+                    features: wgpu::Features::PUSH_CONSTANTS.union(wgpu::Features::POLYGON_MODE_LINE), // TODO: Make this optional
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
@@ -331,12 +331,13 @@ impl PipeLineLayouts {
 }
 
 #[derive(Debug)]
-struct PipeLines {
-    render_3d: wgpu::RenderPipeline,
-    transparent: wgpu::RenderPipeline,
-    sprite: wgpu::RenderPipeline,
-    clickable: wgpu::RenderPipeline,
-    clickable_color: wgpu::RenderPipeline,
+pub struct PipeLines {
+    pub render_3d: wgpu::RenderPipeline,
+    pub wireframe: wgpu::RenderPipeline,
+    pub transparent: wgpu::RenderPipeline,
+    pub sprite: wgpu::RenderPipeline,
+    pub clickable: wgpu::RenderPipeline,
+    pub clickable_color: wgpu::RenderPipeline,
 }
 
 impl PipeLines {
@@ -364,6 +365,23 @@ impl PipeLines {
                 shader,
                 EntryPoint::Mask,
                 "Render Pipeline",
+            )
+        };
+
+        let wireframe_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Shader_3D"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            };
+            create_wireframe_pipeline(
+                &gpu.device,
+                &render_pipeline_layout,
+                gpu.config.format,
+                Some(texture::Texture::DEPTH_FORMAT),
+                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                shader,
+                EntryPoint::Mask,
+                "Wireframe Render Pipeline",
             )
         };
 
@@ -434,6 +452,7 @@ impl PipeLines {
 
         PipeLines {
             render_3d: render_pipeline,
+            wireframe: wireframe_pipeline,
             transparent: transparent_render_pipeline,
             sprite: sprite_render_pipeline,
             clickable: clickable_pipeline,
@@ -448,7 +467,7 @@ pub struct TeState {
     pub camera: camera::CameraState,
     /// The window's size
     pub size: winit::dpi::PhysicalSize<u32>,
-    pipelines: PipeLines,
+    pub pipelines: PipeLines,
     /// Manages 3D models, 2D sprites and 2D texts
     pub instances: InstancesState,
     pub text: TextState,
@@ -663,8 +682,8 @@ impl TeState {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-            self.draw_opaque(&mut render_pass);
-            self.draw_transparent(&mut render_pass);
+            self.draw_opaque(&mut render_pass, &self.pipelines.render_3d);
+            self.draw_transparent(&mut render_pass, &self.pipelines.transparent);
         }
 
         if self.render_2d {
@@ -698,6 +717,49 @@ impl TeState {
                 view,
                 texts,
             );
+        }
+    }
+
+    pub fn render_wireframe(&mut self,
+        view: &wgpu::TextureView,
+        gpu: &GpuState,
+        encoders: &mut Vec<wgpu::CommandEncoder>
+    ) {
+        if self.render_3d {
+            let mut render_pass = encoders
+                .get_mut(0)
+                .expect("Empty encoders vector")
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("wireframe Render Pass"),
+                    color_attachments: &[
+                        // This is what [[location(0)]] in the fragment shader targets
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: self.bgcolor.red,
+                                    g: self.bgcolor.green,
+                                    b: self.bgcolor.blue,
+                                    a: 1.0,
+                                }),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        }),
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &gpu.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+            self.draw_opaque(&mut render_pass, &self.pipelines.wireframe);
+            self.draw_transparent(&mut render_pass, &self.pipelines.wireframe)
         }
     }
 
@@ -846,8 +908,8 @@ impl TeState {
         self.instance_finder = renderer.get_instance_finder();
     }
 
-    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipelines.render_3d);
+    pub fn draw_opaque<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, pipeline: &'a RenderPipeline) {
+        render_pass.set_pipeline(pipeline);
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
         let iter = self
             .instances
@@ -878,8 +940,8 @@ impl TeState {
         }
     }
 
-    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipelines.transparent);
+    pub fn draw_transparent<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, pipeline: &'a RenderPipeline) {
+        render_pass.set_pipeline(pipeline);
         let mut renderer = Renderer::new(render_pass, &self.camera.camera_bind_group);
 
         let iter = self
@@ -1438,6 +1500,67 @@ fn create_render_pipeline(
             cull_mode: Some(wgpu::Face::Back),
             // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
             polygon_mode: wgpu::PolygonMode::Fill,
+            // Requires Features::DEPTH_CLIP_CONTROL
+            unclipped_depth: false,
+            // Requires Features::CONSERVATIVE_RASTERIZATION
+            conservative: false,
+        },
+        depth_stencil: depth_format.map(|format| wgpu::DepthStencilState {
+            format,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        multiview: None,
+    })
+}
+
+fn create_wireframe_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    color_format: wgpu::TextureFormat,
+    depth_format: Option<wgpu::TextureFormat>,
+    vertex_layouts: &[wgpu::VertexBufferLayout],
+    shader: wgpu::ShaderModuleDescriptor,
+    entry_point: EntryPoint,
+    name: &str,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(shader);
+    let entry_point = match entry_point {
+        EntryPoint::Main => "fs_main",
+        EntryPoint::Mask => "fs_mask",
+        EntryPoint::Color => "fs_color",
+    };
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(name),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: vertex_layouts,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point,
+            targets: &[Some(wgpu::ColorTargetState {
+                format: color_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::COLOR,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,            
+            polygon_mode: wgpu::PolygonMode::Line,
             // Requires Features::DEPTH_CLIP_CONTROL
             unclipped_depth: false,
             // Requires Features::CONSERVATIVE_RASTERIZATION
