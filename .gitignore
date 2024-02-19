@@ -8,3 +8,4 @@ imgui.ini
 Cargo.lock
 /target-win
 /target-lin
+/te-player/target-win
