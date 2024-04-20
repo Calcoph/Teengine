@@ -1,6 +1,10 @@
-<p align="center">
-    <a title="Discord Server" href="https://discord.gg/hQZbmqJQWx"><img alt="Discord Server" src=https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white></a>
-</p>
+Graphics engine composed of the following crates:
+
+* **te-renderer**: The core of the project, the rendering engine. Supports view frustrum culling, 2D sprites, 3D models, basic animation, among other things.
+* **te-player**: Displays windows and handles winit events to talk to the renderer. Supports: easy imgui integration.
+* **te-gamepad**: Glue for winit+gilrs to also emit gamepad events.
+* **te-mapmaker**: GUI Map editor using te-renderer adn imgui.
+* **te-examples**: Various examples that show how to use the project.
 
 # WIP
 
