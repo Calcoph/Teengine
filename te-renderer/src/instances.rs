@@ -16,7 +16,7 @@ use crate::{
     resources::{load_glb_model, load_sprite},
     state::GpuState,
     temap,
-    text::Font,
+    text::{Font, OldTextFont},
 };
 
 #[allow(deprecated)]
@@ -643,7 +643,7 @@ pub struct InstancesState {
     tile_size: Vector3<f32>,
     pub resources_path: String,
     pub default_texture_path: String,
-    font: Font,
+    font: OldTextFont,
     render_matrix: RenderMatrix,
 }
 
@@ -661,7 +661,7 @@ impl InstancesState {
         let sprite_instances = SpriteInstances::new();
         let texts = Vec::new();
         let deleted_texts = Vec::new();
-        let font = Font::new(font_dir_path);
+        let font = OldTextFont::load_font(font_dir_path);
         let render_matrix = RenderMatrix::new(chunk_size);
 
         InstancesState {
@@ -1342,6 +1342,21 @@ impl InstancesState {
             }
             InstanceType::Anim3D => panic!("That is not a sprite"),
         }
+    }
+
+    pub(crate) fn set_sprite_depth(&mut self, instance: &InstanceReference, depth: f32) {
+        match instance.dimension {
+            InstanceType::Sprite => {
+                let sprite = self.sprite_instances.instanced.mut_instance(instance);
+                sprite.depth = depth;
+            }
+            InstanceType::Opaque3D => panic!("That is not a sprite"),
+            InstanceType::Anim2D => {
+                let sprite = self.sprite_instances.animated.mut_instance(instance);
+                sprite.depth = depth;
+            }
+            InstanceType::Anim3D => panic!("That is not a sprite"),
+        };
     }
 
     /// Move a 2D text relative to it's current position.

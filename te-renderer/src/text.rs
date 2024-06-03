@@ -8,13 +8,28 @@ use wgpu_glyph::{GlyphBrush, GlyphBrushBuilder};
 
 use crate::{model::Material, state::GpuState, texture};
 
+pub trait Font {
+    type Character;
+
+    fn write_to_material(
+        &self,
+        characters: Vec<Self::Character>,
+        gpu: &GpuState,
+        layout: &wgpu::BindGroupLayout,
+    ) -> (Material, f32, f32);
+
+    fn load_font(font_path: String) -> Self;
+}
+
 #[derive(Debug)]
-pub struct Font {
+pub struct OldTextFont {
     characters: HashMap<String, image::ImageBuffer<Rgba<u8>, Vec<u8>>>,
 }
 
-impl Font {
-    pub fn write_to_material(
+impl Font for OldTextFont {
+    type Character = String;
+
+    fn write_to_material(
         &self,
         characters: Vec<String>,
         gpu: &GpuState,
@@ -83,7 +98,7 @@ impl Font {
         )
     }
 
-    pub fn new(font_dir_path: String) -> Font {
+    fn load_font(font_dir_path: String) -> OldTextFont {
         let mut characters = HashMap::new();
         for file in std::fs::read_dir(font_dir_path.clone()).expect("Could not read font directory")
         {
@@ -101,7 +116,7 @@ impl Font {
             }
         }
 
-        Font { characters }
+        OldTextFont { characters }
     }
 }
 

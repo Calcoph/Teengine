@@ -1302,6 +1302,14 @@ impl TeState {
         self.instances.get_sprite_size(instance)
     }
 
+    pub fn set_instance_depth(
+        &mut self,
+        instance: &InstanceReference,
+        depth: f32
+    ) {
+        self.instances.set_sprite_depth(instance, depth)
+    }
+
     /// Move a 2D text relative to it's current position.
     /// Ignores the z value.
     #[deprecated]
@@ -1559,7 +1567,7 @@ fn create_wireframe_pipeline(
             topology: wgpu::PrimitiveTopology::TriangleList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: None,            
+            cull_mode: None,
             polygon_mode: wgpu::PolygonMode::Line,
             // Requires Features::DEPTH_CLIP_CONTROL
             unclipped_depth: false,
