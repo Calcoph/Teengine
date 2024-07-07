@@ -6,15 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pollster = "0.3.0"
-te-player = { path = "../te-player", features = ["imgui"] }
-te-renderer = { path = "../te-renderer" }
-wgpu = "0.18"
-futures-intrusive = "0.5.0"
-bytemuck = { version = "1.4", features = [ "derive" ] }
-cgmath = "0.18"
-
-[dependencies.image]
-version = "0.24"
-default-features = false
-features = ["png", "jpeg"]
+pollster = { workspace = true }
+te-player = { workspace = true }
+te-renderer = { workspace = true }
+wgpu = { workspace = true }
+futures-intrusive = { workspace = true }
+bytemuck = { workspace = true }
+cgmath = { workspace = true }
+image = { workspace = true }

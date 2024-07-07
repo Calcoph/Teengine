@@ -8,6 +8,44 @@ members = [
     "te-examples"
 ]
 
+[workspace.dependencies]
+json = "0.12.4"
+cgmath = "0.18"
+wgpu = "0.18"
+winit = "0.29"
+bytemuck = { version = "1.4", features = [ "derive" ] }
+sorted-vec = "0.8.0"
+wgpu_glyph = "0.21"
+glyph_brush = "0.7"
+gltf = "1.0"
+gilrs = "0.10.2"
+env_logger = "0.10"
+log = "0.4"
+pollster = "0.3"
+gilrs-core = "0.5.2"
+futures-intrusive = "0.5.0"
+
+imgui = "0.11.0"
+imgui-wgpu = "0.24.0"
+imgui-winit-support = { version = "0.11.0", default-features = false}
+imgui-gilrs = { git = "https://github.com/Calcoph/imgui-gilrs", branch = "uptodate-winit", features = ["winit"] }
+
+[workspace.dependencies.image]
+version = "0.24"
+default-features = false
+features = ["png", "jpeg"]
+
+[workspace.dependencies.te-renderer]
+path = "te-renderer"
+
+[workspace.dependencies.te-gamepad]
+path = "te-gamepad"
+
+[workspace.dependencies.te-player]
+path = "te-player"
+features = ["imgui"]
+
+
 [patch.crates-io]
 imgui = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
 imgui-winit-support = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }

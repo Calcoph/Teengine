@@ -6,25 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.29"
-gilrs-core = "0.5.2"
-imgui = "0.11.0"
-imgui-winit-support = { version = "0.11.0", default-features = false }
-env_logger = "0.10.0"
-wgpu = "0.18"
-cgmath = "0.18"
-pollster = "0.3"
-bytemuck = { version = "1.4", features = [ "derive" ] }
-imgui-wgpu = "0.24.0"
+winit = { workspace = true }
+gilrs-core = { workspace = true }
+imgui = { workspace = true }
+imgui-winit-support = { workspace = true }
+env_logger = { workspace = true }
+wgpu = { workspace = true }
+cgmath = { workspace = true }
+pollster = { workspace = true }
+bytemuck = { workspace = true }
+imgui-wgpu = { workspace = true }
+image = { workspace = true }
 
-[dependencies.image]
-version = "0.24"
-default-features = false
-features = ["png", "jpeg"]
-
-[dependencies.te-renderer]
-path = "../te-renderer"
-
-[dependencies.te-gamepad]
-path = "../te-gamepad"
-features = ["imgui"]
+te-renderer = { workspace = true }
+te-gamepad = { workspace = true, features = ["imgui"]}

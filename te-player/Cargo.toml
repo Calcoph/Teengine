@@ -7,40 +7,31 @@ edition = "2021"
 
 [dependencies]
 # window creator
-winit = "0.29"
-gilrs = { version = "0.10.2" }
+winit = { workspace = true }
+gilrs = { workspace = true }
 
 # renderer
-env_logger = "0.10"
-log = "0.4"
-wgpu = "0.18"
-pollster = "0.3"
-bytemuck = { version = "1.4", features = [ "derive" ] }
-cgmath = "0.18"
+env_logger = { workspace = true }
+log = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+bytemuck = { workspace = true }
+cgmath = { workspace = true }
 
 # imgui
-imgui = { version = "0.11.0", optional = true }
-imgui-wgpu = { version = "0.24.0", optional = true }
-imgui-winit-support = { version = "0.11.0", default-features = false, optional = true}
-imgui-gilrs ={ git = "https://github.com/Calcoph/imgui-gilrs", branch = "uptodate-winit", features = ["winit"] }
+imgui = { workspace = true, optional = true }
+imgui-wgpu = { workspace = true, optional = true }
+imgui-winit-support = { workspace = true, default-features = false, optional = true}
+imgui-gilrs = { workspace = true, optional = true}
 
-json = "0.12.4"
+json = { workspace = true }
+gltf = { workspace = true }
+image = { workspace = true }
 
-[dependencies.gltf]
-version = "1.0"
-
-[dependencies.image]
-version = "0.24"
-default-features = false
-features = ["png", "jpeg"]
-
-[dependencies.te-renderer]
-path = "../te-renderer"
-
-[dependencies.te-gamepad]
-path = "../te-gamepad"
+te-renderer = { workspace = true }
+te-gamepad = { workspace = true }
 
 [features]
-imgui = ["imgui-winit-support", "dep:imgui", "imgui-wgpu", "te-gamepad/imgui"]
+imgui = ["imgui-winit-support", "dep:imgui", "imgui-wgpu", "te-gamepad/imgui", "imgui-gilrs"]
 draw_when_told = []
 default = ["imgui"]
