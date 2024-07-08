@@ -25,9 +25,9 @@ pollster = "0.3"
 gilrs-core = "0.5.2"
 futures-intrusive = "0.5.0"
 
-imgui = "0.11.0"
+imgui = "0.12.0"
 imgui-wgpu = "0.24.0"
-imgui-winit-support = { version = "0.11.0", default-features = false}
+imgui-winit-support = { version = "0.12.0", default-features = false}
 imgui-gilrs = { git = "https://github.com/Calcoph/imgui-gilrs", branch = "uptodate-winit", features = ["winit"] }
 
 [workspace.dependencies.image]
@@ -47,7 +47,7 @@ features = ["imgui"]
 
 
 [patch.crates-io]
-imgui = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
-imgui-winit-support = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
-imgui-wgpu = { git = "https://github.com/Calcoph/imgui-wgpu-rs", rev = "53abff5" }
+#imgui = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
+#imgui-winit-support = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
+imgui-wgpu = { git = "https://github.com/Calcoph/imgui-wgpu-rs", rev = "018e919" }
 wgpu_glyph = { git = "https://github.com/Calcoph/wgpu_glyph", rev = "967d062" }
