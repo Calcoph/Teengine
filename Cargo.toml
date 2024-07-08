@@ -49,5 +49,5 @@ features = ["imgui"]
 [patch.crates-io]
 #imgui = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
 #imgui-winit-support = { git = "https://github.com/Calcoph/imgui-rs", branch = "uptodate-winit" }
-imgui-wgpu = { git = "https://github.com/Calcoph/imgui-wgpu-rs", rev = "018e919" }
+imgui-wgpu = { git = "https://github.com/Calcoph/imgui-wgpu-rs", rev = "53abff5" }
 wgpu_glyph = { git = "https://github.com/Calcoph/wgpu_glyph", rev = "967d062" }
